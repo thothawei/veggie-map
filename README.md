@@ -103,8 +103,9 @@ GET /api/v1/restaurants?latitude=24.1477&longitude=120.6736&radius=5&diet=vegan&
 GET /api/v1/geocode?q=台中一中街
 ```
 
-完整查詢參數、分頁規則、錯誤碼列在 [docs/api.md](docs/api.md)。`docs/openapi.yaml` 排在
-Phase 11，尚未產出。
+完整查詢參數、分頁規則、錯誤碼列在 [docs/api.md](docs/api.md)。機器可讀的 OpenAPI 3.0 規格見
+[`docs/openapi.yaml`](docs/openapi.yaml)（可直接丟進 Swagger UI／Postman 匯入），
+`npx @redocly/cli lint docs/openapi.yaml` 驗證過 0 error。
 
 ## Local Development
 
@@ -221,6 +222,14 @@ Bounding Box，`MBRContains` 過濾出候選集合（能用到 Spatial Index）�
 - `per_page` 上限 100，避免使用者要求超大分頁拖垮資料庫。
 - Rating／confidence score 是快取欄位（`restaurants.rating`／`rating_count`、
   `restaurant_confidence_scores.score`），不即時計算，由 Job 批次更新。
+
+## Observability
+
+外部 API 呼叫（Overpass／Nominatim）記錄進 `external_api_logs`（provider／status／
+response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統一格式化並記進
+`storage/logs/laravel.log`。API response time／cache hit-miss／DB 慢查詢追蹤目前**未實作**——
+完整的「有 vs 沒有」對照表見 [docs/observability.md](docs/observability.md)，誠實記錄而非
+畫大餅。
 
 ## CI/CD
 

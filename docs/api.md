@@ -1,7 +1,8 @@
 # API Overview — VeggieMap
 
-Phase 0 產出的端點清單與回應格式約定。完整的 OpenAPI 規格（`docs/openapi.yaml`）在 Phase 11 產出；
-這份文件是 Phase 3~5 實作時的對照表。
+Phase 0 產出的端點清單與回應格式約定，這份文件是 Phase 3~5 實作時的對照表。完整、可餵給
+Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yaml)（Phase 11 產出，
+`npx @redocly/cli lint` 驗證過 0 error）。
 
 ## Base
 
@@ -44,6 +45,11 @@ Phase 0 產出的端點清單與回應格式約定。完整的 OpenAPI 規格（
 | POST | `/auth/register` | 註冊 | 無 |
 | POST | `/auth/login` | 登入 | 無 |
 | POST | `/auth/logout` | 登出 | 必須 |
+| GET | `/admin/reports` | 待審核回報列表（Phase 7） | 必須（admin） |
+| POST | `/admin/reports/{id}/approve` | 核准回報（Phase 7） | 必須（admin） |
+| POST | `/admin/reports/{id}/reject` | 駁回回報（Phase 7） | 必須（admin） |
+| GET | `/admin/reviews` | 評論列表，含 hidden（Phase 7） | 必須（admin） |
+| POST | `/admin/reviews/{id}/hide` | 隱藏評論（Phase 7） | 必須（admin） |
 
 ## `GET /restaurants` 查詢參數
 

@@ -654,3 +654,49 @@ cluster 看到個別 marker、點 marker 跳轉到 `/restaurants/{id}` 詳情頁
   1m13s 可接受，等 PR 數量變多、想省 CI 時間時再考慮加。
 - `pull_request` trigger 存在，但這個專案目前沒有走 PR 流程（約定是直接 push `main`），
   沒有實際拿一個 PR 驗證過 `pull_request` 事件會不會正確觸發。
+
+## 2026-08-24 — Phase 11：文件收尾（`docs/openapi.yaml`、`docs/observability.md`）
+
+**完成：**
+
+- `docs/openapi.yaml`：OpenAPI 3.0.3，涵蓋全部 20 支已實作端點（`docs/api.md` 表格 + 這次
+  順便補上的 Phase 7 admin 端點）。內容直接對照 `routes/api.php`、各 `FormRequest` 的
+  `rules()`、各 `Resource` 的 `toArray()` 產出，不是憑印象寫的——寫的過程中重新讀了一輪
+  `CreateRestaurantReportRequest`／`DietTypeResource`／`FeatureResource`／
+  `RestaurantReportResource`（一般使用者版，跟 Admin 版欄位不同）確認欄位。
+- 真的用 `npx @redocly/cli lint` 跑過（不是只求 YAML 語法過），修了 3 個問題：
+  1. `nullable: true` 沒有搭配真實 `type` 會被判定違反 OpenAPI 3.0 規範（跟 JSON Schema
+     2020-12 的 `type: "null"` 混用是常見誤用，3.0.x 不支援後者）。
+  2. `security` 屬性放進 `Authorization` header 的說明文字裡有未跳脫的冒號，YAML 直接
+     解析失敗（`mapping values are not allowed here`）——純語法坑，跟 OpenAPI 語意無關。
+  3. `info.license.name: MIT` 沒有配 `url` 會被 lint 標記；查證後這個 repo 根本沒有
+     `LICENSE` 檔，等於是編了一個不存在的授權條款——不是補 url 敷衍過去，是直接把
+     `license` 欄位整個拿掉，等使用者真的決定授權條款再補。
+  跑到最後「Your API description is valid. 🎉」，剩下 13 個警告都是 `operation-4xx-response`
+  這類建議性規則（例如 `/diets`／`/features` 這種完全沒有參數、不可能驗證失敗的端點，
+  硬掰一個 4xx response 反而是說謊，沒有修）。
+- `docs/observability.md`：刻意用「有 vs 沒有」的對照表收尾，不是寫一份看起來很完整
+  的監控藍圖。查證過才寫的部分：`failed_jobs` 表確實存在（Laravel 11 骨架自帶），但因為
+  Phase 6 的 `dispatchSync()` 決定，這張表目前實務上不會有資料——沒有含糊帶過，直接點名
+  這是已知限制。API response time／cache hit-miss／DB 慢查詢追蹤三項都誠實標記未實作，
+  沒有為了讓文件「看起來完整」就寫成已經做了。
+
+**過程中的副產品：**
+
+寫 OpenAPI 時對照 `routes/api.php` 才發現 `docs/api.md` 的端點清單表格從 Phase 5 之後
+就沒更新過，漏了整個 Phase 7 的 Admin 端點（`/admin/reports`、`/admin/reviews` 等 5 條）。
+順手補上，這是文件之間互相校對抓到的落差，不是這個 Phase 原本規劃要做的事。
+
+**未完成 / 等待確認：**
+
+- `docs/observability.md` 提到「/up 比 / 更適合當 health check smoke test」，但
+  `tests/Feature/ExampleTest.php` 目前還是測 `/`（Phase 12 選擇用「backend job 先 build
+  前端資產」解決，而不是換掉測試目標）——這個取捨已經在 Phase 12 記錄過，這裡只是文件
+  互相對照時再次確認沒有遺漏，不是新發現的問題。
+- OpenAPI 規格沒有跑正式的 contract test（Dredd／Schemathesis 那種自動化打真 API 驗證）。
+  有手動用 `curl` 打過幾條代表性的端點交叉核對過（`GET /restaurants/{id}` 詳情頁、
+  帶座標的半徑搜尋、`GET /diets`、`sort=distance` 缺座標的 422 錯誤格式），確認欄位跟
+  規格寫的一致，包含 `distance_meters`／`confidence_score` 這種條件式欄位（`whenLoaded`／
+  `when()` 不成立時是整個 key 消失，不是 key 存在但值是 null——這點規格的敘述文字已經
+  講清楚，只是沒有用型別系統強制）。但沒有涵蓋全部 20 支端點，Admin 那幾支（需要 admin
+  token）跟寫入類端點沒有逐一核對，這裡誠實記錄範圍。

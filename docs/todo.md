@@ -55,11 +55,19 @@
 - 未完成：前端元件測試／Playwright E2E（golden path 仍靠手動瀏覽器驗證，未列為本階段
   必須項目——這個專案規模，投入 Playwright 的 ROI 目前低於其他 Phase）
 
-## Phase 11 — 文件收尾
+## Phase 11 — 文件收尾 ✅ 已完成 2026-08-24
 
 - [x] README 正式改寫（Phase 8.5 一併完成，涵蓋四十節要求的所有章節）
-- [ ] `docs/openapi.yaml`（含 Phase 8.5 新增的 `/geocode`）
-- [ ] `docs/observability.md`
+- [x] `docs/openapi.yaml`：全部 20 支端點（含 Phase 7 admin、Phase 8.5 `/geocode`），
+      `npx @redocly/cli lint` 驗證過 0 error（先抓到並修正：`nullable` 需要搭配真實
+      `type`、`components.info.license` 需要 url 或乾脆不寫——這個專案沒有 LICENSE 檔，
+      不編一個假的 MIT 出來）
+- [x] `docs/observability.md`：誠實記錄「有 vs 沒有」——`external_api_logs` 跟例外統一
+      格式化是真的有做，API response time／cache hit-miss／DB 慢查詢追蹤都老實寫成未實作，
+      `failed_jobs` 表存在但目前 `dispatchSync` 讓它實務上不會有資料，不是隨便寫一份
+      看起來很完整但沒對照到程式碼現況的文件
+- [x] 順便補了 `docs/api.md` 缺漏的 Phase 7 admin 端點（原本的表格漏列，寫 OpenAPI 時
+      對照 routes/api.php 才發現）
 
 ## Phase 12 — GitHub Actions CI ✅ 已完成 2026-08-24
 

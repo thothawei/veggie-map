@@ -1,0 +1,752 @@
+openapi: 3.0.3
+info:
+  title: VeggieMap API
+  description: >
+    A scalable vegetarian-friendly restaurant discovery platform.
+    統一回應格式：成功 `{success:true, data, meta?}`，錯誤
+    `{success:false, error:{code, message, fields?}}`（見 docs/api.md）。
+    這份規格直接對照 routes/api.php 與各 Controller/FormRequest/Resource 產出，不是憑記憶寫的。
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development (docker compose)
+
+tags:
+  - name: Restaurants
+  - name: Lookups
+  - name: Geocode
+  - name: Auth
+  - name: Favorites
+  - name: Reviews
+  - name: Reports
+  - name: Admin
+
+security:
+  - bearerAuth: []
+
+paths:
+  /restaurants:
+    get:
+      operationId: listRestaurants
+      tags: [Restaurants]
+      summary: 列表＋多條件搜尋（含半徑搜尋）
+      description: >
+        沒帶 latitude/longitude 時是純篩選列表（預設 sort=newest）；
+        帶 latitude+longitude 時啟用 MySQL Spatial 兩段式半徑搜尋（Bounding Box → ST_Distance_Sphere），
+        預設 sort=distance。`sort=distance` 沒帶座標會回 422。
+      security: []
+      parameters:
+        - name: keyword
+          in: query
+          schema: { type: string, maxLength: 255 }
+        - name: latitude
+          in: query
+          schema: { type: number, format: float, minimum: -90, maximum: 90 }
+        - name: longitude
+          in: query
+          schema: { type: number, format: float, minimum: -180, maximum: 180 }
+        - name: radius
+          in: query
+          description: 公里，預設 5
+          schema: { type: number, format: float, minimum: 0.1, maximum: 50 }
+        - name: city
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: district
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: diet
+          in: query
+          description: 對應 diet_types.code，見 GET /diets
+          schema: { type: string }
+        - name: price_level
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 4 }
+        - name: rating_min
+          in: query
+          schema: { type: number, minimum: 0, maximum: 5 }
+        - name: pet_friendly
+          in: query
+          schema: { type: boolean }
+        - name: parking
+          in: query
+          schema: { type: boolean }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [distance, rating, popular, newest] }
+        - name: per_page
+          in: query
+          description: 預設 20，上限 100
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: cursor
+          in: query
+          description: Cursor pagination token，來自前一頁 meta.next_cursor
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Restaurant" }
+                      meta: { $ref: "#/components/schemas/CursorMeta" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /restaurants/{id}:
+    get:
+      operationId: getRestaurant
+      tags: [Restaurants]
+      summary: 詳情（含 diet_types／features／menu_items／confidence_score）
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RestaurantId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Restaurant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /restaurants/{id}/favorite:
+    post:
+      operationId: addFavorite
+      tags: [Favorites]
+      summary: 加入收藏（冪等）
+      parameters:
+        - $ref: "#/components/parameters/RestaurantId"
+      responses:
+        "201": { $ref: "#/components/responses/EmptySuccess" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    delete:
+      operationId: removeFavorite
+      tags: [Favorites]
+      summary: 取消收藏（冪等，對本來就沒收藏的餐廳也回成功）
+      parameters:
+        - $ref: "#/components/parameters/RestaurantId"
+      responses:
+        "200": { $ref: "#/components/responses/EmptySuccess" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /restaurants/{id}/reviews:
+    get:
+      operationId: listReviews
+      tags: [Reviews]
+      summary: 列出評論（只顯示 status=active，無需登入）
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RestaurantId"
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Review" }
+                      meta: { $ref: "#/components/schemas/CursorMeta" }
+    post:
+      operationId: createReview
+      tags: [Reviews]
+      summary: 新增評論（同一使用者對同一餐廳只留一筆 active，重新評論＝覆蓋並保留歷史）
+      parameters:
+        - $ref: "#/components/parameters/RestaurantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string, maxLength: 2000, nullable: true }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Review" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /restaurants/{id}/reports:
+    post:
+      operationId: createReport
+      tags: [Reports]
+      summary: 回報店家問題
+      parameters:
+        - $ref: "#/components/parameters/RestaurantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  enum: [closed, not_vegetarian, wrong_info, menu_changed, wrong_address, wrong_hours, other]
+                description: { type: string, maxLength: 2000, nullable: true }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/RestaurantReport" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /diets:
+    get:
+      operationId: listDiets
+      tags: [Lookups]
+      summary: 飲食類型固定清單
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/CodeLabel" }
+
+  /features:
+    get:
+      operationId: listFeatures
+      tags: [Lookups]
+      summary: 特色固定清單
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/CodeLabel" }
+
+  /geocode:
+    get:
+      operationId: geocode
+      tags: [Geocode]
+      summary: 地址/地標轉經緯度（首頁搜尋框用，見 docs/api.md）
+      description: >
+        透過 Nominatim。Redis cache 1 天（同查詢字串），失敗時回
+        `{"success":true,"data":[]}` 而非錯誤，避免外部服務故障拖垮地圖首頁。
+      security: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 255 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/GeocodedPlace" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [Auth]
+      summary: 註冊
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, password_confirmation]
+              properties:
+                name: { type: string, maxLength: 255 }
+                email: { type: string, format: email, maxLength: 255 }
+                password: { type: string, minLength: 8 }
+                password_confirmation: { type: string }
+      responses:
+        "201": { $ref: "#/components/responses/AuthSuccess" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [Auth]
+      summary: 登入
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/AuthSuccess" }
+        "422":
+          description: 帳密錯誤（統一回 422，不透露帳號是否存在）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [Auth]
+      summary: 登出（撤銷當前 token）
+      responses:
+        "200": { $ref: "#/components/responses/EmptySuccess" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /me:
+    get:
+      operationId: getCurrentUser
+      tags: [Auth]
+      summary: 目前使用者
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /me/favorites:
+    get:
+      operationId: listMyFavorites
+      tags: [Favorites]
+      summary: 我的收藏列表
+      parameters:
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Restaurant" }
+                      meta: { $ref: "#/components/schemas/CursorMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /admin/reports:
+    get:
+      operationId: listAdminReports
+      tags: [Admin]
+      summary: 待審核回報列表（admin 限定）
+      parameters:
+        - name: status
+          in: query
+          description: 預設 pending
+          schema: { type: string, enum: [pending, approved, rejected] }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/AdminRestaurantReport" }
+                      meta: { $ref: "#/components/schemas/CursorMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/reports/{id}/approve:
+    post:
+      operationId: approveReport
+      tags: [Admin]
+      summary: 核准回報（admin 限定，重複審核回 422）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AdminRestaurantReport" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /admin/reports/{id}/reject:
+    post:
+      operationId: rejectReport
+      tags: [Admin]
+      summary: 駁回回報（admin 限定，重複審核回 422）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AdminRestaurantReport" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /admin/reviews:
+    get:
+      operationId: listAdminReviews
+      tags: [Admin]
+      summary: 評論列表（admin 限定，可看 hidden）
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, hidden] }
+        - name: restaurant_id
+          in: query
+          schema: { type: integer }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Review" }
+                      meta: { $ref: "#/components/schemas/CursorMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/reviews/{id}/hide:
+    post:
+      operationId: hideReview
+      tags: [Admin]
+      summary: >
+        隱藏評論（admin 限定，重複隱藏回 422；會立即觸發
+        RecalculateRestaurantRatingJob 重算該餐廳 rating）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Review" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "Laravel Sanctum personal access token（`Authorization: Bearer {token}`）"
+
+  parameters:
+    RestaurantId:
+      name: id
+      in: path
+      required: true
+      description: route model binding 是 id-based，不是 slug
+      schema: { type: integer }
+
+  responses:
+    EmptySuccess:
+      description: 成功，data 為 null
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean, example: true }
+              data: { example: null }
+    ValidationError:
+      description: 驗證失敗
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Unauthenticated:
+      description: 未登入
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Forbidden:
+      description: 已登入但沒有權限（例如非 admin 呼叫 /admin/* ）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NotFound:
+      description: 找不到資源
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    AuthSuccess:
+      description: 註冊/登入成功
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/SuccessEnvelope"
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      user: { $ref: "#/components/schemas/User" }
+                      token:
+                        type: string
+                        description: Sanctum plain-text token，只在這個回應出現一次
+
+  schemas:
+    SuccessEnvelope:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: {}
+        meta: { type: object, nullable: true }
+      required: [success, data]
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR, NOT_FOUND, UNAUTHENTICATED, FORBIDDEN, HTTP_ERROR, SERVER_ERROR]
+            message: { type: string }
+            fields:
+              type: object
+              additionalProperties:
+                type: array
+                items: { type: string }
+              nullable: true
+          required: [code, message]
+      required: [success, error]
+
+    CursorMeta:
+      type: object
+      properties:
+        per_page: { type: integer }
+        next_cursor: { type: string, nullable: true }
+        prev_cursor: { type: string, nullable: true }
+
+    CodeLabel:
+      type: object
+      properties:
+        code: { type: string }
+        label: { type: string }
+
+    GeocodedPlace:
+      type: object
+      properties:
+        display_name: { type: string }
+        latitude: { type: number, format: float }
+        longitude: { type: number, format: float }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [user, admin] }
+        created_at: { type: string, format: date-time }
+
+    MenuItem:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        price: { type: number, format: float, nullable: true }
+        diet_type: { type: string, enum: [vegan, vegetarian, non_vegetarian, unknown] }
+        is_available: { type: boolean }
+
+    Restaurant:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        address: { type: string }
+        city: { type: string, nullable: true }
+        district: { type: string, nullable: true }
+        latitude: { type: number, format: float }
+        longitude: { type: number, format: float }
+        distance_meters:
+          type: number
+          format: float
+          nullable: true
+          description: 只有半徑搜尋（帶 latitude+longitude）時才會出現
+        phone: { type: string, nullable: true }
+        website: { type: string, nullable: true }
+        price_level: { type: integer, nullable: true, minimum: 1, maximum: 4 }
+        rating: { type: number, format: float }
+        rating_count: { type: integer }
+        status: { type: string, enum: [active, inactive, pending] }
+        diet_types:
+          type: array
+          items: { type: string }
+          description: diet_types.code 陣列，只有 eager load 過才會出現（詳情頁才有）
+        features:
+          type: array
+          items: { type: string }
+          description: features.code 陣列，只有 eager load 過才會出現（詳情頁才有）
+        menu_items:
+          type: array
+          items: { $ref: "#/components/schemas/MenuItem" }
+        confidence_score:
+          type: integer
+          nullable: true
+          description: 0~100，只有詳情頁才會出現；沒有任何 verification 紀錄時是 null
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Review:
+      type: object
+      properties:
+        id: { type: integer }
+        user:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    RestaurantReport:
+      type: object
+      description: 一般使用者送出回報後拿到的回應（不含 restaurant/user 明細，那是 admin 專用）
+      properties:
+        id: { type: integer }
+        type:
+          type: string
+          enum: [closed, not_vegetarian, wrong_info, menu_changed, wrong_address, wrong_hours, other]
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [pending, approved, rejected] }
+        created_at: { type: string, format: date-time }
+
+    AdminRestaurantReport:
+      type: object
+      description: Admin 審核列表用，含 restaurant/user 明細
+      properties:
+        id: { type: integer }
+        restaurant:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        user:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        type:
+          type: string
+          enum: [closed, not_vegetarian, wrong_info, menu_changed, wrong_address, wrong_hours, other]
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [pending, approved, rejected] }
+        reviewed_by: { type: integer, nullable: true }
+        reviewed_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
