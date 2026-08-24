@@ -125,7 +125,7 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
 
 ## 已知技術債（progress.md 記錄，一併排入）
 
-- [ ] `users:promote {email}` Artisan 指令（目前只能手動改 DB 升 admin）
+- [x] `users:promote {email}` Artisan 指令（目前只能手動改 DB 升 admin）✅ 2026-08-24
 - [ ] 安裝 Laravel Horizon，把 `dispatchSync()` 改回 `dispatch()`（目前沒有 queue worker，
       所有 Job 用 `dispatchSync` 頂著，見 [progress.md](progress.md) Phase 6 決定）
 - [ ] `routes/console.php` 排程：定期跑 `restaurants:sync`、

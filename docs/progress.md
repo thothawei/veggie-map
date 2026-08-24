@@ -882,3 +882,33 @@ Caching／Rate Limiting 兩個段落，`README.md` 的 Caching Strategy／Securi
    `/api/v1/restaurants/1` 三筆真實請求記錄，不是空頁面或 500。
 
 `README.md` Observability 段落補一小段說明用途與環境限制範圍。
+
+## 2026-08-24 — 補：`users:promote {email}` Artisan 指令（技術債清單第一項）
+
+`docs/todo.md`「已知技術債」列的第一項——之前升 admin 只能手動改 DB，補一支正式指令。
+
+- `app/Console/Commands/PromoteUser.php`：`users:promote {email}`，查無此 email 回
+  `FAILURE` 並印錯誤訊息；已經是 admin 則印訊息後直接回 `SUCCESS`（不是重複 update）；
+  否則把 `role` 改成 `admin`。Laravel 11 對 `app/Console/Commands` 自動探索註冊，不用
+  手動加進 `routes/console.php`。
+- 3 個新測試（`tests/Feature/Console/PromoteUserTest.php`）：成功升級、已是 admin 的
+  no-op、查無使用者的失敗情境，都斷言 exit code。
+
+**過程中觀察到、但確認跟這次改動無關的既有問題（環境層級，非程式碼 bug）：** 在同一台
+機器上短時間內連續重跑 `php artisan test` 好幾次，有一部分次數出現
+「Table 'veggiemap_testing.reviews'／'restaurants' doesn't exist」的 `QueryException`，
+影響到跟這次改動完全無關的 `ReviewServiceConcurrencyTest`／`RuleBasedRecommendationServiceTest`。
+一開始懷疑是 `ReviewServiceConcurrencyTest` 背景 subprocess 資源爭用，但排查發現：
+`ps aux` 確認**這台機器同時有多個 Claude Code session 在跑**（不只這個對話），全部指向
+同一個 `docker-compose` stack、同一個 `veggiemap_testing` 資料庫；過程中還看到另一個
+session 正在改 `app/Providers/AppServiceProvider.php`（把 Telescope 排除出 `testing`
+環境，懷疑跟這個現象有關）——套用那個修改後異常依然存在，排除 Telescope 是根因。
+真正吻合的解釋是**多個 session 各自的 `php artisan test` 同時打同一個 MySQL 測試庫**：
+`RefreshDatabase` 把每個測試包在交易裡 rollback，如果另一個 session 的測試流程在
+同一時間對同一張表做 DDL／大量 DML，就會讓彼此的連線互相看到不一致的 schema 狀態。
+單一 session、沒有其他人同時在跑測試時，連續驗證 4 次都乾淨；Phase 12 記錄的 GitHub
+Actions（每次 run 都是獨立 MySQL service container，不共用）也一直是綠燈。**結論**：
+不是這次 Telescope／PromoteUser 改動的問題，也不是程式碼本身的併發 bug，是本機開發
+情境下「多個 session 共用同一個 docker-compose 測試資料庫」的已知風險——之後如果要
+同時開多個 session 對這個 repo 跑測試，要嘛錯開時間，要嘛之後才值得投資讓每個 session
+用獨立的測試庫（目前判斷 ROI 不到需要現在做的程度，先記錄下來）。
