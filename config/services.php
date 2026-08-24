@@ -35,4 +35,18 @@ return [
         ],
     ],
 
+    // VeggieMap 外部資料源設定，見 docs/external-apis.md。
+    'overpass' => [
+        'url' => env('EXTERNAL_API_OVERPASS_URL', 'https://overpass-api.de/api/interpreter'),
+        'timeout' => env('EXTERNAL_API_OVERPASS_TIMEOUT', 30),
+    ],
+
+    'nominatim' => [
+        'url' => env('EXTERNAL_API_NOMINATIM_URL', 'https://nominatim.openstreetmap.org'),
+        'user_agent' => env('EXTERNAL_API_NOMINATIM_USER_AGENT'),
+    ],
+
+    // mock｜osm，見 App\Providers\AppServiceProvider 的 RestaurantProviderInterface 綁定。
+    'restaurant_provider' => env('EXTERNAL_API_RESTAURANT_PROVIDER', 'mock'),
+
 ];

@@ -85,7 +85,323 @@ VeggieMap 的 User/Report 表單都會用到 email 驗證（Phase 4/5），屆�
 - `composer audit` 的 `CVE-2026-48019`（email 驗證 CRLF injection）仍待處理，同 Phase 1 備註，
   最晚 Phase 4/5 的 User/Report 表單要一併解決。
 
-## 下一步（等待確認後）
+## 2026-08-24 — Phase 3: API / Repository Layer（餐廳列表＋詳情）
 
-Phase 3：API / Repository layer（半徑搜尋 Bounding Box + `ST_Distance_Sphere` 兩段式查詢、
-餐廳列表與詳情端點），依 `docs/api.md` 的端點設計實作。
+**完成：**
+
+- `routes/api.php` 啟用，`bootstrap/app.php` 加 `api: routes/api.php` + `apiPrefix: 'api/v1'`。
+- `App\Exceptions\ApiExceptionRenderer`：統一 `/api/*` 錯誤回應為 `docs/api.md` 的
+  `{success:false, error:{code,message}}` 格式（`ValidationException`／`ModelNotFoundException`／
+  `NotFoundHttpException`／`AuthenticationException`／`AuthorizationException`／其他 `HttpExceptionInterface`
+  各自映射，非 `/api/*` 請求回 `null` 交還預設 handler）。
+- `RestaurantRepository::search()`：`docs/database.md` 的半徑搜尋兩段式查詢——
+  Bounding Box WKT polygon + `MBRContains` 過濾（`ST_GeomFromText` 先不帶 SRID 算完再
+  `ST_SRID(...,4326)` 貼標籤，跟既有 `RestaurantFactory` 寫入 `location` 的手法一致，避開 MySQL 8
+  對 SRID 4326 的軸序驗證），再用 `ST_Distance_Sphere` 算精確距離。`distance` 是計算欄位，
+  MySQL 不能在同一層 WHERE 引用 SELECT 別名，改用 `fromSub` 包一層讓外層可以對 `distance`
+  做 WHERE／ORDER BY／Cursor 分頁比較。支援 `keyword`／`city`／`district`／`diet`／`price_level`／
+  `rating_min`／`pet_friendly`／`parking` 篩選與 `distance`／`rating`／`popular`／`newest` 排序。
+- `SearchRestaurantRequest`：查詢參數驗證，`sort=distance` 沒帶座標時回 422 而非悄悄退回其他排序。
+- `RestaurantResource`／`MenuItemResource`；`RestaurantController@index`／`@show`。
+- 實測（真的打 HTTP，不只跑 artisan test）：
+  - `GET /api/v1/restaurants` 列表、`?latitude=&longitude=&radius=` 半徑搜尋（距離遞增排序正確）、
+    Cursor 分頁真的翻到第二頁且無重複/漏筆、`sort=rating`、`?diet=vegan` 篩選皆正常。
+  - `GET /api/v1/restaurants/{id}` 詳情頁正確帶出 `dietTypes`／`features`／`menuItems`。
+  - 404（`ModelNotFoundException`）與 422（自訂驗證錯誤）都回文件要求的錯誤格式。
+  - `EXPLAIN` 確認 `restaurants_location_spatial` 出現在 `possible_keys`（predicate 寫法可用該索引）；
+    但目前只有 20 筆種子資料，optimizer 判斷整表掃描比走索引便宜而選擇 `type=ALL`——這是 MySQL
+    對小表的正常決策，不是查詢寫錯，資料量大了之後才有意義重新驗證是否真的走索引。
+
+**未完成 / 等待確認：**
+
+- `open_now` 篩選參數目前**沒有實作**——schema 裡沒有任何營業時間欄位/表，`docs/database.md`
+  也未設計。要嘛之後補 `opening_hours` 相關表，要嘛從 `docs/api.md` 拿掉這個參數，先回報不擅自二選一。
+- `/diets`、`/features`、收藏／評論／回報／auth（Sanctum 尚未安裝）等端點仍未實作，留給後續 Phase。
+- `RestaurantController`／`RestaurantRepository` 目前沒有自動化測試（`tests/Feature`），
+  這次驗證全靠手動 curl／tinker／EXPLAIN，之後要補 Feature test 固化這些行為。
+
+## 2026-08-24 — Phase 3 續：`/diets`、`/features`
+
+**完成：**
+
+- `open_now` 決議：先擱置、不動 schema，`docs/api.md` 參數列表照舊保留，等未來真的要做
+  營業時間才回來補 `opening_hours` 表與篩選邏輯。
+- `GET /api/v1/diets`、`GET /api/v1/features`：固定清單（各 7／8 筆），資料量小不分頁，
+  共用一個 `LookupController`（`dietTypes()`／`features()`）而非各開一個 controller。
+  `DietTypeResource`／`FeatureResource` 只回 `code`／`label`。
+- 實測：兩支端點都打過 HTTP，回傳筆數與內容跟 `DietTypeSeeder`／`FeatureSeeder` 的固定清單一致。
+
+**未完成 / 等待確認：**
+
+- 收藏／評論／回報／auth（Sanctum 尚未安裝）、Feature test 仍未動工，留給下一階段。
+
+## 2026-08-24 — Phase 4: Auth（Sanctum）＋ 收藏
+
+**完成：**
+
+- `composer require laravel/sanctum`：在 `app` container（PHP 8.2，跟 Phase 1 記錄的坑一致，
+  沒有用 composer:2 image 本身的 PHP 8.4 去解依賴）安裝，`personal_access_tokens` migration
+  已跑。`User` model 加 `HasApiTokens` trait。
+- `AuthController`：`POST /auth/register`（`RegisterRequest` 驗證，`password confirmed`）／
+  `POST /auth/login`（`Hash::check` 失敗回 `ValidationException`，不洩漏帳號是否存在）／
+  `POST /auth/logout`（撤銷當前 token，`auth:sanctum` 保護）。純 Bearer token 認證，
+  沒有用 Sanctum 的 SPA cookie/stateful 模式（這個專案是 API-only，不需要）。
+- `MeController@show`（`GET /me`）、`FavoriteController`（`GET /me/favorites` cursor 分頁列表、
+  `POST`／`DELETE /restaurants/{id}/favorite`）。收藏加入用 `firstOrCreate` 冪等；
+  取消收藏對本來就沒收藏的餐廳也回成功（冪等，見程式碼註解），不特別開 `FavoritePolicy`——
+  這個動作除了「已登入」以外沒有其他授權判斷維度，`docs/api.md` 講的 Policy 針對的是
+  Review／Report／Restaurant 那種有 ownership／審核角色的資源。
+- 實測全流程（真打 HTTP）：register → 重複 email 422 → login 錯密碼 422 → login 成功 →
+  無 token 打 `/me` → favorite → 重複 favorite 冪等 → `/me/favorites` 有資料 → unfavorite →
+  `/me/favorites` 清空 → logout → 用同一個 token 再打 `/me` 確認 401（token 真的被撤銷）。
+
+**過程中抓到並修掉 2 個真的 bug（不是憑空猜的）：**
+
+1. `/me` 沒帶 token 原本回 **500**（`Route [login] not defined.`），不是文件要求的 401。
+   原因：Laravel 預設 `Authenticate` middleware 在請求沒有明確 `Accept: application/json` header
+   時，`redirectTo()` 會嘗試 `route('login')`——這個純 API 專案根本沒有 `login` 具名路由，
+   丟出的 `RouteNotFoundException` 蓋掉了原本該回的 `AuthenticationException`。
+   修法：`bootstrap/app.php` 用 `$middleware->redirectGuestsTo(fn () => null)` 強制永不重導。
+2. 註冊回應裡 `user.role` 原本是 `null`，但 DB 實際存的是 migration default 的 `user`
+   （`Eloquent::create()` 後記憶體 model 不會自動回填 DB-side default）。修法：
+   `AuthController::register()` 顯式帶 `'role' => 'user'`，不依賴 DB default 反映到回應。
+
+**未完成 / 等待確認：**
+
+- 評論／回報端點、`FormRequest`／`Policy`（`ReviewPolicy`／`ReportPolicy`）仍未實作。
+- `AuthController`／`FavoriteController` 沒有自動化測試，跟 Phase 3 一樣先靠手動驗證，
+  之後要補 Feature test。
+- Token 沒有 expiry／refresh 機制，`config/sanctum.php` 目前是預設值（`expiration => null`
+  永不過期）——MVP／Portfolio Demo 範圍可接受，正式營運要重新評估。
+
+## 2026-08-24 — Phase 5: 評論／回報
+
+**完成：**
+
+- `ReviewService::submit()`：`reviews` 的「同一使用者對同一餐廳只能有一筆 active review」
+  無法用 DB unique constraint 表達，改用交易——把現有 active review 改成 hidden 再建立新的，
+  等於「重新評論＝覆蓋上一筆」並保留歷史。併發安全靠 InnoDB REPEATABLE READ 對
+  `(user_id, restaurant_id, status)` 索引範圍的隱含 next-key lock，不需要額外顯式鎖。
+- `GET /restaurants/{id}/reviews`（無需登入，只顯示 `status=active`，cursor 分頁）／
+  `POST /restaurants/{id}/reviews`（`CreateReviewRequest` 驗證 rating 1~5）。
+- `POST /restaurants/{id}/reports`（`CreateRestaurantReportRequest` 驗證 `type` 是文件列的
+  7 種 enum 值之一）。
+- `ReviewPolicy`／`RestaurantReportPolicy`（`create()` 目前都只要求已登入，沒有其他授權維度——
+  審核／擁有者專屬的判斷留到有對應端點時再加）；`app/Http/Controllers/Controller` 補上
+  `AuthorizesRequests` trait（Laravel 11 預設骨架的空 base controller 沒有這個，`$this->authorize()`
+  要靠它才能用）。
+- 實測全流程（真打 HTTP）：未登入看評論列表（空）→ 無 token 寫評論 401 → rating 超出範圍 422 →
+  第一次評論成功 → 同使用者對同餐廳第二次評論 → 列表只剩最新一筆 active（舊的變 hidden，
+  驗證覆蓋邏輯真的生效，不是憑程式碼讀出來的推測）→ 回報成功 → 回報 `type` 不合法 422 →
+  無 token 回報 401。
+
+**過程中抓到並修掉 1 個真的 bug：**
+
+`POST /restaurants/{id}/reports` 一開始固定回 403「This action is unauthorized.」，即使
+`RestaurantReportController` 明確呼叫了 `$this->authorize('create', RestaurantReport::class)`
+且對應 Policy 的 `create()` 寫死回 `true`。根因：Laravel 的 Policy 自動發現慣例是
+`{Model 類別名稱}Policy`——`App\Models\RestaurantReport` 對應的是 `App\Policies\RestaurantReportPolicy`，
+不是我原本取名的 `ReportPolicy`，命名對不上，Laravel 找不到 Policy 時預設視為未授權。
+改檔名／類別名稱成 `RestaurantReportPolicy` 後重測通過。
+
+**未完成 / 等待確認：**
+
+- Review／Report 都還沒有 Feature test，繼續靠手動 curl 驗證，之後要補。
+- `restaurant.rating`／`rating_count` 沒有在寫入 review 時同步更新——依 `docs/database.md` 設計，
+  這是快取欄位，由未來 Phase 6/7 的 `RecalculateRestaurantRatingJob` 批次更新，Phase 5 範圍
+  只負責把 review 寫進去。
+- Admin 審核 report（approve/reject、`reviewed_by`／`reviewed_at`）尚未實作，`docs/api.md`
+  端點清單本來就沒列出對應 API，留給未來若有 Admin 面板時再處理。
+
+## 2026-08-24 — Feature Test 補完
+
+**完成：**
+
+- 獨立測試資料庫 `veggiemap_testing`（同一個 Docker MySQL container，不碰 `veggiemap` 開發資料）：
+  `CREATE DATABASE` + `GRANT ALL` 給既有 `veggiemap` 使用者。schema 用了 MySQL 專屬空間函式
+  （`POINT`／`ST_Distance_Sphere`／`MBRContains`，見 `RestaurantRepository`），sqlite 跑不起來，
+  所以沒有走常見的「測試用 sqlite in-memory」路線。`phpunit.xml` 直接把 `DB_*` env 硬指到這個庫，
+  `RefreshDatabase` 每個測試方法都在交易裡跑完就 rollback。**這是手動一次性設定，新環境／CI
+  要跑這個測試套件前得先手動建這個庫**（沒有寫成 migration/setup script，見「未完成」）。
+- 6 個 Feature test 檔案（`tests/Feature/Api/`）涵蓋目前所有端點：`RestaurantTest`（列表／篩選／
+  半徑搜尋距離排序／cursor 分頁翻頁不重複不漏／詳情／404）、`LookupTest`、`AuthTest`（含
+  Phase 4 抓到的 role null／guest 401 兩個 regression）、`FavoriteTest`（含冪等行為）、
+  `ReviewTest`（含覆蓋舊評論邏輯）、`RestaurantReportTest`（含 Phase 5 抓到的 Policy 命名
+  regression）。共 30 個測試、82 個 assertion，全綠。
+- 寫測試過程中兩個一開始失敗的案例，深入排查後確認**都是測試假象、不是產品 bug**：
+  1. `logout` 測試：同一個 PHPUnit test method 內連續打兩次 HTTP 請求，共用同一個 app 容器，
+     Sanctum 的 `RequestGuard` 會把第一次解析出的 user 快取在物件屬性上，不會因為 DB 裡的
+     token 被刪就重新查——這只在單一 process 的測試環境發生（真實環境每個請求是獨立
+     PHP-FPM process，Phase 4 手動 curl 已經驗證過 logout 後續請求真的會 401）。修法：
+     兩次請求之間呼叫 `app('auth')->forgetGuards()` 清快取，不是改程式碼。
+  2. `distance_meters` 型別斷言：JSON 編碼把整數值的浮點數（例如 `30.0`）序列化成 `30`，
+     `json_decode` 讀回來是 PHP int——這是 JSON 編碼慣例，不是資料算錯。斷言改用
+     `assertIsNumeric` 而非 `assertIsFloat`。
+
+**未完成 / 等待確認：**
+
+- 建測試庫是手動下的 SQL，沒有寫成腳本／文件化到 README（README 本身還是 Laravel 預設內容，
+  留給 Phase 11）。之後要接 CI 的話，這個「先手動建 `veggiemap_testing`」的步驟必須自動化，
+  否則 CI 環境跑不起來。
+- 只覆蓋 Feature/HTTP 層行為，沒有 Unit test 覆蓋 `RestaurantRepository::boundingBoxPolygon()`
+  這種純計算邏輯，也沒有測試 `ReviewService` 併發競態（需要真的並行請求才能驗證 next-key
+  lock 有沒有效，目前只驗證了「循序覆蓋」邏輯）。
+
+## 2026-08-24 — Phase 6: Rating／Confidence Score 批次計算 Job
+
+**完成：**
+
+- `config/vegetarian.php`：`verification_weights`（`restaurant_claim`／`menu_verified`／
+  `user_report`／`photo_verified`／`external_source`／`admin_verified` 六種驗證類型的分數），
+  `docs/database.md` 明確要求 `restaurant_verifications.score` 要對應這份 config，不寫死在程式碼。
+- `VerificationService::record()`：集中管理「寫入一筆驗證紀錄時分數怎麼決定」的邏輯（查 config），
+  供未來寫驗證紀錄的呼叫端共用。**目前還沒有任何 HTTP 端點會呼叫它**——餐廳自主認領／Admin
+  後台／Phase 8 的 `restaurants:sync` 外部資料匯入都還沒實作，先把邏輯定義好等之後接。
+- `RecalculateRestaurantRatingJob`：算某餐廳所有 `status=active` 的 review 平均分數與筆數，
+  更新 `restaurants.rating`／`rating_count` 快取欄位。掛在 `ReviewService::submit()` 尾端，
+  每次評論異動（新增或覆蓋）後觸發。
+- `CalculateRestaurantScoreJob`：加總某餐廳所有未過期（`expires_at is null or > now()`）的
+  `restaurant_verifications.score`，封頂 100，upsert 進 `restaurant_confidence_scores`。
+- 兩支 Artisan 批次指令：`restaurants:recalculate-ratings`／`restaurants:calculate-scores`，
+  chunk 過全部餐廳逐一 dispatch，用於 backfill／之後接 cron。
+- **關鍵設計決定（不是隨口做的）**：兩個 Job 都實作 `ShouldQueue`，但呼叫端一律用
+  `dispatchSync()` 而不是 `dispatch()`。原因：這個專案目前沒有跑 queue worker（`QUEUE_CONNECTION=redis`，
+  Phase 1 就記錄過 Horizon/Sail 之類的套件還沒裝），如果真的呼叫 `dispatch()` 丟進 Redis 佇列，
+  沒有 worker 消化的話 rating／confidence score 就永遠不會更新——會變成一個「程式碼看起來
+  對、實際上什麼都沒發生」的死路徑。等之後真的架了 queue worker，把 `dispatchSync` 改回
+  `dispatch` 即可，Job 類別本身不用動。
+- 實測：
+  - 6 個新 Feature test（`RecalculateRestaurantRatingJobTest`／`CalculateRestaurantScoreJobTest`）：
+    hidden review 不計入平均、零 active review 歸零、API 送出評論後 rating 真的更新、
+    過期驗證不計分、加總封頂 100、`VerificationService` 正確查表。全部通過（連同既有測試共
+    36 個、92 個 assertion）。
+  - 在**非測試的 dev 資料庫**上也真打過一次 HTTP（送出評論後 `GET /restaurants/1` 的 rating
+    立即反映）＋跑過兩支 artisan 指令（`restaurants_confidence_scores` 表 20 筆全部 upsert 成功），
+    確認 `dispatchSync` 這個決定在真實環境（不只測試環境的 sync queue driver）真的有效。
+
+**未完成 / 等待確認：**
+
+- 沒有任何端點會真的建立 `restaurant_verifications` 紀錄，所以目前所有餐廳的 confidence score
+  都是 0——這不是 bug，是「分數計算管線已經打通，但分數的資料來源（自主認領／Admin／
+  外部匯入）還沒做」的誠實現況，等 Phase 8（`restaurants:sync`）或 Admin 功能接上才會有非零值。
+- 沒有排程（`routes/console.php` 的 schedule）自動跑這兩支批次指令，目前只能手動執行。
+
+**追加（同一輪，使用者已授權後續建議自動採用）：**
+
+`docs/api.md` 端點清單當初沒列 `confidence_score`，是文件遺漏——已經補進
+`RestaurantResource`（`GET /restaurants/{id}` 詳情頁 eager load `confidenceScore` 關聯；列表頁
+沒有帶，避免每筆多一次額外查詢的成本，且列表頁场景用不太到這個欄位）。測試與真實 HTTP
+都驗證過會正確回傳（沒有分數紀錄時是 `null`，跑過批次指令後是實際數字）。
+
+## 2026-08-24 — Phase 8: `restaurants:sync` 外部資料匯入
+
+**完成：**
+
+- Adapter Pattern（`docs/architecture.md`）：`RestaurantProviderInterface` + `RestaurantData`／
+  `BoundingBox` value object，`OsmRestaurantProvider`（真的呼叫 Overpass API，30s timeout、
+  429 退避重試、寫 `ExternalApiLog`）／`MockRestaurantProvider`（讀
+  `storage/app/mock/restaurants.json` fixture，Overpass 斷線或本機無網路時的保底）。
+  `AppServiceProvider` 依 `EXTERNAL_API_RESTAURANT_PROVIDER`（預設 `mock`，避免開發/測試環境
+  不小心打到真的 Overpass）綁定介面。
+- `RestaurantSyncService`：對每筆匯入資料——用 `(source, source_id)` upsert（重跑同一批不會
+  產生重複列，已實測驗證冪等）、掛 diet_types、「同名＋距離 <100m 視為可能重複」兩筆都標記
+  `is_possible_duplicate`（不自動合併/刪除，見 `docs/database.md`）、透過 `VerificationService`
+  建立 `external_source` 驗證紀錄、`dispatchSync` 觸發 `CalculateRestaurantScoreJob`——這是
+  Phase 6 那條「confidence score 目前全部是 0，因為沒有資料源會寫入 verification」的缺口，
+  Phase 8 補上後分數管線才真正跑得起來。
+- `php artisan restaurants:sync --bbox=minLat,minLng,maxLat,maxLng [--provider=mock|osm]`：
+  `--bbox` 必填（不給明確錯誤訊息，不讓人一次不小心撈全台灣），`--provider` 可覆蓋 config
+  做單次測試。
+- 5 筆 fixture 資料（`storage/app/mock/restaurants.json`，台北/台中/高雄各一到三家，含
+  `diet_codes`），讓 mock provider 開箱即可匯入非空結果。
+- 實測（真打 command，非只讀程式碼）：
+  - mock provider 匯入 5 筆成功，diet_types／verification／confidence score 全部正確寫入
+    （用 `mysql --default-character-set=utf8mb4` 直接查表驗證，中途發現 client 預設連線
+    charset 沒設會讓中文查詢條件對不上，這是查證方式的坑不是資料的坑）。
+  - 冪等性：同一批 fixture 再跑一次，`created=0／updated=5`，`restaurants` 總數沒有變多。
+  - Dedup：手動塞一筆跟既有餐廳同名同座標（不同 `source_id`）的資料，兩筆都被標記
+    `is_possible_duplicate=1`；同名但距離遠（跨城市）的則不會誤標。
+  - 7 個新 Feature test（`RestaurantSyncServiceTest`，含用匿名類別實作
+    `RestaurantProviderInterface` 做的單元化測試，不依賴共用 fixture 檔內容），加上既有測試
+    共 43 個、108 個 assertion，全綠。
+
+**過程中抓到並修掉 1 個真的 bug：**
+
+`Str::slug()` 對純中文名稱（例如「清心蔬食」）音譯不出任何 ASCII 字元，回傳空字串——實測
+匯入後所有中文餐廳名的 slug 全部撞成同一個 fallback（`restaurant-2`／`restaurant-3`…），
+`docs/database.md` 講的「slug 供人類看得懂的 URL 用」的設計目的完全失效。這對台灣餐廳平台
+是會影響所有資料的系統性問題，不是邊角案例。修法：轉不出 ASCII 字元時退回用
+`{來源}-{來源ID}`（例如 `osm-mock-node-1001`）當種子，每家餐廳至少有不同、可追溯的 slug。
+寫了對應 regression test（`slug_falls_back_to_source_seed_...`）。
+
+**未完成 / 等待確認：**
+
+- `NominatimGeocodingProvider`（使用者輸入地址轉經緯度）**沒有實作**——`docs/api.md` 的端點
+  清單裡本來就沒有「地址搜尋」這條 API（現有 `GET /restaurants` 直接吃 `latitude`/`longitude`
+  數字），這部分屬於範圍外，不是漏做。
+- Circuit breaker（`docs/external-apis.md` 提到「連續 N 次失敗後停止」）目前沒有實作：一次
+  `restaurants:sync` 呼叫只打一次 Overpass API（一個 bounding box = 一次請求），單次呼叫內
+  沒有「連續失敗」的情境可以觸發斷路器。這個概念要等未來做「一次排程掃多個 bounding box」
+  的批次排程器時才有意義，先誠實記下不是忘記做。
+- 沒有排程自動跑 `restaurants:sync`，目前只能手動執行（跟 Phase 6 的批次計算指令一樣）。
+- `restaurants:sync --provider=osm` 沒有打過真的 Overpass API 驗證（只測過 mock provider）——
+  `OsmRestaurantProvider` 的 HTTP 呼叫／重試／`ExternalApiLog` 寫入邏輯目前只靠程式碼審視，
+  沒有實際對外流量驗證過，之後要跑一次真的匯入才能確認。
+
+## 2026-08-24 — Phase 7: Admin 審核（report／review）
+
+**範圍先講清楚：`docs/api.md` 的端點清單原本完全沒列 Admin 相關端點**，這個 Phase 是我自己
+依 `restaurant_reports`／`reviews` 表已經有的 `reviewed_by`／`reviewed_at`／`status` 欄位
+（見 `docs/database.md`）反推設計出來的，不是照抄某份既有規格，設計決定列在下面。
+
+**完成：**
+
+- `RestaurantReportPolicy::review()`／`ReviewPolicy::moderate()`：`$user->isAdmin()` 判斷，
+  非 admin 一律 403（沿用既有的 Policy 自動發現機制與 `ApiExceptionRenderer` 錯誤格式）。
+- `GET /api/v1/admin/reports`（預設只列 `pending`，可用 `?status=` 切換）／
+  `POST /api/v1/admin/reports/{id}/approve`／`POST /api/v1/admin/reports/{id}/reject`：
+  只更新這筆回報自己的 `status`／`reviewed_by`／`reviewed_at`，**刻意不會**反過來自動改動
+  被回報的餐廳資料（例如 `type=closed` 不會自動把 `restaurant.status` 改成 `inactive`）——
+  文件沒定義這種連動規則，寧可讓 Admin 自己另外處理，也不要憑空猜一個沒人要求的自動化行為。
+  重複審核已審核過的回報回 422，不會覆蓋歷史。
+- `GET /api/v1/admin/reviews`（可用 `?status=`／`?restaurant_id=` 篩選，看得到 `hidden` 的）／
+  `POST /api/v1/admin/reviews/{id}/hide`：隱藏後立刻 `dispatchSync(RecalculateRestaurantRatingJob)`，
+  跟 `ReviewService::submit()` 用同一套「沒有 queue worker，用 dispatchSync 保證真的生效」的邏輯。
+  重複隱藏已隱藏的評論回 422。
+- 實測（真打 HTTP，非 admin／admin 兩種身分都測過）：
+  - 建了一個真實帳號、手動在 DB 把 `role` 改成 `admin`（沒有 Admin 帳號建立/晉升的 API，
+    這本來就不在任何文件範圍內，MVP 靠手動 SQL 是合理的）。
+  - 非 admin 打 `/admin/reports`／approve／`/admin/reviews`／hide 全部正確 403。
+  - Admin 建立→列出→approve→再 approve 一次（422，不會覆蓋）全程正確；`reviewed_by` 正確記成
+    審核者的 user id。
+  - 送出評論（rating 從 0/0 變 1/1）→ Admin 隱藏該評論 → `GET /restaurants/{id}` 的 rating
+    立刻掉回 0/0，證明 `RecalculateRestaurantRatingJob` 真的被觸發且拿到正確的最新資料。
+  - 11 個新 Feature test（`tests/Feature/Api/Admin/`），加上既有測試共 54 個、129 個
+    assertion，全綠。
+
+**未完成 / 等待確認：**
+
+- 沒有「Admin 帳號建立／晉升」的 API 或指令——目前只能手動改 DB。這對正式營運不可接受，
+  但 MVP／Portfolio Demo 範圍先不做，之後若要做，合理的形式會是一支 Artisan command
+  （例如 `users:promote {email}`）而不是公開 API。
+- `restaurant_reports` 的審核結果目前完全不影響被回報的餐廳本身（見上面設計決定）——如果
+  之後要接「approve 後自動處理餐廳資料」的規則，需要先定義清楚每種 `type` 該對應什麼動作，
+  不是這個 Phase 該猜的範圍。
+- Admin review 列表沒有像 `/restaurants` 那樣支援 `sort`／`keyword`，只有基本狀態/餐廳 id
+  篩選——Admin 審核佇列的資料量級跟公開列表不同，先做最小可用版本。
+
+## 現況總覽（2026-08-24 收尾）
+
+Phase 0～8 全部完成並實測：架構／文件、Laravel＋Docker 專案初始化、13 張表 migration＋
+Model＋Factory＋Seeder、`/restaurants`（含半徑搜尋兩段式查詢＋cursor 分頁）、`/diets`／
+`/features`、Sanctum 認證＋收藏、評論／回報、Rating／Confidence Score 批次計算 Job、
+`restaurants:sync` 外部資料匯入（Overpass／Mock Provider）、Admin 審核 report／review。
+54 個 Feature test、129 個 assertion，全綠。
+
+**下一步（尚未做、等使用者選擇優先順序）：**
+
+- Phase 9：Vue 3 + Leaflet 前端（`docs/architecture.md` 系統圖裡畫的那塊，目前完全還沒動）。
+- `users:promote` 這類 Admin 帳號晉升指令（Phase 7 記錄的已知缺口）。
+- 排程自動跑 `restaurants:sync`／批次計算 Job（目前都只能手動執行）。
+- README／`docs/openapi.yaml` 等文件收尾工作（Phase 11 範圍）。
+- 部署／CI（Phase 13 範圍），含 Feature test 需要的 `veggiemap_testing` 資料庫建置要先自動化。

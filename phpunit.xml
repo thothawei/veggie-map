@@ -22,8 +22,17 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
-        <!-- <env name="DB_CONNECTION" value="sqlite"/> -->
-        <!-- <env name="DB_DATABASE" value=":memory:"/> -->
+        <!--
+            schema 用 MySQL 專屬的空間函式（POINT／ST_Distance_Sphere／MBRContains，
+            見 App\Repositories\RestaurantRepository），sqlite 跑不起來，改連同一個
+            Docker MySQL 的獨立測試庫，不碰 veggiemap 開發資料。
+        -->
+        <env name="DB_CONNECTION" value="mysql"/>
+        <env name="DB_HOST" value="mysql"/>
+        <env name="DB_PORT" value="3306"/>
+        <env name="DB_DATABASE" value="veggiemap_testing"/>
+        <env name="DB_USERNAME" value="veggiemap"/>
+        <env name="DB_PASSWORD" value="veggiemap"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
