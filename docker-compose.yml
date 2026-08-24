@@ -1,0 +1,58 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: veggiemap-app
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - veggiemap
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: veggiemap-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - veggiemap
+
+  mysql:
+    image: mysql:8.0
+    container_name: veggiemap-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: veggiemap
+      MYSQL_USER: veggiemap
+      MYSQL_PASSWORD: veggiemap
+      MYSQL_ROOT_PASSWORD: veggiemap_root
+    ports:
+      - "3307:3306"
+    volumes:
+      - veggiemap-mysql-data:/var/lib/mysql
+    networks:
+      - veggiemap
+
+  redis:
+    image: redis:7-alpine
+    container_name: veggiemap-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - veggiemap
+
+networks:
+  veggiemap:
+    driver: bridge
+
+volumes:
+  veggiemap-mysql-data:
