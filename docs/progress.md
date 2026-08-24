@@ -582,3 +582,75 @@ cluster 看到個別 marker、點 marker 跳轉到 `/restaurants/{id}` 詳情頁
 - `veggiemap_testing` 的建庫腳本化只驗證過「對已存在的資料庫重跑」，沒有實際刪掉整個
   Docker volume 從零驗證過 `docker-entrypoint-initdb.d` 那條全新 volume 路徑（會動到
   這台機器上其他人的開發資料，沒有必要冒這個風險去驗證一段邏輯很單純的 SQL）。
+
+## 2026-08-24 — Phase 12：GitHub Actions CI
+
+**完成：**
+
+- `.github/workflows/ci.yml`：兩個平行 job。
+  - **Backend**：`shivammathur/setup-php@v2`（PHP 8.2 + pdo_mysql/mbstring/bcmath/gd/zip）
+    → 建 `.env` → `composer install` → `php artisan key:generate` → 建前端資產（見下方
+    「過程中抓到的 bug」）→ `pint --test` → `phpstan analyse`（Larastan）→ 等 MySQL service
+    container 就緒 → `migrate --force` → `php artisan test`。
+  - **Frontend**：`actions/setup-node@v4`（Node 22）→ `npm ci` → `eslint` → `vue-tsc` →
+    `vitest run` → `npm run build`。
+- 新增 `larastan/larastan` + `phpstan.neon`（level 5）。第一次跑出 12 個錯誤，不是雜訊——
+  `Restaurant`／`Review`／`RestaurantReport`／`RestaurantConfidenceScore` 的關聯方法回傳型別
+  都只寫裸的 `BelongsTo`／`HasMany`／`HasOne`，沒有帶泛型，導致 PHPStan 完全看不穿
+  `$this->restaurant->id` 這種透過關聯存取的寫法。補上 `@return BelongsTo<Restaurant, $this>`
+  這類泛型 docblock 是全面性修正（不是只在出錯的地方局部繞過），順便也拿掉了
+  `OsmRestaurantProvider`／`NominatimGeocodingProvider` 裡兩個多餘的 `?->`（`RequestException`
+  的建構子簽章證明 `$response` 永遠不是 null，PHPStan 講對了）。修完 0 error。
+- 新增 ESLint（flat config，`eslint-plugin-vue` + `@vue/eslint-config-typescript`）。
+  抓到的都是真問題：一個沒用到的 import、四處 `catch (e: any)` 直接存取
+  `e?.response?.data?.error?.message` 這種完全沒型別保護的寫法。改成
+  `resources/js/lib/apiError.ts` 的 `extractApiErrorMessage`／`extractApiErrorFields`，
+  用 axios 的 `isAxiosError` 做真正的型別窄化，不是隨便塞個 `unknown` 應付 lint。瀏覽器
+  重新走過一次登入錯密碼的流程，確認改完之後錯誤訊息還是正確顯示，不是只有 type-check 過。
+- 啟用 `pint --test` 前，先跑一次完整（非 `--test`）的 `pint` 格式化全專案——這個 CI gate
+  一啟用就會抓到 16 個 Phase 0~8 留下來、從來沒被嚴格模式檢查過的既有風格問題。既然是我
+  自己要加這道 CI gate，讓它第一次真的跑就失敗不合理，先修乾淨是前提不是額外加工。
+
+**過程中抓到並修掉的 3 個 bug（第一次真的推上 GitHub Actions 跑才發現，本機 docker-compose
+一直是綠燈，因為本機環境有這次 session 留下的殘餘狀態把問題蓋住了）：**
+
+1. **`storage/app/mock/restaurants.json` 從來沒有真的進版控**——`storage/app/.gitignore`
+   整個目錄用 `*` 擋掉，Phase 8 建立這個 fixture 時沒有 `git add -f`，這個檔案其實只存在
+   於我的本機。任何人 fresh clone 這個 repo，`restaurants:sync --provider=mock` 都會匯入
+   0 筆（`RestaurantSyncServiceTest` 期待 5 筆），因為 mock provider 讀不到不存在的檔案。
+   這對一個履歷用的 Portfolio 專案是嚴重問題——demo 的保底路徑本身其實是壞的。修法：
+   `.gitignore` 加 `!mock/`／`!mock/restaurants.json` 例外，`git add -f` 真的把檔案加進去。
+2. **`GET /`（`tests/Feature/ExampleTest.php`）在全新 checkout 上會炸
+   `ViteManifestNotFoundException`**——Phase 9 把 `/` 改成 Vue SPA shell（`app.blade.php`
+   透過 `@vite` 載入資產），render 這個 view 需要 `public/build/manifest.json`。本機測試
+   一直過是因為這個 session 稍早跑過 `npm run build`，`public/build/` 一直躺在本機沒清掉，
+   蓋住了「後端測試其實依賴前端建置產物」這個真實耦合。修法：Backend CI job 在跑 Pint/
+   PHPStan/PHPUnit 之前先 `npm ci && npm run build`（不是刪掉這個測試打發——`/` 本來就是
+   這個專案实际的入口，測它回 200 是有意義的迴歸測試，跟 README「Local Development」講的
+   「前端要 build 過整個 app 才能動」是同一件事）。用 `mv public/build /tmp && php artisan
+   test tests/Feature/ExampleTest.php` 反向驗證過真的會紅、加回來會綠，不是憑錯誤訊息猜的。
+3. **Vitest 在 CI 直接 Startup Error**：`You should not run the Vite HMR server in CI
+   environments`——Vitest 預設吃 `vite.config.js`，裡面的 `laravel-vite-plugin` 偵測到
+   CI 環境變數直接擋掉。單元測試根本不需要 Laravel 的資產管線，加一份獨立的
+   `vitest.config.ts`（只保留 `vue()` plugin，不含 `laravel()`）解決，兩份設定互不干擾。
+   本機用 `CI=true npm run test` 重現過失敗、加了 `vitest.config.ts` 之後重現過修好，
+   不是照錯誤訊息裡的 `LARAVEL_BYPASS_ENV_CHECK=1` 提示照抄了事（那個做法只是關掉檢查，
+   沒有解決「Vitest 不該吃到 Laravel 資產管線設定」這個根本問題）。
+
+**實測：**
+
+`git push` 後用 `gh run watch` 真的看完整整兩次 workflow 執行（不是寫完 yaml 就交差）：
+第一次跑就在 100% 真實的全新 checkout 環境下抓到上面 3 個 bug；修完後第二次兩個 job
+（Backend 1m13s／Frontend 19s）全綠，`gh run view` 確認 exit code 0。
+
+**未完成 / 等待確認：**
+
+- `gh` CLI 的 OAuth token 一開始沒有 `workflow` scope，push `.github/workflows/ci.yml`
+  被 GitHub 拒絕；裝置授權碼（device code）前兩次都在使用者來得及操作前過期，第三次才
+  成功——這不是我能自動解決的，純粹是使用者互動時間的問題，記錄下來避免下次以為是
+  gh 指令本身有問題。
+- CI 沒有 cache Composer/npm 依賴到 GitHub Actions cache（`actions/setup-node` 的
+  `cache: npm` 有開，但 `shivammathur/setup-php` 沒接 Composer cache）——目前 Backend job
+  1m13s 可接受，等 PR 數量變多、想省 CI 時間時再考慮加。
+- `pull_request` trigger 存在，但這個專案目前沒有走 PR 流程（約定是直接 push `main`），
+  沒有實際拿一個 PR 驗證過 `pull_request` 事件會不會正確觸發。

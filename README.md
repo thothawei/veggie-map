@@ -224,8 +224,16 @@ Bounding Box，`MBRContains` 過濾出候選集合（能用到 Spatial Index）�
 
 ## CI/CD
 
-尚未實作（[docs/todo.md](docs/todo.md) Phase 12）。規劃：`.github/workflows/ci.yml` 跑
-Install → Pint → PHPStan → 自動建測試庫 → PHPUnit → build。
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)，push/PR 到 `main` 時觸發，兩個平行 job：
+
+- **Backend**：`composer install` → 建前端資產（`/` 是 SPA shell，render 需要 Vite
+  manifest）→ `pint --test` → `phpstan analyse`（Larastan, level 5）→ MySQL service
+  container → migrate → `php artisan test`。
+- **Frontend**：`npm ci` → `eslint` → `vue-tsc --noEmit` → `vitest run` → `npm run build`。
+
+第一次真的跑在 GitHub Actions 上時抓到 3 個本機環境掩蓋掉的真 bug（mock fixture 從沒進
+版控、`/` 依賴的 Vite manifest 在全新 checkout 不存在、Vitest 誤吃到 `laravel-vite-plugin`
+的 CI 防呆機制），細節見 [docs/progress.md](docs/progress.md) Phase 12。
 
 ## Future Roadmap
 
@@ -234,7 +242,7 @@ Install → Pint → PHPStan → 自動建測試庫 → PHPUnit → build。
   靠手動瀏覽器驗證）
 - `users:promote` Admin 帳號晉升指令
 - `routes/console.php` 排程自動跑 `restaurants:sync`／批次計算 Job
-- GitHub Actions CI、部署文件（AWS，需使用者確認 credentials 後才執行）
+- 部署文件（AWS，需使用者確認 credentials 後才執行）
 - 更長期：AI 推薦、Menu OCR、使用者聲譽系統（見總體規劃文件，第一版 MVP 刻意不做）
 
 ---

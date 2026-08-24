@@ -61,11 +61,19 @@
 - [ ] `docs/openapi.yaml`（含 Phase 8.5 新增的 `/geocode`）
 - [ ] `docs/observability.md`
 
-## Phase 12 — GitHub Actions CI
+## Phase 12 — GitHub Actions CI ✅ 已完成 2026-08-24
 
-- [ ] `.github/workflows/ci.yml`：Install → Pint → PHPStan → 自動建 `veggiemap_testing`
-      → PHPUnit → build
-- [ ] 前端存在後補：ESLint／TypeScript／Vitest／build
+- [x] `.github/workflows/ci.yml`：Backend job（Pint --test → Larastan(PHPStan) →
+      MySQL service container → migrate → PHPUnit）+ Frontend job（ESLint → vue-tsc →
+      Vitest → npm run build），兩個 job 並行跑
+- [x] ESLint／TypeScript／Vitest／build 都在 Frontend job 裡
+- [x] 真的推上 GitHub、用 `gh run watch` 看過兩次實際執行（不是只寫完 yaml 就交差）：
+      第一次跑就抓到 3 個只有在全新 checkout 才會炸的真 bug（見 progress.md），修完
+      第二次兩個 job 都綠燈，`gh run view` 確認 exit code 0
+
+已知限制：`docker/mysql/init/`、`scripts/setup-test-db.sh` 是給本機 docker-compose 用的，
+CI 用的是 GitHub Actions 原生的 MySQL service container（`MYSQL_DATABASE` 環境變數直接建庫），
+兩條路徑不共用同一個腳本，但邏輯上是等效的（見 workflow 檔案裡的註解）。
 
 ## Phase 13 — 部署文件
 
