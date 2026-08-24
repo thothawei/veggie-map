@@ -700,3 +700,25 @@ cluster 看到個別 marker、點 marker 跳轉到 `/restaurants/{id}` 詳情頁
   `when()` 不成立時是整個 key 消失，不是 key 存在但值是 null——這點規格的敘述文字已經
   講清楚，只是沒有用型別系統強制）。但沒有涵蓋全部 20 支端點，Admin 那幾支（需要 admin
   token）跟寫入類端點沒有逐一核對，這裡誠實記錄範圍。
+
+## 2026-08-24 — Phase 13：部署文件
+
+**完成：**
+
+- `docs/deployment.md`：方案 A（EC2+RDS+ElastiCache）／方案 B（ECS Fargate，未來 scale
+  用，只記錄架構方向不展開步驟）比較與選擇理由；方案 A 的完整步驟（RDS／ElastiCache
+  佈建、EC2、production `.env` 覆寫清單、建置指令、HTTPS、admin 帳號建立、Queue
+  Worker／排程建議、安全性、回滾策略）。
+- 開頭先列「目前還不是 production-ready」的缺口對照表（沒有 Horizon、沒有
+  `users:promote`、沒有排程、`CVE-2026-48019` 未處理、Nominatim 商業政策偏保留），
+  每項標記「部署前要不要處理」，不是寫成一份看起來萬事俱備的文件。
+- 重新真的跑了一次 `composer audit`（不是憑 Phase 1 記錄的舊印象），確認
+  `CVE-2026-48019`（Laravel CRLF injection in default email rule）現況依然存在，
+  修法還是升級到 12.60+/13.10+，寫進部署文件的「安全性：部署前必須處理」。
+
+**未完成 / 等待確認：**
+
+- 沒有實際執行任何 AWS 資源佈建或部署——沒有 credentials，也沒有使用者確認要花錢起
+  infra，依照總 prompt 規則停在文件階段。
+- 方案 B（ECS Fargate）只記錄架構方向，沒有寫逐步操作——這個專案目前的規模用不到，
+  真的要用的時候再回來展開。

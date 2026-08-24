@@ -83,9 +83,14 @@
 CI 用的是 GitHub Actions 原生的 MySQL service container（`MYSQL_DATABASE` 環境變數直接建庫），
 兩條路徑不共用同一個腳本，但邏輯上是等效的（見 workflow 檔案裡的註解）。
 
-## Phase 13 — 部署文件
+## Phase 13 — 部署文件 ✅ 已完成 2026-08-24
 
-- [ ] 只產出 deployment documentation，不執行 production 部署（未確認 AWS credentials 前）
+- [x] `docs/deployment.md`：方案 A（EC2+RDS+ElastiCache，推薦）與方案 B（ECS Fargate）
+      架構比較＋為什麼選 A、RDS/ElastiCache/EC2 佈建、`.env` production 覆寫清單、
+      建置步驟、admin 帳號建立、Queue Worker／排程建議、安全性（真的重新跑
+      `composer audit` 驗證 `CVE-2026-48019` 現況還在，不是憑記憶抄）、回滾策略
+- [x] 只產出文件，沒有實際執行部署（沒有 AWS credentials，也沒有使用者確認要花錢起 infra）
+- [x] 文件開頭列出「目前還不是 production-ready」的已知缺口對照表，不是寫得像萬事俱備
 
 ## 已知技術債（progress.md 記錄，一併排入）
 

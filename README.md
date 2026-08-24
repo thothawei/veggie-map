@@ -251,7 +251,8 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
   靠手動瀏覽器驗證）
 - `users:promote` Admin 帳號晉升指令
 - `routes/console.php` 排程自動跑 `restaurants:sync`／批次計算 Job
-- 部署文件（AWS，需使用者確認 credentials 後才執行）
+- 實際 AWS 部署（部署文件已完成，見 [docs/deployment.md](docs/deployment.md)；
+  需使用者確認 credentials 後才執行）
 - 更長期：AI 推薦、Menu OCR、使用者聲譽系統（見總體規劃文件，第一版 MVP 刻意不做）
 
 ---
