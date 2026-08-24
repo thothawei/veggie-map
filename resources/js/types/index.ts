@@ -34,6 +34,7 @@ export interface Restaurant {
     rating_count: number;
     status: 'active' | 'inactive' | 'pending';
     distance_meters?: number;
+    recommendation_score?: number;
     diet_types?: string[];
     features?: string[];
     menu_items?: MenuItem[];

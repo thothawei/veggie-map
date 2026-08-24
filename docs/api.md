@@ -31,6 +31,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 | Method | Path | 說明 | 認證 |
 |---|---|---|---|
 | GET | `/restaurants` | 列表＋搜尋（見下方查詢參數） | 選用（登入可帶收藏狀態） |
+| GET | `/restaurants/recommended` | 推薦餐廳（首頁用，見下方） | 無 |
 | GET | `/restaurants/{id}` | 詳情 | 選用 |
 | POST | `/restaurants/{id}/favorite` | 加入收藏 | 必須 |
 | DELETE | `/restaurants/{id}/favorite` | 取消收藏 | 必須 |
@@ -92,6 +93,30 @@ Nominatim 逾時／失敗時回 `{"success": true, "data": []}`（不讓地圖�
 （例如 `contact: you@example.com`），會被 Nominatim 的防護機制直接 403 擋掉——這不是程式碼邏輯錯誤，
 是 User-Agent 字串本身被擋，真的打過 Nominatim 才發現，光看程式碼看不出來。已改成
 `VeggieMap/1.0 (+https://github.com/thothawei/veggie-map)`。
+
+## `GET /restaurants/recommended` — 推薦餐廳
+
+首頁「推薦餐廳」用（見總體規劃第三十節）。候選集是同一套半徑搜尋結果，
+`RuleBasedRecommendationService`（`app/Services/Recommendation/`）依六個分量加權排序，
+不是單純依 rating 排序：
+
+```
+score = distance_score * 0.25 + rating_score * 0.20 + vegetarian_confidence * 0.25
+      + feature_match * 0.15 + popularity * 0.10 + freshness * 0.05
+```
+
+權重在 `config/recommendation.php`，不寫死在程式碼裡。`RecommendationServiceInterface`
+是 Adapter Pattern（跟 `RestaurantProviderInterface`／`GeocodingProviderInterface`
+同一套設計），未來要換 `AIRecommendationService` 只改 `AppServiceProvider` 的綁定，
+`RestaurantController` 不用動。
+
+參數：`latitude`／`longitude`（必填）、`radius`（公里，預設 5）、`limit`（預設 6，上限 20）。
+
+```
+GET /api/v1/restaurants/recommended?latitude=25.033&longitude=121.5645&radius=5&limit=6
+```
+
+回應的每筆 Restaurant 多一個 `recommendation_score`（0~1），只有這支端點才會出現。
 
 ## Pagination
 

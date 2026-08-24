@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import client from '@/api/client';
 import RestaurantMap from '@/components/RestaurantMap.vue';
@@ -13,6 +13,7 @@ const router = useRouter();
 const TAICHUNG: [number, number] = [24.1477, 120.6736];
 
 const restaurants = ref<Restaurant[]>([]);
+const recommended = ref<Restaurant[]>([]);
 const loading = ref(false);
 const filters = ref<Partial<RestaurantSearchParams>>({});
 const mapRef = ref<InstanceType<typeof RestaurantMap> | null>(null);
@@ -30,18 +31,28 @@ async function loadByBounds() {
         // 地圖首頁依 bounds 撈餐廳，不是撈全部——用 bounds 中心點 + 對角線距離當半徑，
         // 交給後端既有的半徑搜尋（見 docs/database.md 的兩段式查詢），不用另開一支 API。
         const radiusKm = haversineKm(currentBounds.minLat, currentBounds.minLng, currentBounds.maxLat, currentBounds.maxLng) / 2;
+        const radius = Math.max(radiusKm, 0.5);
 
-        const response = await client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
-            params: {
-                latitude: midLat,
-                longitude: midLng,
-                radius: Math.max(radiusKm, 0.5),
-                sort: 'distance',
-                per_page: 100,
-                ...filters.value,
-            },
-        });
-        restaurants.value = response.data.data;
+        const [restaurantsRes, recommendedRes] = await Promise.all([
+            client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
+                params: {
+                    latitude: midLat,
+                    longitude: midLng,
+                    radius,
+                    sort: 'distance',
+                    per_page: 100,
+                    ...filters.value,
+                },
+            }),
+            // 後端 RuleBasedRecommendationService 依 distance/rating/vegetarian_confidence/
+            // feature_match/popularity/freshness 加權排序（見總體規劃第三十節），不是單純
+            // 依評分排序，所以是獨立一支 API，不是從上面那批結果在前端隨便切幾筆。
+            client.get<ApiSuccess<Restaurant[]>>('/restaurants/recommended', {
+                params: { latitude: midLat, longitude: midLng, radius, limit: 6 },
+            }),
+        ]);
+        restaurants.value = restaurantsRes.data.data;
+        recommended.value = recommendedRes.data.data;
     } finally {
         loading.value = false;
     }
@@ -63,10 +74,6 @@ function handleLocate() {
 function goToDetail(restaurant: Restaurant) {
     router.push({ name: 'restaurant-detail', params: { id: restaurant.id } });
 }
-
-const recommended = computed(() =>
-    [...restaurants.value].sort((a, b) => b.rating - a.rating).slice(0, 6),
-);
 
 watch(filters, loadByBounds, { deep: true });
 </script>

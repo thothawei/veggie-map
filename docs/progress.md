@@ -722,3 +722,66 @@ cluster 看到個別 marker、點 marker 跳轉到 `/restaurants/{id}` 詳情頁
   infra，依照總 prompt 規則停在文件階段。
 - 方案 B（ECS Fargate）只記錄架構方向，沒有寫逐步操作——這個專案目前的規模用不到，
   真的要用的時候再回來展開。
+
+## 2026-08-24 — 補：`RuleBasedRecommendationService`（總體規劃第 29／30 節，Phase 0 就設計過但沒做）
+
+**發現過程：** Phase 0 的 `docs/architecture.md`「AI 預留」段落早就寫好
+`RecommendationServiceInterface`／`RuleBasedRecommendationService`／`config/recommendation.php`
+的設計，而且明講「第一版只有 RuleBasedRecommendationService 實作」——這不是 AI/ML，是
+MVP 範圍內的東西，「明確不做的事」那段排除的是 `Recommendation ML`（AI 版本），不是
+Rule-based 版本本身。但 Phase 9 做前端首頁「推薦餐廳」時，直接在 `HomeView.vue` 用
+`[...restaurants].sort((a,b) => b.rating - a.rating).slice(0,6)` 打發，從來沒有實作
+過設計文件裡講的這個服務——是重新過一遍總體規劃 md 對照現有程式碼才抓到的落差。
+
+**完成：**
+
+- `config/recommendation.php`：六個分量權重（distance/rating/vegetarian_confidence/
+  feature_match/popularity/freshness，對應總體規劃第三十節公式）、
+  `max_features_expected`、`freshness_window_days`、`candidate_pool_size`。
+- `RecommendationServiceInterface` + `RuleBasedRecommendationService`
+  （`app/Services/Recommendation/`）：候選集合 `rank()`，每個分量正規化到 0~1 再加權，
+  在候選集合內部排序（不是跨請求可比較的絕對分數，跟半徑搜尋的 distance 一樣是
+  bounded-context 的相對值）。`AppServiceProvider` 綁定介面，未來換
+  `AIRecommendationService` 只改綁定這一行。
+- `RestaurantRepository::candidatesForRecommendation()`：復用既有 `search()` 的半徑搜尋，
+  不是另開一套查詢邏輯，只是多 eager load 算分需要的 `dietTypes`／`features`／
+  `confidenceScore`。
+- `GET /api/v1/restaurants/recommended`（`RecommendedRestaurantRequest` 驗證
+  latitude/longitude 必填），route 註冊在 `/restaurants/{restaurant}` **之前**——
+  沒有排對順序的話 Laravel 會把 "recommended" 當成 route model binding 的 id 去查，
+  這是新增靜態路徑段路由時的標準陷阱，寫的時候就注意到了。
+- `RestaurantResource` 新增 `recommendation_score`（`when(isset(...))`，只有這支端點
+  回應才會有這個欄位，跟既有 `distance_meters` 同一套模式）。
+- `HomeView.vue` 的「推薦餐廳」改成真的打這支新端點（`Promise.all` 跟原本的 bounds
+  搜尋並行），不再是前端隨便排序既有列表那幾筆。
+
+**過程中抓到並修掉的問題（不是一次寫對）：**
+
+1. `EloquentCollection::make($paginator->items())->load(...)` 一開始寫成
+   `collect(...)->load(...)`——`Illuminate\Support\Collection`（`collect()` 回傳的型別）
+   沒有 `load()` 方法，那是 `Illuminate\Database\Eloquent\Collection` 才有的，本機測試
+   直接噴 `BadMethodCallException`，改用 `EloquentCollection::make()` 解決。
+2. PHPStan（Larastan）誤判 `$restaurant->confidenceScore?->score` 的 `?->` 是多餘的
+   （宣稱這個關聯永遠非 null），但這是 Larastan 對 eager-loaded `HasOne` 的已知限制，
+   不是真的——`test_score_is_bounded_between_zero_and_one` 那個測試建立的餐廳完全沒有
+   `RestaurantConfidenceScore` 紀錄，`?->` 拿掉的話那個測試會直接炸
+   `Attempt to read property on null`，實測驗證過才敢用 `@phpstan-ignore` 蓋掉這條規則，
+   不是看到報錯就無腦加 ignore。
+3. `Restaurant` model 動態設定 `recommendation_score`（跟既有的 `distance` 一樣不是
+   資料表欄位）在 PHPStan 底下被判定成「寫入未宣告屬性」——`distance` 沒被抓到是因為
+   只有「讀」被放寬檢查，「寫」是不同規則；補 `@property float|null $recommendation_score`
+   到 Restaurant model 的 class docblock 解決，跟既有 `$distance` 的註記方式一致。
+
+**實測：**
+
+- 3 個新的 `RuleBasedRecommendationServiceTest`（含「故意讓分數排序邏輯反過來，測試
+  真的會紅」的自我驗證）+ 2 個新的 HTTP 層測試（`RestaurantTest`），加上既有測試共
+  68 個、211 個 assertion，全綠。Pint／PHPStan 都乾淨。
+- 真打 `curl http://localhost:8080/api/v1/restaurants/recommended?...`，回應正確依
+  `recommendation_score` 遞減排序。
+- 瀏覽器打開首頁，「推薦餐廳」區塊網路請求確認真的打到新端點（不是舊的前端排序），
+  console 無錯誤。
+- `docs/openapi.yaml` 補上這支端點與 `Restaurant.recommendation_score` 欄位，
+  `npx @redocly/cli lint` 重新跑過仍然 0 error。`docs/api.md`／`docs/architecture.md`
+  同步更新，`architecture.md` 的「AI 預留」標題從「不在 MVP 範圍」改成標明
+  Rule-based 版本已實作，只有 AI 版本還沒做。

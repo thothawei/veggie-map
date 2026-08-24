@@ -5,9 +5,29 @@ namespace App\Repositories;
 use App\Models\Restaurant;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 
 class RestaurantRepository
 {
+    /**
+     * 給 RecommendationService 用的候選集合：復用 search() 同一套半徑搜尋，取前
+     * $limit 筆（依距離排序，不分頁），eager load 算分需要的關聯——不是另外重寫一套查詢。
+     *
+     * @return EloquentCollection<int, Restaurant>
+     */
+    public function candidatesForRecommendation(float $lat, float $lng, float $radiusKm, int $limit): EloquentCollection
+    {
+        $paginator = $this->search([
+            'latitude' => $lat,
+            'longitude' => $lng,
+            'radius' => $radiusKm,
+            'sort' => 'distance',
+            'per_page' => min($limit, 100),
+        ]);
+
+        return EloquentCollection::make($paginator->items())->load(['dietTypes', 'features', 'confidenceScore']);
+    }
+
     /**
      * 半徑搜尋兩段式查詢（見 docs/database.md）：
      * 1. Bounding Box + MBRContains 過濾 `location`，吃 Spatial Index 縮小候選集。

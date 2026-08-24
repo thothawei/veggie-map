@@ -85,11 +85,14 @@ Overpass API → Normalize（座標/名稱正規化）→ Validate（必要欄�
 
 用 `chunk()`／cursor 讀取匯入結果，避免一次性把整批資料塞進記憶體（規則第 21 節）。
 
-## AI 預留（不在 MVP 範圍）
+## AI 預留（`RuleBasedRecommendationService` 已實作，AI 版本不在 MVP 範圍）
 
-`RecommendationServiceInterface` 第一版只有 `RuleBasedRecommendationService` 實作，權重放
-`config/recommendation.php`。未來加 `AIRecommendationService` 時，呼叫端（Controller）不需要改，
-因為兩者符合同一介面——這是 Adapter Pattern 在推薦系統上的延伸應用，不是另外發明一套機制。
+`RecommendationServiceInterface`（`app/Services/Recommendation/`）第一版只有
+`RuleBasedRecommendationService` 實作，權重放 `config/recommendation.php`，
+`GET /restaurants/recommended` 供前端首頁「推薦餐廳」使用（見 [docs/api.md](api.md)）。
+未來加 `AIRecommendationService` 時，呼叫端（`RestaurantController`）不需要改，只改
+`AppServiceProvider` 的介面綁定——這是 Adapter Pattern 在推薦系統上的延伸應用，不是
+另外發明一套機制。
 
 ## 明確不做的事（MVP 邊界）
 

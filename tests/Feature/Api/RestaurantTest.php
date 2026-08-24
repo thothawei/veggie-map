@@ -113,4 +113,29 @@ class RestaurantTest extends TestCase
 
         $this->getJson("/api/v1/restaurants/{$restaurant->id}")->assertStatus(404);
     }
+
+    public function test_recommended_requires_coordinates(): void
+    {
+        $this->getJson('/api/v1/restaurants/recommended')
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'VALIDATION_ERROR');
+    }
+
+    public function test_recommended_returns_ranked_restaurants_with_scores(): void
+    {
+        Restaurant::factory()->count(3)->create([
+            'latitude' => 25.0332,
+            'longitude' => 121.5645,
+            'location' => DB::raw('ST_SRID(POINT(121.5645, 25.0332), 4326)'),
+        ]);
+
+        $response = $this->getJson('/api/v1/restaurants/recommended?latitude=25.0332&longitude=121.5645&radius=5&limit=2');
+
+        $response->assertOk()->assertJsonCount(2, 'data');
+        $this->assertNotNull($response->json('data.0.recommendation_score'));
+        $this->assertGreaterThanOrEqual(
+            $response->json('data.1.recommendation_score'),
+            $response->json('data.0.recommendation_score'),
+        );
+    }
 }

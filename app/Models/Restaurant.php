@@ -8,6 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
+/**
+ * @property float|null $distance `RestaurantRepository::search()` 的 subquery 計算欄位，
+ *                                只有半徑搜尋時才存在，不是資料表實際欄位。
+ * @property float|null $recommendation_score `RuleBasedRecommendationService::rank()`
+ *                                            動態設定的分數，不是資料表實際欄位。
+ */
 class Restaurant extends Model
 {
     use HasFactory;

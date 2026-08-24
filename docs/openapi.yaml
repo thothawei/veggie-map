@@ -98,6 +98,49 @@ paths:
                       meta: { $ref: "#/components/schemas/CursorMeta" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /restaurants/recommended:
+    get:
+      operationId: getRecommendedRestaurants
+      tags: [Restaurants]
+      summary: 推薦餐廳（首頁「推薦餐廳」用，見總體規劃第三十節）
+      description: >
+        候選集是同一套半徑搜尋結果，`RuleBasedRecommendationService` 依
+        distance/rating/vegetarian_confidence/feature_match/popularity/freshness
+        六個分量加權排序（權重見 config/recommendation.php），不是單純依 rating 排序。
+        `recommendation_score`（0~1）只有在這支端點的回應才會出現。
+      security: []
+      parameters:
+        - name: latitude
+          in: query
+          required: true
+          schema: { type: number, format: float, minimum: -90, maximum: 90 }
+        - name: longitude
+          in: query
+          required: true
+          schema: { type: number, format: float, minimum: -180, maximum: 180 }
+        - name: radius
+          in: query
+          description: 公里，預設 5
+          schema: { type: number, format: float, minimum: 0.1, maximum: 50 }
+        - name: limit
+          in: query
+          description: 預設 6
+          schema: { type: integer, minimum: 1, maximum: 20 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Restaurant" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
   /restaurants/{id}:
     get:
       operationId: getRestaurant
@@ -678,6 +721,11 @@ components:
           format: float
           nullable: true
           description: 只有半徑搜尋（帶 latitude+longitude）時才會出現
+        recommendation_score:
+          type: number
+          format: float
+          nullable: true
+          description: 0~1，只有 GET /restaurants/recommended 才會出現
         phone: { type: string, nullable: true }
         website: { type: string, nullable: true }
         price_level: { type: integer, nullable: true, minimum: 1, maximum: 4 }

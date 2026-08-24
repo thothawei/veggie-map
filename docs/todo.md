@@ -92,6 +92,20 @@ CI 用的是 GitHub Actions 原生的 MySQL service container（`MYSQL_DATABASE`
 - [x] 只產出文件，沒有實際執行部署（沒有 AWS credentials，也沒有使用者確認要花錢起 infra）
 - [x] 文件開頭列出「目前還不是 production-ready」的已知缺口對照表，不是寫得像萬事俱備
 
+## 補做：`RuleBasedRecommendationService` ✅ 已完成 2026-08-24
+
+重新對照總體規劃 md（第 29/30 節）跟 `docs/architecture.md`「AI 預留」段落才抓到的落差——
+Phase 0 就設計好、Phase 9 卻直接用前端 client-side sort 打發沒做的東西，補齊細節見
+progress.md。
+
+- [x] `config/recommendation.php`、`RecommendationServiceInterface`／
+      `RuleBasedRecommendationService`、`AppServiceProvider` 綁定
+- [x] `RestaurantRepository::candidatesForRecommendation()`、
+      `GET /api/v1/restaurants/recommended`、`RestaurantResource.recommendation_score`
+- [x] `HomeView.vue` 首頁「推薦餐廳」改接真的後端排序，不再是前端 sort by rating
+- [x] 5 個新測試（3 個 Service 邏輯＋2 個 HTTP），`docs/openapi.yaml`／`docs/api.md`／
+      `docs/architecture.md` 同步更新
+
 ## 已知技術債（progress.md 記錄，一併排入）
 
 - [ ] `users:promote {email}` Artisan 指令（目前只能手動改 DB 升 admin）

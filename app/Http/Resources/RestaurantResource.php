@@ -12,6 +12,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * @property float|null $distance `RestaurantRepository::search()` 的 subquery 計算欄位
  *                                （見 app/Repositories/RestaurantRepository.php 的 selectRaw），只有半徑搜尋時才存在，
  *                                不是 restaurants 表的實際欄位，Restaurant model 本身不會宣告它。
+ * @property float|null $recommendation_score `RuleBasedRecommendationService::rank()` 動態
+ *                                            設定的分數，只有 GET /restaurants/recommended 才會有。
  */
 class RestaurantResource extends JsonResource
 {
@@ -28,6 +30,7 @@ class RestaurantResource extends JsonResource
             'latitude' => (float) $this->latitude,
             'longitude' => (float) $this->longitude,
             'distance_meters' => $this->when(isset($this->distance), fn () => round((float) $this->distance, 1)),
+            'recommendation_score' => $this->when(isset($this->recommendation_score), fn () => (float) $this->recommendation_score),
             'phone' => $this->phone,
             'website' => $this->website,
             'price_level' => $this->price_level,
