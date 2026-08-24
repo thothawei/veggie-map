@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Services\External\GeocodingProviderInterface;
 use App\Services\External\MockRestaurantProvider;
+use App\Services\External\NominatimGeocodingProvider;
 use App\Services\External\OsmRestaurantProvider;
 use App\Services\External\RestaurantProviderInterface;
 use Illuminate\Support\ServiceProvider;
@@ -21,6 +23,10 @@ class AppServiceProvider extends ServiceProvider
                 ? new OsmRestaurantProvider
                 : new MockRestaurantProvider;
         });
+
+        // 地址搜尋只有 Nominatim 一種 provider（docs/external-apis.md 已核准），沒有像
+        // restaurant provider 那樣需要在 mock/real 之間切換，綁死即可，不過度設計。
+        $this->app->bind(GeocodingProviderInterface::class, NominatimGeocodingProvider::class);
     }
 
     /**

@@ -405,3 +405,46 @@ Model＋Factory＋Seeder、`/restaurants`（含半徑搜尋兩段式查詢＋cur
 - 排程自動跑 `restaurants:sync`／批次計算 Job（目前都只能手動執行）。
 - README／`docs/openapi.yaml` 等文件收尾工作（Phase 11 範圍）。
 - 部署／CI（Phase 13 範圍），含 Feature test 需要的 `veggiemap_testing` 資料庫建置要先自動化。
+
+## 2026-08-24 — Phase 8.5：地址搜尋（Geocoding）
+
+**完成：**
+
+- `GeocodingProviderInterface` + `GeocodedPlace` value object（`app/Services/External/`），
+  跟 Phase 8 的 `RestaurantProviderInterface` 同一套 Adapter Pattern。只有 Nominatim 一種
+  provider（`docs/external-apis.md` 已核准，沒有 mock/real 切換需求），直接在
+  `AppServiceProvider` 綁死 `NominatimGeocodingProvider`，不做用不到的抽象。
+- `NominatimGeocodingProvider`：呼叫 Nominatim `/search`，5s timeout、429 退避重試（`throw:false`，
+  非 429 的失敗回應正常回傳而不是被 Laravel HTTP client 的 retry 機制強制丟例外）、寫
+  `ExternalApiLog`。
+- `GET /api/v1/geocode?q=關鍵字`：`GeocodeRequest` 驗證、`Cache::remember('geocode:'.md5($q), 1天, ...)`
+  擋重複查詢字串，避免撞 Nominatim 每秒 1 次請求的政策限制。失敗時回
+  `{"success":true,"data":[]}`，不讓地圖首頁因外部服務掛掉而整個壞掉。
+- 4 個 Feature test（`tests/Feature/Api/GeocodeTest.php`，`Http::fake` 模擬 Nominatim，不真打
+  外部 API）：正常回傳、缺 `q` 回 422、Nominatim 失敗回空陣列且正確記 `error_code`、重複查詢
+  真的只打一次 Nominatim（cache 生效）。加上既有測試共 58 個、141 個 assertion，全綠。
+
+**過程中抓到並修掉 1 個真的 bug：**
+
+`->retry($times, $sleep, $when)` 的第 4 個參數 `$throw` 預設是 `true`——代表即使 `$when`
+判斷不該重試（例如收到 503 而非 429），Laravel HTTP client 還是會在耗盡重試次數後把
+非 2xx 回應強制轉成例外丟出來。寫 Feature test 模擬 503 時才發現：預期回應該正常帶
+`error_code=HTTP_503`，實際卻是被外層 `catch (\Throwable)` 接住、記成籠統的
+`error_code=RequestException`，功能上仍會 fallback 成功但記錄不準確。修法：`retry()` 加
+`throw: false`，只在真的觸發 429 重試時才允許中途丟例外驅動 retry 迴圈本身，其他失敗回應
+正常回傳讓程式自己判斷 `successful()`。
+
+**實測（真打外部 Nominatim API，非 mock）：**
+
+打 `GET /api/v1/geocode?q=台中一中街` 一開始回空陣列，查 `external_api_logs` 發現
+`status=403`——不是程式碼邏輯錯，是 `.env` 的 `EXTERNAL_API_NOMINATIM_USER_AGENT` 預設值
+`"VeggieMap/1.0 (contact: you@example.com)"` 帶著 `example.com` 這種常見教學範例網域字串，
+被 Nominatim 的防護機制直接擋掉（用 `curl` 直接對 Nominatim 測試同一組 User-Agent 字串重現，
+排除是本地網路或程式碼問題）。改成 `VeggieMap/1.0 (+https://github.com/thothawei/veggie-map)`
+後重打，成功拿到「台中一中, 育才街...」等真實結果，`external_api_logs` 記到 `status=200`。
+細節見 [api.md](api.md) 的「踩過的坑」段落。
+
+**未完成 / 等待確認：**
+
+- `docs/openapi.yaml` 仍未產出（Phase 11 範圍），`/geocode` 先只記在 `docs/api.md`。
+- 前端串接（輸入框 → call `/geocode` → 移動地圖）留給 Phase 9，這個 Phase 只做後端 API。

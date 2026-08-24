@@ -1,9 +1,10 @@
 <?php
 
-use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Api\Admin\RestaurantReportController as AdminRestaurantReportController;
+use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\GeocodeController;
 use App\Http\Controllers\Api\LookupController;
 use App\Http\Controllers\Api\MeController;
 use App\Http\Controllers\Api\RestaurantController;
@@ -17,6 +18,8 @@ Route::get('/restaurants/{restaurant}/reviews', [ReviewController::class, 'index
 
 Route::get('/diets', [LookupController::class, 'dietTypes']);
 Route::get('/features', [LookupController::class, 'features']);
+
+Route::get('/geocode', [GeocodeController::class, 'search']);
 
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login', [AuthController::class, 'login']);

@@ -3,18 +3,20 @@
 > 用途：Claude Code 下一次接手時的進度追蹤清單。完成一項就打勾＋commit push（見
 > [progress.md](progress.md) 的 commit/push 慣例），不要一次全做。
 
-## Phase 8.5 — 地址搜尋（Geocoding，優先）
+## Phase 8.5 — 地址搜尋（Geocoding，優先）✅ 已完成 2026-08-24
 
 回應「輸入提示字找到素食地圖」需求：目前 `GET /api/v1/restaurants` 只吃數字座標，
 使用者無法打地名。`docs/architecture.md` 已設計好介面，只是沒實作。
 
-- [ ] `GeocodingProviderInterface`（`app/Services/External/`）
-- [ ] `NominatimGeocodingProvider`：呼叫 Nominatim `/search`，5s timeout、429 退避重試、
+- [x] `GeocodingProviderInterface`（`app/Services/External/`）
+- [x] `NominatimGeocodingProvider`：呼叫 Nominatim `/search`，5s timeout、429 退避重試、
       寫 `ExternalApiLog`，帶合法 `User-Agent`（見 [external-apis.md:23](external-apis.md)）
-- [ ] `GET /api/v1/geocode?q=關鍵字` 端點：回傳候選地點清單（含 lat/lng）
-- [ ] Redis cache：`geocode:{md5(q)}`，TTL 1 天（同查詢字串避免撞 Nominatim rate limit）
-- [ ] Feature test（mock HTTP，不真打 Nominatim API）
-- [ ] 更新 `docs/api.md` 補上這條端點
+- [x] `GET /api/v1/geocode?q=關鍵字` 端點：回傳候選地點清單（含 lat/lng）
+- [x] Redis cache：`geocode:{md5(q)}`，TTL 1 天（同查詢字串避免撞 Nominatim rate limit）
+- [x] Feature test（mock HTTP，不真打 Nominatim API）
+- [x] 更新 `docs/api.md` 補上這條端點
+- [x] （額外抓到的坑）`.env` 的 `EXTERNAL_API_NOMINATIM_USER_AGENT` 預設值帶 `example.com`
+      會被 Nominatim 403 擋掉，已改成真實 repo URL，見 progress.md／api.md 細節
 
 ## Phase 9 — Vue 3 + Leaflet 前端
 
