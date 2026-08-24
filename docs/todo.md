@@ -32,18 +32,28 @@
 - [x] Filter drawer：素食類型／寵物友善／停車，串 `/diets`、`/features`
 - [x] Axios + Pinia：auth token 存取、攔截器帶 Bearer token、favorites 狀態——瀏覽器實測過
       註冊／收藏／評論／評分即時更新的完整流程
-- [ ] Mobile responsive：只用桌面尺寸驗證過，還沒切手機視窗檢查版面
-- [ ] `AdminView` 的核准/駁回/隱藏三個操作只走過程式碼審視，沒有真的拿 admin 帳號在
-      瀏覽器裡點過（需要先手動改 DB 把某帳號設 `role=admin`）
+- [x] Mobile responsive（Phase 10 補測時抓到真的橫向溢出 bug 並修掉，見 progress.md）
+- [x] `AdminView` 拿真的 admin 帳號在瀏覽器裡點過核准/駁回/隱藏（Phase 10 一併驗證，
+      過程中還發現並修掉 router guard 的競態 bug：硬導航到 `/admin` 會被誤導回首頁）
 
-## Phase 10 — 補測試缺口
+## Phase 10 — 補測試缺口 ✅ 已完成 2026-08-24
 
-- [ ] Unit test：`RestaurantRepository::boundingBoxPolygon()`（純計算邏輯）
-- [ ] Unit test：距離計算相關純邏輯
-- [ ] `ReviewService` 併發競態測試（目前只驗證循序覆蓋，沒測真並行）
-- [ ] `veggiemap_testing` 建庫流程腳本化（目前手動下 SQL，CI 環境跑不起來）
-- [ ] 前端 Vitest／Playwright（目前 Phase 9 全靠手動瀏覽器驗證，見 progress.md）
-- [ ] Phase 9 遺留的兩項：mobile responsive、Admin 頁面瀏覽器實測
+- [x] Unit test：`RestaurantRepository::boundingBoxPolygon()`（純計算邏輯，含反向驗證：
+      故意改錯數學公式，測試真的會紅）
+- [x] ~~Unit test：距離計算相關純邏輯~~ 查證後發現不存在——距離計算 100% 在 SQL 端
+      （`ST_Distance_Sphere`），沒有獨立 PHP 函式可以抽出來測，唯一的純 PHP 幾何邏輯
+      就是上面的 bounding box，已經測了
+- [x] `ReviewService` 併發競態測試：真的用背景 process + 原生 PDO 撐住 DB 鎖，讓兩個交易
+      真的重疊，不是循序模擬。**過程中抓到一個真的 bug**：兩個交易對同一個空 index range
+      的 gap lock 互相 INSERT 會被 InnoDB 判定 deadlock 直接丟例外，不是優雅序列化；
+      `DB::transaction()` 原本沒有重試次數，已修成 `DB::transaction($fn, 3)`。細節與這個
+      測試「能穩定驗證什麼、不能穩定驗證什麼」的誠實記錄見 progress.md。
+- [x] `veggiemap_testing` 建庫流程腳本化：`scripts/setup-test-db.sh`（隨時可重跑）+
+      `docker/mysql/init/01-create-test-database.sql`（全新 volume 自動跑）
+- [x] 前端 Vitest：抽出 `resources/js/lib/geo.ts`（Haversine 距離計算）並測試——
+      目前唯一的前端自動化測試，元件測試／Playwright E2E 仍未做，見下方未完成項目
+- 未完成：前端元件測試／Playwright E2E（golden path 仍靠手動瀏覽器驗證，未列為本階段
+  必須項目——這個專案規模，投入 Playwright 的 ROI 目前低於其他 Phase）
 
 ## Phase 11 — 文件收尾
 

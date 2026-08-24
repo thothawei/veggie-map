@@ -507,3 +507,78 @@ cluster 看到個別 marker、點 marker 跳轉到 `/restaurants/{id}` 詳情頁
 - Router guard 的 `requiresAdmin` 判斷依賴 `auth.user` 已經載入完成；如果使用者帶著舊
   token 直接刷新進 `/admin`，`fetchCurrentUser()` 還沒 resolve 前那一瞬間會先被導回首頁，
   是已知的競態限制，MVP 範圍先不特別處理（重新整理後手動點一次連結即可正常進入）。
+
+## 2026-08-24 — Phase 10：補測試缺口
+
+**完成：**
+
+- `tests/Unit/RestaurantRepositoryBoundingBoxTest.php`：用 `ReflectionMethod` 直接測
+  `boundingBoxPolygon()`（private 純數學方法，不碰 DB，用純 `PHPUnit\Framework\TestCase`
+  不啟動 Laravel framework）。4 個測試：WKT 封閉環格式、赤道附近的角座標數值、高緯度經度
+  跨幅確實變寬（地球是球體不是平面格線）、極點附近除以零防呆真的不會出 NAN/INF。
+  自我驗證過：故意把 `lngDelta` 改錯（等於 `latDelta`，忽略緯度修正）重跑，
+  「高緯度經度跨幅變寬」那條測試真的紅了，確認測試有真的在測東西，不是恆真斷言。
+- `docs/todo.md` 原本列的「Unit test：距離計算相關純邏輯」查證後發現不存在對應目標——
+  這個專案的距離計算 100% 在 SQL 端（`ST_Distance_Sphere`），沒有獨立的 PHP 距離公式可以
+  抽出來單元測試，唯一的純 PHP 幾何邏輯就是上面測掉的 bounding box。誠實記錄查證結果，
+  不硬湊一個沒意義的測試。
+- `scripts/setup-test-db.sh` + `docker/mysql/init/01-create-test-database.sql`：把
+  「Feature Test 補完」那次手動下的 SQL 腳本化。全新 volume 靠後者（MySQL image 只在
+  volume 第一次初始化時執行 `docker-entrypoint-initdb.d`），已存在的 volume（多數本機
+  開發環境）不會自動重跑，所以前者是隨時可以重跑的等效版本，也是未來 Phase 12 CI 要用的
+  那一步。實測：對已經手動建過的既有測試庫重跑，`CREATE DATABASE IF NOT EXISTS` 正確
+  no-op、`migrate --force` 正確回報 `Nothing to migrate`。
+- `tests/Feature/ReviewServiceConcurrencyTest.php` + `tests/Support/hold_review_lock.php`：
+  第一個真正讓兩個交易重疊的測試（Phase 5 的 Feature Test 補完只驗證過循序覆蓋）。
+  背景用獨立 PHP process（`Illuminate\Support\Facades\Process`）+ 原生 PDO（不能用
+  `RefreshDatabase`——它把整個測試包在一個交易裡，另一條連線看不到未 commit 的資料）
+  故意撐住鎖，前景呼叫真正的 `ReviewService::submit()`，斷言：(1) 前景真的被鎖卡住等待
+  （測 elapsed time，不是只看結果）、(2) 併發下仍然只有一筆 active review。
+- **這個測試在開發過程中抓到一個真的 bug**：`ReviewService::submit()` 原本的程式碼註解
+  宣稱靠 InnoDB 的 next-key lock 就能保證併發安全，但實測發現兩個交易對同一個空 index
+  range 各自取得 gap lock 後都想 `INSERT` 進那個 gap 時，InnoDB 會判定成 deadlock
+  （`1213 Deadlock found`）直接丟例外中止其中一個交易——不是誰乖乖排隊等誰。原本的
+  `DB::transaction($fn)` 沒有帶重試次數（預設 1 次），代表使用者端在真實併發下有機會
+  收到 500 而不是優雅地稍等一下。修法：`DB::transaction($fn, 3)`，帶 Laravel 內建的
+  deadlock 自動重試。
+- **測試本身也做了自我驗證，且過程中發現结果比預期複雜**：拔掉 `, 3` 重跑 8 次，
+  沒有一次重現 deadlock 例外——因為背景測試腳本自己也有重試迴圈（一開始加是為了讓
+  背景 process 不要一遇到 deadlock 就整個腳本崩潰），會默默吸收掉大部分的 deadlock，
+  使得這個測試對「前景是否有重試」這件事本身不是每次都能觸發判定。誠實記錄：這個測試
+  可靠驗證的是「兩個真的重疊的交易之後，資料庫裡永遠不會出現兩筆同時 active 的 review」
+  這個核心不變量（每次都驗證到），但不是每次都能重現最一開始抓到的那個 deadlock
+  interleaving 本身——那個 bug 是靠人工重跑同一個測試多次、配合關掉背景腳本的重試
+  才穩定重現、修掉、驗證過的，不是這支測試每次自動保證會抓到。`DB::transaction($fn, 3)`
+  這個修法本身是正確且符合 Laravel 慣例的防禦性修正，即使 regression test 對這一項的
+  保護力不是 100%。
+- 實測：全部 63 個測試（含新增 5 個）、179 個 assertion 全綠；`ReviewServiceConcurrencyTest`
+  連續跑 3 次穩定通過。
+
+**額外處理（Phase 9 留下的兩項缺口，趁這次一併驗證掉）：**
+
+- **重現並修掉 Router guard 的競態 bug**：真的拿剛才手動改成 `role=admin` 的帳號，
+  瀏覽器直接硬導航到 `/admin`——確認真的會被導回首頁，不是猜測。根因比 Phase 9 記錄的
+  更深一層：一開始只把 `app.mount()` 延到 `fetchCurrentUser()` resolve 之後還是沒用，
+  因為 Vue Router 4 的初始導航是在 `app.use(router)` 當下就觸發，不是等 `app.mount()`；
+  真正有效的修法是連 `app.use(router)` 本身都要延後到 `fetchCurrentUser()` resolve 之後
+  （`resources/js/main.ts`）。修完後同一個瀏覽器 session 重新硬導航到 `/admin`，正確停留
+  在管理後台，列出待審核回報／評論。
+  - 順便走了一次完整 Admin 流程（先前只有程式碼審視過）：核准一筆回報（消失於待審核
+    清單）、隱藏一則評論（`GET /restaurants/{id}` 的 rating 立刻掉回 0.0(0)，證明
+    `RecalculateRestaurantRatingJob::dispatchSync()` 真的被 Admin 動作觸發）。
+- **抓到並修掉真的 Mobile responsive bug**：切到 375px 寬瀏覽器，`document.documentElement`
+  的 `scrollWidth`（437px）大於 `clientWidth`（375px）——不是憑感覺猜的，是量出來的真實
+  橫向溢出。根因：`.app-header nav` 跟 `HomeView` 的 `.hero-controls` 都是沒有
+  `flex-wrap` 的 flex row，導覽列連結跟「搜尋框＋使用目前位置」按鈕在窄螢幕硬擠成一行。
+  修法：兩處都加 `flex-wrap: wrap`，`.app-header`／`.hero` 的 padding 縮小、
+  `white-space: nowrap` 避免文字被硬折斷。修完後 `scrollWidth === clientWidth === 375`，
+  首頁／餐廳列表／餐廳詳情／管理後台四個頁面都重新在 375px 寬下驗證過無橫向溢出。
+
+**未完成 / 等待確認：**
+
+- 前端仍然沒有 Vitest 元件測試或 Playwright E2E——這次新增的 `lib/geo.ts`（從
+  `HomeView.vue` 抽出來的 Haversine 距離計算，原本是行內函式，抽出來才有辦法脫離
+  Leaflet 地圖元件單獨測）是唯一的前端自動化測試，golden path 仍然靠手動瀏覽器驗證。
+- `veggiemap_testing` 的建庫腳本化只驗證過「對已存在的資料庫重跑」，沒有實際刪掉整個
+  Docker volume 從零驗證過 `docker-entrypoint-initdb.d` 那條全新 volume 路徑（會動到
+  這台機器上其他人的開發資料，沒有必要冒這個風險去驗證一段邏輯很單純的 SQL）。

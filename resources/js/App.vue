@@ -40,11 +40,18 @@ body {
     color: #1f2933;
 }
 
+#app {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
 .app-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    padding: 0.75rem 1.5rem;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
     background: #2f855a;
     color: #fff;
 }
@@ -54,12 +61,15 @@ body {
     font-weight: 700;
     color: #fff;
     text-decoration: none;
+    white-space: nowrap;
 }
 
 .app-header nav {
     display: flex;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
     align-items: center;
+    justify-content: flex-end;
 }
 
 .app-header nav a,
@@ -67,6 +77,7 @@ body {
     color: #fff;
     text-decoration: none;
     font-size: 0.9rem;
+    white-space: nowrap;
 }
 
 .app-header nav a.router-link-active {

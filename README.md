@@ -144,21 +144,32 @@ docker compose logs -f app
 ## Testing
 
 ```bash
+./scripts/setup-test-db.sh   # 第一次跑測試前執行一次即可（可重複執行，冪等）
 docker compose exec app php artisan test
 ```
 
-58 個 Feature/Unit test、141 個 assertion，涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
-Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:sync` 冪等性與去重）。
+63 個 Feature/Unit test、179 個 assertion，涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
+Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:sync` 冪等性與去重、
+`RestaurantRepository` bounding box 純數學、`ReviewService` 真實併發競態——不是循序模擬，
+是兩個真的重疊的資料庫交易）。
 
 測試用 MySQL（非 sqlite in-memory）——schema 用了 `POINT`／`ST_Distance_Sphere`／`MBRContains`
-等 MySQL 專屬空間函式，sqlite 跑不起來。跑測試前需先手動建立 `veggiemap_testing` 資料庫：
+等 MySQL 專屬空間函式，sqlite 跑不起來，所以需要 `scripts/setup-test-db.sh` 先建立
+`veggiemap_testing` 資料庫並跑 migration。全新的 Docker volume 也會透過
+`docker/mysql/init/01-create-test-database.sql` 自動建立（MySQL 官方 image 只在 volume
+第一次初始化時執行 `docker-entrypoint-initdb.d`），但既有的舊 volume 不會自動重跑，這是
+`scripts/setup-test-db.sh` 存在的原因——CI 或任何時候都能安全重跑。
 
-```sql
-CREATE DATABASE veggiemap_testing;
-GRANT ALL PRIVILEGES ON veggiemap_testing.* TO 'veggiemap'@'%';
+前端：
+
+```bash
+npm run type-check   # vue-tsc --noEmit
+npm run test         # Vitest，目前只涵蓋純邏輯（例如 lib/geo.ts 的距離計算）
 ```
 
-（這個手動步驟尚未腳本化，CI 落地前必須自動化，見 [docs/todo.md](docs/todo.md) Phase 10。）
+沒有 Vitest 元件測試或 Playwright E2E——golden path（地圖／搜尋／收藏／評論／Admin 審核）
+目前靠手動瀏覽器驗證覆蓋，見 [docs/progress.md](docs/progress.md) Phase 9/10 與
+[docs/todo.md](docs/todo.md)。
 
 ## External APIs
 
@@ -219,7 +230,8 @@ Install → Pint → PHPStan → 自動建測試庫 → PHPUnit → build。
 ## Future Roadmap
 
 - Laravel Horizon + 真正的 queue worker（目前 `dispatchSync` 頂著）
-- 前端 Unit/E2E test（Vitest／Playwright，目前只有手動瀏覽器驗證）
+- 前端元件測試／Playwright E2E（目前 Vitest 只測 `lib/geo.ts` 這種純邏輯，golden path
+  靠手動瀏覽器驗證）
 - `users:promote` Admin 帳號晉升指令
 - `routes/console.php` 排程自動跑 `restaurants:sync`／批次計算 Job
 - GitHub Actions CI、部署文件（AWS，需使用者確認 credentials 後才執行）

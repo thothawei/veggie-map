@@ -5,6 +5,7 @@ import client from '@/api/client';
 import RestaurantMap from '@/components/RestaurantMap.vue';
 import SearchBox from '@/components/SearchBox.vue';
 import FilterDrawer from '@/components/FilterDrawer.vue';
+import { haversineKm } from '@/lib/geo';
 import type { ApiSuccess, GeocodedPlace, Restaurant, RestaurantSearchParams } from '@/types';
 
 const router = useRouter();
@@ -44,16 +45,6 @@ async function loadByBounds() {
     } finally {
         loading.value = false;
     }
-}
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLng = ((lng2 - lng1) * Math.PI) / 180;
-    const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function handleBoundsChanged(bounds: { minLat: number; minLng: number; maxLat: number; maxLng: number }) {
@@ -125,7 +116,7 @@ watch(filters, loadByBounds, { deep: true });
 
 <style scoped>
 .hero {
-    padding: 1.5rem;
+    padding: 1.5rem 1rem;
     text-align: center;
     background: #f0fff4;
 }
@@ -137,6 +128,7 @@ watch(filters, loadByBounds, { deep: true });
 
 .hero-controls {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.75rem;
     max-width: 640px;
     margin: 1rem auto 0;
