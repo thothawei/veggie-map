@@ -5,15 +5,19 @@
         "build": "vue-tsc --noEmit && vite build",
         "dev": "vite",
         "type-check": "vue-tsc --noEmit",
-        "test": "vitest run"
+        "test": "vitest run",
+        "lint": "eslint resources/js"
     },
     "devDependencies": {
         "@types/leaflet": "^1.9.22",
         "@types/leaflet.markercluster": "^1.5.6",
         "@vitejs/plugin-vue": "^6.0.8",
+        "@vue/eslint-config-typescript": "^14.9.0",
         "autoprefixer": "^10.4.20",
         "axios": "^1.7.4",
         "concurrently": "^9.0.1",
+        "eslint": "^9.39.5",
+        "eslint-plugin-vue": "^10.10.0",
         "laravel-vite-plugin": "^1.2.0",
         "postcss": "^8.4.47",
         "tailwindcss": "^3.4.13",

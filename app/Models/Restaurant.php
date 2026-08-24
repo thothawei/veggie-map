@@ -59,43 +59,67 @@ class Restaurant extends Model
         ];
     }
 
+    /**
+     * @return BelongsToMany<DietType, $this>
+     */
     public function dietTypes(): BelongsToMany
     {
         return $this->belongsToMany(DietType::class, 'restaurant_diet_types')
             ->withPivot('created_at');
     }
 
+    /**
+     * @return BelongsToMany<Feature, $this>
+     */
     public function features(): BelongsToMany
     {
         return $this->belongsToMany(Feature::class, 'restaurant_features')
             ->withPivot('created_at');
     }
 
+    /**
+     * @return HasMany<MenuItem, $this>
+     */
     public function menuItems(): HasMany
     {
         return $this->hasMany(MenuItem::class);
     }
 
+    /**
+     * @return HasMany<RestaurantVerification, $this>
+     */
     public function verifications(): HasMany
     {
         return $this->hasMany(RestaurantVerification::class);
     }
 
+    /**
+     * @return HasOne<RestaurantConfidenceScore, $this>
+     */
     public function confidenceScore(): HasOne
     {
         return $this->hasOne(RestaurantConfidenceScore::class);
     }
 
+    /**
+     * @return HasMany<RestaurantReport, $this>
+     */
     public function reports(): HasMany
     {
         return $this->hasMany(RestaurantReport::class);
     }
 
+    /**
+     * @return HasMany<Favorite, $this>
+     */
     public function favorites(): HasMany
     {
         return $this->hasMany(Favorite::class);
     }
 
+    /**
+     * @return HasMany<Review, $this>
+     */
     public function reviews(): HasMany
     {
         return $this->hasMany(Review::class);

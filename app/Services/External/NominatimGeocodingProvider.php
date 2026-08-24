@@ -30,7 +30,7 @@ class NominatimGeocodingProvider implements GeocodingProviderInterface
                 ->timeout(5)
                 ->retry(2, 1000, function ($exception) {
                     return $exception instanceof RequestException
-                        && $exception->response?->status() === 429;
+                        && $exception->response->status() === 429;
                 }, throw: false)
                 ->get($url, [
                     'q' => $query,

@@ -8,6 +8,7 @@ use App\Models\Restaurant;
 use App\Services\External\BoundingBox;
 use App\Services\External\RestaurantData;
 use App\Services\External\RestaurantProviderInterface;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -16,8 +17,7 @@ class RestaurantSyncService
     public function __construct(
         private readonly RestaurantProviderInterface $provider,
         private readonly VerificationService $verifications,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{created: int, updated: int, duplicates_flagged: int, skipped: int}
@@ -106,7 +106,7 @@ class RestaurantSyncService
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<string, int>  $dietTypeIds
+     * @param  Collection<string, int>  $dietTypeIds
      */
     private function syncDietTypes(Restaurant $restaurant, array $dietCodes, $dietTypeIds): void
     {

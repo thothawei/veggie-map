@@ -5,6 +5,7 @@ namespace Tests\Feature\Jobs;
 use App\Jobs\CalculateRestaurantScoreJob;
 use App\Models\Restaurant;
 use App\Models\RestaurantVerification;
+use App\Services\VerificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -59,7 +60,7 @@ class CalculateRestaurantScoreJobTest extends TestCase
     {
         $restaurant = Restaurant::factory()->create();
 
-        $verification = app(\App\Services\VerificationService::class)
+        $verification = app(VerificationService::class)
             ->record($restaurant, 'admin_verified');
 
         $this->assertSame(config('vegetarian.verification_weights.admin_verified'), $verification->score);

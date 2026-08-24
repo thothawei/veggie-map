@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { extractApiErrorFields, extractApiErrorMessage } from '@/lib/apiError';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -19,8 +20,8 @@ async function submit() {
     try {
         await auth.register(name.value, email.value, password.value, passwordConfirmation.value);
         router.push('/');
-    } catch (e: any) {
-        errors.value = e?.response?.data?.error?.fields ?? { _: [e?.response?.data?.error?.message ?? '註冊失敗'] };
+    } catch (e: unknown) {
+        errors.value = extractApiErrorFields(e) ?? { _: [extractApiErrorMessage(e, '註冊失敗')] };
     } finally {
         loading.value = false;
     }

@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { extractApiErrorMessage } from '@/lib/apiError';
 
 const route = useRoute();
 const router = useRouter();
@@ -18,8 +19,8 @@ async function submit() {
     try {
         await auth.login(email.value, password.value);
         router.push((route.query.redirect as string) ?? '/');
-    } catch (e: any) {
-        error.value = e?.response?.data?.error?.message ?? '登入失敗';
+    } catch (e: unknown) {
+        error.value = extractApiErrorMessage(e, '登入失敗');
     } finally {
         loading.value = false;
     }

@@ -17,9 +17,7 @@ class RecalculateRestaurantRatingJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(public int $restaurantId)
-    {
-    }
+    public function __construct(public int $restaurantId) {}
 
     public function handle(): void
     {
@@ -29,6 +27,14 @@ class RecalculateRestaurantRatingJob implements ShouldQueue
             return;
         }
 
+        /**
+         * `selectRaw` 的彙總欄位不是 Review model 宣告過的欄位，PHPStan 看不到，
+         * 用 inline 型別註記讓 Larastan 知道這裡實際上長什麼樣子。`COUNT(*)`／`AVG()`
+         * 沒有 GROUP BY 時，就算零筆符合條件的 review 也一定會回一列（count=0,
+         * avg=NULL），`->first()` 在這個 query 上實際上不可能是 null。
+         *
+         * @var object{review_count: int, average_rating: string|null} $stats
+         */
         $stats = $restaurant->reviews()
             ->where('status', 'active')
             ->selectRaw('COUNT(*) as review_count, AVG(rating) as average_rating')

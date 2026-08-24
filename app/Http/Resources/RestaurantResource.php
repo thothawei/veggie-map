@@ -2,10 +2,17 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Restaurant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/** @mixin \App\Models\Restaurant */
+/**
+ * @mixin Restaurant
+ *
+ * @property float|null $distance `RestaurantRepository::search()` 的 subquery 計算欄位
+ *                                （見 app/Repositories/RestaurantRepository.php 的 selectRaw），只有半徑搜尋時才存在，
+ *                                不是 restaurants 表的實際欄位，Restaurant model 本身不會宣告它。
+ */
 class RestaurantResource extends JsonResource
 {
     public function toArray(Request $request): array

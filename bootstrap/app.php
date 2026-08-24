@@ -21,5 +21,5 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        $exceptions->render(fn (\Throwable $e, $request) => (new ApiExceptionRenderer)($e, $request));
+        $exceptions->render(fn (Throwable $e, $request) => (new ApiExceptionRenderer)($e, $request));
     })->create();

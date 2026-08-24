@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (Pint / PHPStan / PHPUnit)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: veggiemap_testing
+          MYSQL_USER: veggiemap
+          MYSQL_PASSWORD: veggiemap
+          MYSQL_ROOT_PASSWORD: veggiemap_root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    # 測試套件（phpunit.xml）不需要 Redis：CACHE_STORE=array、QUEUE_CONNECTION=sync，
+    # 見 docs/progress.md「Feature Test 補完」的決定，不必為了 CI 多開一個 service。
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: veggiemap_testing
+      DB_USERNAME: veggiemap
+      DB_PASSWORD: veggiemap
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, bcmath, gd, zip
+          coverage: none
+
+      - name: Copy .env
+        run: cp .env.example .env
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Generate application key
+        run: php artisan key:generate
+
+      - name: Laravel Pint (style check)
+        run: ./vendor/bin/pint --test
+
+      - name: PHPStan (Larastan)
+        run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
+
+      - name: Wait for MySQL
+        run: |
+          for i in $(seq 1 30); do
+            mysqladmin ping -h127.0.0.1 -uveggiemap -pveggiemap --silent && break
+            sleep 2
+          done
+
+      - name: Run migrations
+        run: php artisan migrate --force
+
+      - name: PHPUnit
+        run: php artisan test
+
+  frontend:
+    name: Frontend (ESLint / TypeScript / Vitest / Build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Vitest
+        run: npm run test
+
+      - name: Build
+        run: npm run build

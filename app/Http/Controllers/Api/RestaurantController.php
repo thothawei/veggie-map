@@ -11,9 +11,7 @@ use Illuminate\Http\JsonResponse;
 
 class RestaurantController extends Controller
 {
-    public function __construct(private readonly RestaurantRepository $restaurants)
-    {
-    }
+    public function __construct(private readonly RestaurantRepository $restaurants) {}
 
     public function index(SearchRestaurantRequest $request): JsonResponse
     {

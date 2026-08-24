@@ -20,9 +20,7 @@ class RestaurantSyncServiceTest extends TestCase
     {
         return new class($items, $source) implements RestaurantProviderInterface
         {
-            public function __construct(private array $items, private string $source)
-            {
-            }
+            public function __construct(private array $items, private string $source) {}
 
             public function fetch(BoundingBox $bbox): array
             {

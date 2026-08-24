@@ -20,9 +20,7 @@ class CalculateRestaurantScoreJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(public int $restaurantId)
-    {
-    }
+    public function __construct(public int $restaurantId) {}
 
     public function handle(): void
     {

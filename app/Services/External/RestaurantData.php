@@ -10,7 +10,7 @@ final class RestaurantData
 {
     /**
      * @param  string[]  $dietCodes  對應 diet_types.code（見 docs/database.md），
-     *                                來源標籤對不上任何已知 code 的一律丟掉，不硬塞。
+     *                               來源標籤對不上任何已知 code 的一律丟掉，不硬塞。
      */
     public function __construct(
         public readonly string $sourceId,
@@ -23,6 +23,5 @@ final class RestaurantData
         public readonly ?string $phone = null,
         public readonly ?string $website = null,
         public readonly array $dietCodes = [],
-    ) {
-    }
+    ) {}
 }

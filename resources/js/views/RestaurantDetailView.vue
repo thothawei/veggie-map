@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { isAxiosError } from 'axios';
 import client from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { useFavoritesStore } from '@/stores/favorites';
+import { extractApiErrorMessage } from '@/lib/apiError';
 import type { ApiSuccess, Restaurant } from '@/types';
 
 const props = defineProps<{ id: string }>();
@@ -27,8 +29,8 @@ async function load() {
     try {
         const response = await client.get<ApiSuccess<Restaurant>>(`/restaurants/${props.id}`);
         restaurant.value = response.data.data;
-    } catch (error: any) {
-        if (error?.response?.status === 404) {
+    } catch (error: unknown) {
+        if (isAxiosError(error) && error.response?.status === 404) {
             notFound.value = true;
         } else {
             throw error;
@@ -58,8 +60,8 @@ async function submitReview() {
         });
         reviewComment.value = '';
         await load();
-    } catch (error: any) {
-        reviewError.value = error?.response?.data?.error?.message ?? '送出評論失敗';
+    } catch (error: unknown) {
+        reviewError.value = extractApiErrorMessage(error, '送出評論失敗');
     } finally {
         submittingReview.value = false;
     }

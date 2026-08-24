@@ -13,8 +13,7 @@ final class BoundingBox
         public readonly float $minLng,
         public readonly float $maxLat,
         public readonly float $maxLng,
-    ) {
-    }
+    ) {}
 
     public static function fromString(string $csv): self
     {

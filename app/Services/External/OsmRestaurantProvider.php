@@ -3,6 +3,7 @@
 namespace App\Services\External;
 
 use App\Models\ExternalApiLog;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -28,8 +29,8 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
         try {
             $response = Http::timeout($timeout)
                 ->retry(3, 30000, function ($exception, $request) {
-                    return $exception instanceof \Illuminate\Http\Client\RequestException
-                        && $exception->response?->status() === 429;
+                    return $exception instanceof RequestException
+                        && $exception->response->status() === 429;
                 })
                 ->asForm()
                 ->post($url, ['data' => $query]);
