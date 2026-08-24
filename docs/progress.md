@@ -1005,3 +1005,36 @@ Horizon 改動造成——單獨用 `--filter` 跑受影響的測試檔（`Calcu
 - `config/horizon.php` 的 `supervisor-1` 沒有依 Job 類型分開不同 supervisor／queue（例如
   外部 API 同步 vs 批次計算分開），這個專案目前只有 2 種 Job、共用 `default` queue 已經
   夠用，之後 Job 種類變多再重新評估要不要分。
+
+## 2026-08-24 — 補：Database ERD（總體規劃「最終完成標準」第 2 項）
+
+`docs/database.md` 一直只有逐表的文字說明，沒有視覺化的 ERD——總體規劃最後「完成後請提供」
+清單明講要有「Database ERD」，跟「1. 專案架構圖」是分開列的兩個項目，文字表格不算數。
+
+- `docs/database.md` 新增 `## ERD` 段落，Mermaid `erDiagram`，直接對照
+  `database/migrations/` 實際欄位與外鍵手動核對過（不是憑 Phase 0 的舊設計稿），涵蓋
+  13 張核心表，排除 `personal_access_tokens`／`telescope_entries` 等框架基礎設施表。
+- **真的用 `@mermaid-js/mermaid-cli` 渲染驗證過**，不是寫完語法看起來對就結案——
+  第一次跑就抓到 2 個真的語法錯誤：屬性註解字串裡帶逗號會讓 ER 屬性解析器誤判
+  （`"0-100, CalculateRestaurantScoreJob 更新"` 這種寫法會炸），以及
+  `restaurant_confidence_scores.restaurant_id` 這種「同時是 PK 也是 FK」的複合鍵，
+  Mermaid ER 語法一個屬性只能掛一個 key 關鍵字，`PK_FK`／`PK FK` 都不合法，改成
+  `PK` 搭配文字註解「also FK to restaurants.id」表達。修完渲染出 PNG 用 Read 工具
+  肉眼確認過 13 張表跟關聯線都正確，不是只看 CLI 沒有報錯就假設圖是對的。
+- README「Database Design」順便修正一個既有的小錯誤：原本把 `personal_access_tokens`
+  算進「13 張表」的清單裡，但 `docs/database.md` 的 13 張表本來就不含它（它是 Sanctum
+  的框架表）——連著加 ERD 連結一起修掉，不是這次才引入的問題。
+
+**追加（同一輪順手補掉，不是留到下次）：** 既然 ERD 已經抓到 ASCII art 不夠正式這件事，
+乾脆把 `docs/architecture.md`／`README.md` 的系統圖也一併換成用同一套 `mermaid-cli`
+驗證過的 Mermaid `flowchart`，回應總體規劃「最終完成標準」第 1 項「專案架構圖」。順便
+對照現況重畫時發現，原本的 ASCII 圖裡的 `SyncRestaurantDataJob`／`ProcessUserReportJob`
+從來沒有實作過（`restaurants:sync` 是同步 Artisan 指令不是 Job，使用者回報是同步處理
+沒有對應 Job）——這張圖從 Phase 0 畫完後沒人回來對照實際程式碼更新過，新圖只畫真的
+存在的元件（`CalculateRestaurantScoreJob`／`RecalculateRestaurantRatingJob`、
+`RecommendationServiceInterface`）。
+
+**未完成 / 等待確認：**
+
+- 無。「最終完成標準」清單的 10 項（架構圖、ERD、API 文件、Docker、測試結果、CI/CD、
+  效能考量、安全性考量、外部 API 文件、README）目前逐項核對都有對應產出。

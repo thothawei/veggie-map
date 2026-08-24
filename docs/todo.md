@@ -134,3 +134,20 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
       `restaurants:recalculate-ratings`、`restaurants:calculate-scores`（目前只能手動執行）
       ✅ 2026-08-24——細節見 progress.md，`restaurants:sync` 因為沒有正式決定過涵蓋範圍，
       改用 `EXTERNAL_API_SYNC_BBOXES` 環境變數控制，留空就不排程
+
+## 補做：Database ERD ＋ 架構圖改用 Mermaid ✅ 已完成 2026-08-24
+
+總體規劃「最終完成標準」點名要的兩項視覺化產出，之前只有文字表格／ASCII art，這次
+一併補齊，細節見 progress.md（含用 `mermaid-cli` 實際渲染驗證、抓到並修正 2 個真的
+語法錯誤、順便修掉架構圖裡兩個從沒實作過的幽靈 Job 名稱）。
+
+- [x] `docs/database.md` 新增 `## ERD`（Mermaid `erDiagram`，13 張核心表）
+- [x] `docs/architecture.md`／`README.md` 的系統圖改成 Mermaid `flowchart`，對照現況重畫
+- [x] README「Database Design」順便修正一個既有的表格數量小錯誤
+
+## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成
+
+`docs/progress.md` 逐項記錄；`git log` 每個 commit 都有對應 GitHub Actions CI 綠燈
+（`gh run list` 可查）。下次接手前建議先讀 `docs/progress.md` 最新幾則條目，特別是
+「多個 Claude Code session 共用同一個測試資料庫」那則已知環境限制——如果同時開多個
+session 對這個 repo 工作，`php artisan test` 偶爾會出現隨機失敗，不代表程式碼壞了。

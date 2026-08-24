@@ -6,35 +6,65 @@
 Backend Engineer 的系統設計能力（RESTful API、快取策略、佇列架構、地理空間搜尋、可替換的外部資料源
 Adapter），而不是做一個簡單 CRUD。
 
-## 系統圖（文字版，Phase 9 完成 Frontend 後補正式圖）
+## 系統圖
 
-```
-┌────────────┐      ┌──────────────────────────────────────────┐
-│  Vue 3 SPA │─────▶│ Laravel API (/api/v1)                     │
-│  + Leaflet │◀─────│  Controller → FormRequest → Service       │
-└────────────┘      │  → Repository → Eloquent → MySQL          │
-                     │         │                                │
-                     │         ├─▶ Redis (search/detail cache,  │
-                     │         │        rate limit)              │
-                     │         └─▶ Queue (Redis driver)          │
-                     └────────────────┬───────────────────────────┘
-                                       │
-                     ┌─────────────────▼─────────────────┐
-                     │ Horizon Workers                    │
-                     │  SyncRestaurantDataJob             │
-                     │  CalculateRestaurantScoreJob        │
-                     │  RecalculateRestaurantRatingJob     │
-                     │  ProcessUserReportJob               │
-                     └────────────────┬────────────────────┘
-                                      │
-                     ┌─────────────────▼─────────────────┐
-                     │ app/Services/External/             │
-                     │  RestaurantProviderInterface        │
-                     │   ├─ OsmRestaurantProvider (Overpass)│
-                     │   └─ MockRestaurantProvider          │
-                     │  GeocodingProviderInterface          │
-                     │   └─ NominatimGeocodingProvider       │
-                     └───────────────────────────────────┘
+對照現況重畫過（原本的文字方塊圖從 Phase 0 之後沒更新，裡面的 `SyncRestaurantDataJob`／
+`ProcessUserReportJob` 其實從來沒有實作過——`restaurants:sync` 是同步執行的 Artisan
+指令，不是排進佇列的 Job；使用者回報是在 `RestaurantReportController` 裡同步處理，沒有
+對應的 Job。這份圖只畫真的存在的東西）。用 `@mermaid-js/mermaid-cli` 渲染驗證過。
+
+```mermaid
+flowchart TD
+    subgraph Client
+        SPA["Vue 3 SPA<br/>Leaflet map"]
+    end
+
+    subgraph Laravel["Laravel API (/api/v1)"]
+        Controller["Controller"]
+        FormRequest["FormRequest"]
+        ServiceLayer["Service / Repository"]
+        Eloquent["Eloquent"]
+        Controller --> FormRequest --> ServiceLayer --> Eloquent
+    end
+
+    MySQL[("MySQL 8<br/>Spatial index")]
+    Redis[("Redis<br/>search/detail cache<br/>rate limit<br/>queue driver")]
+
+    subgraph Horizon["Horizon Workers"]
+        Job1["CalculateRestaurantScoreJob"]
+        Job2["RecalculateRestaurantRatingJob"]
+    end
+
+    subgraph External["app/Services/External/"]
+        RPI["RestaurantProviderInterface"]
+        Osm["OsmRestaurantProvider (Overpass)"]
+        Mock["MockRestaurantProvider"]
+        GPI["GeocodingProviderInterface"]
+        Nominatim["NominatimGeocodingProvider"]
+        RPI --- Osm
+        RPI --- Mock
+        GPI --- Nominatim
+    end
+
+    subgraph Recommendation["app/Services/Recommendation/"]
+        RSI["RecommendationServiceInterface"]
+        RuleBased["RuleBasedRecommendationService"]
+        RSI --- RuleBased
+    end
+
+    Sync["restaurants:sync (scheduled Artisan command)"]
+
+    SPA -->|HTTP| Controller
+    Eloquent --> MySQL
+    ServiceLayer -->|cache/rate limit| Redis
+    ServiceLayer -->|dispatch| Redis
+    Redis -->|consume| Horizon
+    Horizon --> MySQL
+    ServiceLayer --> RSI
+    ServiceLayer --> GPI
+    Sync --> RPI
+    Sync -->|dispatch| Job1
+    RPI --> MySQL
 ```
 
 ## 技術選型與 Why

@@ -3,6 +3,137 @@
 Phase 0 產出，正式 migration 在 Phase 2 實作。這份文件是設計依據，欄位名稱與型別可能在 Phase 2
 微調（微調時要回來更新這份文件，不能讓文件與 migration 分岔）。
 
+## ERD
+
+直接對照 `database/migrations/` 實際欄位與外鍵畫的（不是憑當初設計草稿），13 張核心表，
+不含 Laravel 框架自帶的 `personal_access_tokens`／`cache`／`jobs`／`sessions`／
+`telescope_entries` 等基礎設施表。
+
+```mermaid
+erDiagram
+    RESTAURANTS ||--o{ RESTAURANT_DIET_TYPES : has
+    DIET_TYPES ||--o{ RESTAURANT_DIET_TYPES : has
+    RESTAURANTS ||--o{ RESTAURANT_FEATURES : has
+    FEATURES ||--o{ RESTAURANT_FEATURES : has
+    RESTAURANTS ||--o{ MENU_ITEMS : has
+    RESTAURANTS ||--o{ RESTAURANT_VERIFICATIONS : has
+    USERS ||--o{ RESTAURANT_VERIFICATIONS : verifies
+    RESTAURANTS ||--|| RESTAURANT_CONFIDENCE_SCORES : has
+    RESTAURANTS ||--o{ RESTAURANT_REPORTS : "reported in"
+    USERS ||--o{ RESTAURANT_REPORTS : files
+    RESTAURANTS ||--o{ FAVORITES : "favorited in"
+    USERS ||--o{ FAVORITES : has
+    RESTAURANTS ||--o{ REVIEWS : has
+    USERS ||--o{ REVIEWS : writes
+
+    RESTAURANTS {
+        bigint id PK
+        string name
+        string slug UK
+        text description
+        string address
+        string city
+        string district
+        decimal latitude
+        decimal longitude
+        point location "SRID 4326 - spatial index"
+        string phone
+        string website
+        tinyint price_level
+        decimal rating "cache - RecalculateRestaurantRatingJob 更新"
+        int rating_count
+        enum source "manual/osm/external_api/user"
+        string source_id
+        enum status "active/inactive/pending"
+        boolean is_possible_duplicate
+    }
+    DIET_TYPES {
+        bigint id PK
+        string code UK
+        string label
+    }
+    RESTAURANT_DIET_TYPES {
+        bigint restaurant_id FK
+        bigint diet_type_id FK
+    }
+    FEATURES {
+        bigint id PK
+        string code UK
+        string label
+    }
+    RESTAURANT_FEATURES {
+        bigint restaurant_id FK
+        bigint feature_id FK
+    }
+    MENU_ITEMS {
+        bigint id PK
+        bigint restaurant_id FK
+        string name
+        text description
+        decimal price
+        enum diet_type "vegan/vegetarian/non_vegetarian/unknown"
+        boolean is_available
+    }
+    RESTAURANT_VERIFICATIONS {
+        bigint id PK
+        bigint restaurant_id FK
+        enum verification_type
+        tinyint score "config/vegetarian.php 權重"
+        bigint verified_by FK "nullable - users.id"
+        timestamp verified_at
+        timestamp expires_at "nullable"
+        json metadata
+    }
+    RESTAURANT_CONFIDENCE_SCORES {
+        bigint restaurant_id PK "also FK to restaurants.id"
+        tinyint score "0-100 - CalculateRestaurantScoreJob 更新"
+        timestamp calculated_at
+    }
+    RESTAURANT_REPORTS {
+        bigint id PK
+        bigint user_id FK
+        bigint restaurant_id FK
+        enum type "closed/not_vegetarian/wrong_info/..."
+        text description
+        enum status "pending/approved/rejected"
+        bigint reviewed_by FK "nullable - users.id"
+        timestamp reviewed_at
+    }
+    USERS {
+        bigint id PK
+        string name
+        string email UK
+        string password
+        enum role "user/admin"
+    }
+    FAVORITES {
+        bigint user_id FK
+        bigint restaurant_id FK
+    }
+    REVIEWS {
+        bigint id PK
+        bigint user_id FK
+        bigint restaurant_id FK
+        tinyint rating "1-5"
+        text comment
+        enum status "active/hidden -覆蓋舊評論用"
+    }
+    EXTERNAL_API_LOGS {
+        bigint id PK
+        string provider
+        string endpoint
+        smallint status
+        int response_time_ms
+        boolean success
+        string error_code
+    }
+```
+
+`external_api_logs` 沒有外鍵關聯到任何表——它是 `OsmRestaurantProvider`／
+`NominatimGeocodingProvider` 的獨立稽核記錄，見 [docs/observability.md](observability.md)。
+`restaurant_confidence_scores.restaurant_id` 同時是 PK 也是 FK（1:1 關係，見下方
+`restaurant_confidence_scores` 章節）。
+
 ## 核心表
 
 ### restaurants

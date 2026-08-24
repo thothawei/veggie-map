@@ -26,24 +26,58 @@ Backend Engineer 系統設計能力」為目標的作品專案，不是一個簡
 
 ## Architecture
 
-```
-┌────────────┐      ┌──────────────────────────────────────────┐
-│  Vue 3 SPA │─────▶│ Laravel API (/api/v1)                     │
-│  + Leaflet │◀─────│  Controller → FormRequest → Service       │
-│  (Phase 9) │      │  → Repository → Eloquent → MySQL          │
-└────────────┘      │         │                                │
-                     │         ├─▶ Redis (search/detail cache)   │
-                     │         └─▶ Queue jobs (見下方 Queue 說明)│
-                     └────────────────┬───────────────────────────┘
-                                       │
-                     ┌─────────────────▼─────────────────┐
-                     │ app/Services/External/             │
-                     │  RestaurantProviderInterface        │
-                     │   ├─ OsmRestaurantProvider (Overpass)│
-                     │   └─ MockRestaurantProvider          │
-                     │  GeocodingProviderInterface          │
-                     │   └─ NominatimGeocodingProvider       │
-                     └───────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Client
+        SPA["Vue 3 SPA<br/>Leaflet map"]
+    end
+
+    subgraph Laravel["Laravel API (/api/v1)"]
+        Controller["Controller"]
+        FormRequest["FormRequest"]
+        ServiceLayer["Service / Repository"]
+        Eloquent["Eloquent"]
+        Controller --> FormRequest --> ServiceLayer --> Eloquent
+    end
+
+    MySQL[("MySQL 8<br/>Spatial index")]
+    Redis[("Redis<br/>search/detail cache<br/>rate limit<br/>queue driver")]
+
+    subgraph Horizon["Horizon Workers"]
+        Job1["CalculateRestaurantScoreJob"]
+        Job2["RecalculateRestaurantRatingJob"]
+    end
+
+    subgraph External["app/Services/External/"]
+        RPI["RestaurantProviderInterface"]
+        Osm["OsmRestaurantProvider (Overpass)"]
+        Mock["MockRestaurantProvider"]
+        GPI["GeocodingProviderInterface"]
+        Nominatim["NominatimGeocodingProvider"]
+        RPI --- Osm
+        RPI --- Mock
+        GPI --- Nominatim
+    end
+
+    subgraph Recommendation["app/Services/Recommendation/"]
+        RSI["RecommendationServiceInterface"]
+        RuleBased["RuleBasedRecommendationService"]
+        RSI --- RuleBased
+    end
+
+    Sync["restaurants:sync (scheduled Artisan command)"]
+
+    SPA -->|HTTP| Controller
+    Eloquent --> MySQL
+    ServiceLayer -->|cache/rate limit| Redis
+    ServiceLayer -->|dispatch| Redis
+    Redis -->|consume| Horizon
+    Horizon --> MySQL
+    ServiceLayer --> RSI
+    ServiceLayer --> GPI
+    Sync --> RPI
+    Sync -->|dispatch| Job1
+    RPI --> MySQL
 ```
 
 完整技術選型與「Why」寫在 [docs/architecture.md](docs/architecture.md)。
@@ -61,9 +95,11 @@ Leaflet + `leaflet.markercluster`。
 
 ## Database Design
 
-13 張表：`restaurants`、`diet_types`／`restaurant_diet_types`、`features`／`restaurant_features`、
-`menu_items`、`restaurant_verifications`、`restaurant_confidence_scores`、`restaurant_reports`、
-`users`、`favorites`、`reviews`、`external_api_logs`、`personal_access_tokens`（Sanctum）。
+13 張核心表：`restaurants`、`diet_types`／`restaurant_diet_types`、`features`／
+`restaurant_features`、`menu_items`、`restaurant_verifications`、
+`restaurant_confidence_scores`、`restaurant_reports`、`users`、`favorites`、`reviews`、
+`external_api_logs`（不含 `personal_access_tokens`／`telescope_entries` 等框架基礎設施表）。
+ERD 見 [docs/database.md](docs/database.md#erd)。
 
 欄位設計、Index 選擇的理由（哪些 index 為什麼建、複合 index 怎麼排序）完整記錄在
 [docs/database.md](docs/database.md)。
