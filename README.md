@@ -5,8 +5,8 @@
 素食 × 地圖 × 多條件搜尋 × 寵物友善 × 使用者回報 × 素食可信度的餐廳探索平台。這是一個以「展示中高階
 Backend Engineer 系統設計能力」為目標的作品專案，不是一個簡單 CRUD demo。
 
-現況：後端 API（Phase 0–8.5）已完成並實測；前端（Vue 3 + Leaflet）尚未開始。詳細進度見
-[docs/progress.md](docs/progress.md)，剩餘規劃見 [docs/todo.md](docs/todo.md)。
+現況：後端 API（Phase 0–8.5）與前端 MVP（Phase 9：地圖／搜尋／收藏／評論／Admin 審核）已完成
+並實測。詳細進度見 [docs/progress.md](docs/progress.md)，剩餘規劃見 [docs/todo.md](docs/todo.md)。
 
 ## Features
 
@@ -30,9 +30,9 @@ Backend Engineer 系統設計能力」為目標的作品專案，不是一個簡
 ┌────────────┐      ┌──────────────────────────────────────────┐
 │  Vue 3 SPA │─────▶│ Laravel API (/api/v1)                     │
 │  + Leaflet │◀─────│  Controller → FormRequest → Service       │
-│ (Phase 9,  │      │  → Repository → Eloquent → MySQL          │
-│  尚未實作)  │      │         │                                │
-└────────────┘      │         ├─▶ Redis (search/detail cache)   │
+│  (Phase 9) │      │  → Repository → Eloquent → MySQL          │
+└────────────┘      │         │                                │
+                     │         ├─▶ Redis (search/detail cache)   │
                      │         └─▶ Queue jobs (見下方 Queue 說明)│
                      └────────────────┬───────────────────────────┘
                                        │
@@ -53,8 +53,9 @@ Backend Engineer 系統設計能力」為目標的作品專案，不是一個簡
 **Backend**：Laravel 11（PHP 8.2）、MySQL 8（Spatial functions）、Redis（cache + queue driver）、
 Laravel Sanctum、Laravel Pint（formatter）。
 
-**Frontend（規劃中，見 [docs/todo.md](docs/todo.md) Phase 9）**：Vue 3、TypeScript、Vite、Pinia、
-Vue Router、Axios、Leaflet。
+**Frontend**：Vue 3 + TypeScript（`<script setup>`）、Vite（透過 `laravel-vite-plugin` 整合，SPA
+由 Laravel blade shell 渲染、HMR 走 Vite dev server）、Pinia、Vue Router（history 模式）、Axios、
+Leaflet + `leaflet.markercluster`。
 
 **Infra**：Docker Compose（app / nginx / mysql / redis）。
 
@@ -117,7 +118,17 @@ docker compose exec app php artisan key:generate
 docker compose exec app php artisan migrate --seed
 ```
 
-API：`http://localhost:8080/api/v1`（host port 依 `docker-compose.yml` 設定，見下方 Docker 章節）。
+前端跑在 host 上（不在 Docker 裡），需要另外裝 Node 依賴並啟動 Vite：
+
+```bash
+npm install
+npm run dev
+```
+
+打開 `http://localhost:8080/` 就是完整的 SPA（Laravel blade shell 用 `@vite` 載入 Vite dev
+server 的模組做 HMR，不是把整個 SPA 另外架在 5173——`npm run dev` 只負責前端資產編譯）。
+API 本身在 `http://localhost:8080/api/v1`（host port 依 `docker-compose.yml` 設定，見下方
+Docker 章節）。Production build：`npm run build`（含 `vue-tsc` 型別檢查，不過就直接失敗）。
 
 ## Docker
 
@@ -207,8 +218,8 @@ Install → Pint → PHPStan → 自動建測試庫 → PHPUnit → build。
 
 ## Future Roadmap
 
-- Vue 3 + Leaflet 前端（Phase 9）
 - Laravel Horizon + 真正的 queue worker（目前 `dispatchSync` 頂著）
+- 前端 Unit/E2E test（Vitest／Playwright，目前只有手動瀏覽器驗證）
 - `users:promote` Admin 帳號晉升指令
 - `routes/console.php` 排程自動跑 `restaurants:sync`／批次計算 Job
 - GitHub Actions CI、部署文件（AWS，需使用者確認 credentials 後才執行）

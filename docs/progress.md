@@ -392,19 +392,12 @@ VeggieMap 的 User/Report 表單都會用到 email 驗證（Phase 4/5），屆�
 
 ## 現況總覽（2026-08-24 收尾）
 
-Phase 0～8 全部完成並實測：架構／文件、Laravel＋Docker 專案初始化、13 張表 migration＋
-Model＋Factory＋Seeder、`/restaurants`（含半徑搜尋兩段式查詢＋cursor 分頁）、`/diets`／
-`/features`、Sanctum 認證＋收藏、評論／回報、Rating／Confidence Score 批次計算 Job、
+（此段為 2026-08-24 收尾當下的舊快照，Phase 8.5／9 完成後現況見下方各自的 Phase 記錄與
+[todo.md](todo.md)）Phase 0～8 全部完成並實測：架構／文件、Laravel＋Docker 專案初始化、13 張表
+migration＋Model＋Factory＋Seeder、`/restaurants`（含半徑搜尋兩段式查詢＋cursor 分頁）、
+`/diets`／`/features`、Sanctum 認證＋收藏、評論／回報、Rating／Confidence Score 批次計算 Job、
 `restaurants:sync` 外部資料匯入（Overpass／Mock Provider）、Admin 審核 report／review。
 54 個 Feature test、129 個 assertion，全綠。
-
-**下一步（尚未做、等使用者選擇優先順序）：**
-
-- Phase 9：Vue 3 + Leaflet 前端（`docs/architecture.md` 系統圖裡畫的那塊，目前完全還沒動）。
-- `users:promote` 這類 Admin 帳號晉升指令（Phase 7 記錄的已知缺口）。
-- 排程自動跑 `restaurants:sync`／批次計算 Job（目前都只能手動執行）。
-- README／`docs/openapi.yaml` 等文件收尾工作（Phase 11 範圍）。
-- 部署／CI（Phase 13 範圍），含 Feature test 需要的 `veggiemap_testing` 資料庫建置要先自動化。
 
 ## 2026-08-24 — Phase 8.5：地址搜尋（Geocoding）
 
@@ -448,3 +441,69 @@ Model＋Factory＋Seeder、`/restaurants`（含半徑搜尋兩段式查詢＋cur
 
 - `docs/openapi.yaml` 仍未產出（Phase 11 範圍），`/geocode` 先只記在 `docs/api.md`。
 - 前端串接（輸入框 → call `/geocode` → 移動地圖）留給 Phase 9，這個 Phase 只做後端 API。
+
+## 2026-08-24 — Phase 9：Vue 3 + Leaflet 前端
+
+**完成：**
+
+- `npm install` 加 `vue`／`vue-router@4`／`pinia`／`leaflet`／`leaflet.markercluster`
+  （`vue-router@5` 需要 vite 7/8，跟現有 vite 6 衝突，鎖 4.x）、`typescript`／`vue-tsc`／
+  `@vitejs/plugin-vue`／`@types/leaflet`（`typescript@7` 是最新版但 `vue-tsc@3.3.11` 還不支援
+  它移除 `./lib/tsc` export 的新版佈局，鎖回穩定的 `typescript@5.9.3`）。
+- 架構決定：SPA 不是獨立跑在 5173 的專案，而是延續 Laravel 既有的 `laravel-vite-plugin`
+  整合方式——`resources/views/app.blade.php` 當 shell，`routes/web.php` 用
+  `Route::view('/{any}', 'app')->where('any', '.*')` 把所有非 `/api`、非 `/up` 的路徑交給
+  Vue Router（history 模式）自己決定畫面。`npm run dev` 只負責資產編譯與 HMR，實際頁面
+  一律從 `http://localhost:8080/` 進，不是 5173——比總 prompt 原本設想的「前端獨立跑在
+  5173」更貼近這個專案已經是 Laravel 全端專案的事實，也不需要另外處理 CORS 讓頁面本身跨
+  origin（`config/cors.php` 還是加了，給 API 呼叫本身用，也方便未來真的要拆前後端時直接用）。
+- 頁面：`HomeView`（地圖首頁）、`RestaurantListView`、`RestaurantDetailView`、`LoginView`、
+  `RegisterView`、`FavoritesView`、`ProfileView`、`AdminView`（reports/reviews 審核）。
+  路由用 `:id` 不是總 prompt 寫的 `:slug`——後端 `GET /restaurants/{restaurant}` 是 id-based
+  route model binding（`docs/api.md` 早就這樣記錄），沒有 slug 查詢能力，前端路徑照實際 API
+  能力設計，不假裝支援不存在的查詢方式。
+- `RestaurantMap.vue`：Leaflet + `leaflet.markercluster`，`moveend` 事件驅動依 bounds 撈餐廳
+  （`HomeView` 用 bounds 中心點＋對角線距離的一半當半徑，直接餵給既有的 `/restaurants` 半徑
+  搜尋，不用另開一支「依 bounds 查」的 API）、目前位置（`navigator.geolocation`）、marker
+  popup、點擊導到詳情頁。
+- `SearchBox.vue`：串 Phase 8.5 的 `/geocode`，選取候選地點後地圖 `flyTo`。
+- `FilterDrawer.vue`：串 `/diets`／`/features`，`defineModel` 雙向綁定篩選條件。
+- Pinia：`stores/auth.ts`（token 存 localStorage、`fetchCurrentUser`／`login`／`register`／
+  `logout`）、`stores/favorites.ts`。Axios client（`api/client.ts`）攔截器自動帶 Bearer token。
+- Router guard：`meta.requiresAuth`／`requiresAdmin` 未登入導去 `/login?redirect=`。
+
+**過程中抓到並修掉的問題：**
+
+1. `vue-tsc --noEmit` 直接崩潰（`ERR_PACKAGE_PATH_NOT_EXPORTED`）——根因是 npm 預設裝到最新的
+   `typescript@7.x`，這個專案跑的當下 `vue-tsc` 生態還沒跟上 TS7 的新 export 佈局，不是
+   我的程式碼問題。鎖回 `typescript@^5.9` 解決。
+2. `body` 沒有明確設 `background`，在瀏覽器實測時整頁背景是黑的（繼承宿主環境的深色主題），
+   不是 CSS 邏輯錯誤但會在不同瀏覽器/系統主題下表現不一致——加上明確的 `background: #fff`。
+3. Template 裡 `@blur="() => setTimeout(...)"` 型別檢查不過（Vue 元件實例代理沒有全域
+   `setTimeout`），改成具名方法呼叫 `window.setTimeout`。
+
+**實測（真的開瀏覽器點，不只 build 過）：**
+
+`npm run build`（含 `vue-tsc --noEmit`）過、`npm run dev` 起 Vite，瀏覽器開
+`http://localhost:8080/` 逐條走過：地圖載入台中市 20 家種子餐廳並正確分群成 cluster、點開
+cluster 看到個別 marker、點 marker 跳轉到 `/restaurants/{id}` 詳情頁且內容（名稱/評分/地址/
+菜單/diet標籤/features標籤）正確；搜尋框輸入「台北車站」→ 真的打 Nominatim 拿到候選清單 →
+點選後地圖飛到台北（附近沒有種子餐廳，正確顯示空結果，不是 bug）；註冊帳號 → nav 正確切換
+成已登入狀態 → 進入某餐廳詳情頁按「加入收藏」即時變成「已收藏」→ 送出評論後評分立即從
+0.0(0) 變成 5.0(1)，證明前端打的 API 跟 `RecalculateRestaurantRatingJob` 的
+`dispatchSync` 串起來了 → `/favorites` 頁面正確列出剛收藏的餐廳。全程瀏覽器 console 無錯誤。
+`/restaurants` 列表頁篩選 chip 與搜尋框也正常。
+
+**未完成 / 等待確認：**
+
+- `AdminView` 只用程式碼推導 admin API 呼叫方式驗證過（unit 層級沒問題），沒有實際拿一個
+  admin 角色帳號在瀏覽器裡點過核准/駁回/隱藏——這個決定是因為要手動改 DB 把某帳號設
+  `role=admin` 才能測，範圍上跟 Phase 7 當初手動測試 admin API 的方式一致，但沒有在這次
+  一併重新過一次瀏覽器驗證，下次有動 Admin 相關程式碼時要記得補測。
+- 沒有 Vitest／Playwright 這類前端自動化測試，目前全靠這次的手動瀏覽器驗證，見
+  `docs/todo.md` Phase 10。
+- Mobile responsive（總 prompt 要求的地圖 UX 項目之一）目前只用桌面尺寸驗證過，沒有實際
+  切到手機視窗檢查版面。
+- Router guard 的 `requiresAdmin` 判斷依賴 `auth.user` 已經載入完成；如果使用者帶著舊
+  token 直接刷新進 `/admin`，`fetchCurrentUser()` 還沒 resolve 前那一瞬間會先被導回首頁，
+  是已知的競態限制，MVP 範圍先不特別處理（重新整理後手動點一次連結即可正常進入）。
