@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\Restaurant;
+use App\Models\RestaurantConfidenceScore;
+use App\Observers\RestaurantConfidenceScoreObserver;
+use App\Observers\RestaurantObserver;
 use App\Services\External\GeocodingProviderInterface;
 use App\Services\External\MockRestaurantProvider;
 use App\Services\External\NominatimGeocodingProvider;
@@ -9,6 +13,9 @@ use App\Services\External\OsmRestaurantProvider;
 use App\Services\External\RestaurantProviderInterface;
 use App\Services\Recommendation\RecommendationServiceInterface;
 use App\Services\Recommendation\RuleBasedRecommendationService;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -40,6 +47,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Restaurant::observe(RestaurantObserver::class);
+        RestaurantConfidenceScore::observe(RestaurantConfidenceScoreObserver::class);
+
+        // 見總體規劃第十六節：/api/v1/restaurants 用 Redis-based rate limiter（底層
+        // Cache::store() 走 CACHE_STORE=redis，不用額外套件）。依登入使用者 id 或 IP 分桶，
+        // 已登入使用者不會因為同一台 NAT 底下其他匿名使用者而被牽連。
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
     }
 }

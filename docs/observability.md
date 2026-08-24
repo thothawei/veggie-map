@@ -67,11 +67,16 @@ GROUP BY provider;
 
 ## Cache Hit / Miss
 
-**沒有實作。** `GET /geocode` 用 `Cache::remember()`（見
-[`GeocodeController`](../app/Http/Controllers/Api/GeocodeController.php)），Redis 本身
-可以用 `INFO stats` 看全域的 `keyspace_hits`／`keyspace_misses`，但應用層沒有針對個別
-cache key 記錄命中率。這是誠實的缺口，不是遺漏文件——`docs/todo.md` 也沒有把它排進近期
-規劃，因為目前 cache 用量（只有 geocode 這一處）還不到需要專門監控的規模。
+Cache 本身已經實作：`GET /geocode`（`GeocodeController`）、`GET /restaurants`／
+`GET /restaurants/{id}`（`RestaurantRepository`，見 [docs/api.md](api.md) 的
+Caching 段落）都走 Redis，寫入後由 `RestaurantObserver`／
+`RestaurantConfidenceScoreObserver` 主動清快取。
+
+**但命中率追蹤沒有實作。** Redis 本身可以用 `INFO stats` 看全域的
+`keyspace_hits`／`keyspace_misses`，應用層沒有針對個別 cache key（例如區分
+`restaurant:{id}` 命中率 vs `restaurants:search:*` 命中率）另外記錄。這是誠實的缺口——
+目前的驗證方式是測試裡直接數 DB query 次數（見 `RestaurantCachingTest`），不是量測
+production 流量下的命中率，兩者是不同層級的保證。
 
 ## Database Slow Query Awareness
 

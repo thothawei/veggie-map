@@ -149,10 +149,11 @@ docker compose logs -f app
 docker compose exec app php artisan test
 ```
 
-63 個 Feature/Unit test、179 個 assertion，涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
+74 個 Feature/Unit test、229 個 assertion，涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
 Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:sync` 冪等性與去重、
-`RestaurantRepository` bounding box 純數學、`ReviewService` 真實併發競態——不是循序模擬，
-是兩個真的重疊的資料庫交易）。
+`RestaurantRepository` bounding box 純數學、`ReviewService` 真實併發競態、
+`RuleBasedRecommendationService` 加權排序、search/detail cache 命中與失效、rate limiting
+429——不是只驗證回應內容，快取那組測試直接斷言重複請求的 DB query 數為 0）。
 
 測試用 MySQL（非 sqlite in-memory）——schema 用了 `POINT`／`ST_Distance_Sphere`／`MBRContains`
 等 MySQL 專屬空間函式，sqlite 跑不起來，所以需要 `scripts/setup-test-db.sh` 先建立
@@ -186,9 +187,14 @@ npm run test         # Vitest，目前只涵蓋純邏輯（例如 lib/geo.ts 的
 
 ## Caching Strategy
 
-- 搜尋結果／餐廳詳情：Redis cache，依查詢條件組 key，短 TTL（避免重複的 Spatial Query 打 DB）。
+- 搜尋結果：`restaurants:search:{md5(filters)}`，TTL 300s（避免重複的 Spatial Query 打 DB）。
+- 餐廳詳情：`restaurant:{id}`，TTL 600s。
 - 地址搜尋：`geocode:{md5(query)}`，TTL 1 天（配合 Nominatim rate limit，而非效能考量）。
-- **不使用** `Cache::flush()`——資料異動只清相關 key，避免整個 Redis 被清空影響其他快取。
+- 寫入後清快取：`Restaurant`／`RestaurantConfidenceScore` 掛 Observer，存檔即清對應的
+  `restaurant:{id}` 與 `Cache::tags(['restaurants'])`。**不使用** `Cache::flush()`——
+  只清相關 key，不影響 geocode 之類無關的 cache。
+- 驗證方式：`tests/Feature/Api/RestaurantCachingTest.php` 直接斷言重複請求的 DB query
+  數為 0，不是只看回應內容對不對（回應對，快取可能根本沒接上也看不出來）。
 
 ## Queue Architecture
 
@@ -210,6 +216,8 @@ Bounding Box，`MBRContains` 過濾出候選集合（能用到 Spatial Index）�
 - 密碼 hashing：Laravel 原生（不自行實作）。
 - 認證：Laravel Sanctum Bearer Token（API-only，未使用 SPA cookie 模式）。
 - 授權：Policy（`ReviewPolicy`／`RestaurantReportPolicy`），Admin 動作額外檢查 `role`。
+- Rate Limiting：整個 `/api/v1/*` 60 次／分鐘，Redis-based（`AppServiceProvider` 的
+  `RateLimiter::for('api', ...)`），依登入使用者 id 或 IP 分桶，超過回 429。
 - Mass assignment：所有 Model 明確宣告 `$fillable`。
 - API 錯誤格式統一經 `ApiExceptionRenderer`，不外洩 Laravel 預設例外堆疊訊息（production）。
 - `.env`／API Key 不進版控（`.gitignore` 已排除）。

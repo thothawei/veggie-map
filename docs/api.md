@@ -128,3 +128,21 @@ GET /api/v1/restaurants/recommended?latitude=25.033&longitude=121.5645&radius=5&
 每個會寫入的端點對應一個 FormRequest（`SearchRestaurantRequest`、`CreateReviewRequest`、
 `CreateRestaurantReportRequest`…）與一個 Policy（`ReviewPolicy`、`RestaurantPolicy`、`ReportPolicy`、
 `FavoritePolicy`）。Controller 只做「呼叫 Service／回傳 Resource」，不做欄位驗證與授權判斷。
+
+## Caching（`RestaurantRepository`）
+
+- `GET /restaurants`：`restaurants:search:{md5(filters)}`，`Cache::tags(['restaurants'])`，
+  TTL 300s。不同篩選條件／排序／cursor 各自獨立的 cache entry。
+- `GET /restaurants/{id}`：`restaurant:{id}`，TTL 600s。route 不用 implicit model
+  binding（那樣會在進 controller 前就先查一次 DB，等於白做快取），改用純 id 查詢，
+  查詢本身包在 `Cache::remember()` 裡。
+- 寫入後清快取：`Restaurant`／`RestaurantConfidenceScore` 兩個 model 都掛了 Observer，
+  存檔／刪除時 `Cache::forget("restaurant:{id}")` + `Cache::tags(['restaurants'])->flush()`，
+  不做全域 `Cache::flush()`（會清掉跟餐廳無關的 cache，例如 geocode 結果）。
+
+## Rate Limiting
+
+整個 `/api/v1/*` 套 `throttle:api`，60 次／分鐘，依登入使用者 id 或 IP 分桶
+（`AppServiceProvider::boot()` 的 `RateLimiter::for('api', ...)`）。底層走
+`CACHE_STORE=redis`，是 Redis-based limiter，不需要額外套件。超過限制回 429，
+回應帶 `X-RateLimit-Limit`／`X-RateLimit-Remaining` header。

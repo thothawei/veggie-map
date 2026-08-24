@@ -6,6 +6,7 @@ use App\Models\Restaurant;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Facades\Cache;
 
 class RestaurantRepository
 {
@@ -29,6 +30,21 @@ class RestaurantRepository
     }
 
     /**
+     * `restaurant:{id}` detail cache，TTL 600s（總體規劃第十六節）。用 implicit route
+     * model binding 的話，Laravel 會在進 controller 前就先查一次 DB，等於白做了快取——
+     * 所以 `RestaurantController::show()` 改用純 id，查詢本身包在這裡面。
+     */
+    public function findForDetail(int $id): ?Restaurant
+    {
+        return Cache::remember("restaurant:{$id}", 600, function () use ($id) {
+            return Restaurant::query()
+                ->where('status', 'active')
+                ->with(['dietTypes', 'features', 'menuItems', 'confidenceScore'])
+                ->find($id);
+        });
+    }
+
+    /**
      * 半徑搜尋兩段式查詢（見 docs/database.md）：
      * 1. Bounding Box + MBRContains 過濾 `location`，吃 Spatial Index 縮小候選集。
      * 2. 對縮小後的候選集算 ST_Distance_Sphere 精確距離，用於排序／半徑截斷。
@@ -38,33 +54,43 @@ class RestaurantRepository
      */
     public function search(array $filters): CursorPaginator
     {
-        $hasCoords = isset($filters['latitude'], $filters['longitude']);
-        $sort = $filters['sort'] ?? ($hasCoords ? 'distance' : 'newest');
-        $perPage = min((int) ($filters['per_page'] ?? 20), 100);
+        // key 依「完整篩選條件（含 cursor/sort/per_page）」算，不同頁/不同排序各自有
+        // 自己的 cache entry；見 docs/architecture.md 的 Redis Cache 設計、總體規劃第十六節
+        // 的 `restaurants:search:{hash}`，TTL 300s。用 tags(['restaurants']) 而不是單純
+        // key，才能在 RestaurantObserver 寫入時整批清掉，不用維護「哪些 hash 曾經存在」
+        // 這種額外簿記，也不會變成總體規劃第十七節明講禁止的 `Cache::flush()` 全域清空。
+        ksort($filters);
+        $cacheKey = 'restaurants:search:'.md5(json_encode($filters));
 
-        if ($hasCoords) {
-            $lat = (float) $filters['latitude'];
-            $lng = (float) $filters['longitude'];
-            $radiusKm = (float) ($filters['radius'] ?? 5);
+        return Cache::tags(['restaurants'])->remember($cacheKey, 300, function () use ($filters) {
+            $hasCoords = isset($filters['latitude'], $filters['longitude']);
+            $sort = $filters['sort'] ?? ($hasCoords ? 'distance' : 'newest');
+            $perPage = min((int) ($filters['per_page'] ?? 20), 100);
 
-            $inner = $this->baseQuery($filters)
-                ->whereRaw('MBRContains(ST_SRID(ST_GeomFromText(?), 4326), location)', [
-                    $this->boundingBoxPolygon($lat, $lng, $radiusKm),
-                ])
-                ->selectRaw('restaurants.*, ST_Distance_Sphere(location, ST_SRID(POINT(?, ?), 4326)) as distance', [
-                    $lng, $lat,
-                ]);
+            if ($hasCoords) {
+                $lat = (float) $filters['latitude'];
+                $lng = (float) $filters['longitude'];
+                $radiusKm = (float) ($filters['radius'] ?? 5);
 
-            $query = Restaurant::query()
-                ->fromSub($inner, 'restaurants')
-                ->where('distance', '<=', $radiusKm * 1000);
-        } else {
-            $query = $this->baseQuery($filters);
-        }
+                $inner = $this->baseQuery($filters)
+                    ->whereRaw('MBRContains(ST_SRID(ST_GeomFromText(?), 4326), location)', [
+                        $this->boundingBoxPolygon($lat, $lng, $radiusKm),
+                    ])
+                    ->selectRaw('restaurants.*, ST_Distance_Sphere(location, ST_SRID(POINT(?, ?), 4326)) as distance', [
+                        $lng, $lat,
+                    ]);
 
-        $this->applySort($query, $sort, $hasCoords);
+                $query = Restaurant::query()
+                    ->fromSub($inner, 'restaurants')
+                    ->where('distance', '<=', $radiusKm * 1000);
+            } else {
+                $query = $this->baseQuery($filters);
+            }
 
-        return $query->cursorPaginate($perPage);
+            $this->applySort($query, $sort, $hasCoords);
+
+            return $query->cursorPaginate($perPage);
+        });
     }
 
     private function baseQuery(array $filters): Builder

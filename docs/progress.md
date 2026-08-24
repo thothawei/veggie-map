@@ -785,3 +785,71 @@ Rule-based 版本本身。但 Phase 9 做前端首頁「推薦餐廳」時，直
   `npx @redocly/cli lint` 重新跑過仍然 0 error。`docs/api.md`／`docs/architecture.md`
   同步更新，`architecture.md` 的「AI 預留」標題從「不在 MVP 範圍」改成標明
   Rule-based 版本已實作，只有 AI 版本還沒做。
+
+## 2026-08-24 — 補：Redis Search/Detail Cache + Rate Limiting（總體規劃第 16／17／42 節）
+
+**發現過程：** 同一輪重新對照總體規劃 md 抓到的第二個落差，比 Recommendation 那個更嚴重——
+「Redis Cache」跟「Rate Limiting」是總體規劃開頭第一段就列出的核心能力清單項目
+（跟 RESTful API／MySQL／Queue 並列），第十六／十七節也明講要對 `/restaurants` 做
+search cache（`restaurants:search:{hash}`，300s）／detail cache（`restaurant:{id}`，
+600s）／清快取／Redis-based rate limiter。查證發現：**這兩項在這個專案裡完全是 0%
+實作**——`grep` 全專案找不到任何 `throttle` middleware、找不到 `RateLimiter::for`，
+Redis cache 只有 Phase 8.5 的 `GET /geocode` 一處在用，核心的 `/restaurants` 列表／詳情
+每一次請求都是真的打 MySQL。這不是「還沒排到」的技術債，是履歷/面試情境下如果有人
+真的去讀程式碼或戳 API，會直接戳破「這個專案有用 Redis」這個宣稱的落差，所以列為
+高優先立刻補。
+
+**完成：**
+
+- `RestaurantRepository::search()`：包一層 `Cache::tags(['restaurants'])->remember()`，
+  key 用排序過的完整 filters（含 cursor/sort/per_page）算 md5，不同頁/不同條件各自
+  獨立的 cache entry，TTL 300s。
+- `RestaurantRepository::findForDetail()`：新方法，`restaurant:{id}` cache，TTL 600s。
+  **關鍵設計決定**：`RestaurantController::show()` 原本用 Laravel implicit route model
+  binding（`Restaurant $restaurant`），這樣 Laravel 會在進 controller「之前」就先查一次
+  DB 做綁定，包再多 `Cache::remember()` 都是狀後諸葛——改成收原始 `int $restaurant`，
+  查詢本身（含 eager load）整個包進 cache closure，才是真的省掉 DB 查詢。
+- `RestaurantObserver`／`RestaurantConfidenceScoreObserver`（`app/Observers/`）+
+  共用的 `RestaurantCacheInvalidator`：`Restaurant`／`RestaurantConfidenceScore` 存檔或
+  刪除時，`Cache::forget("restaurant:{id}")` + `Cache::tags(['restaurants'])->flush()`。
+  兩個 model 都要掛，因為 confidence score 是獨立的表，只更新它不會觸發 Restaurant
+  的 saved event，但 detail cache 裡內嵌了 confidence_score 欄位。**不做**
+  `Cache::flush()`（總體規劃第十七節明講禁止），tags 機制只清跟餐廳相關的 key。
+- `AppServiceProvider::boot()` 新增 `RateLimiter::for('api', ...)`：60 次／分鐘，依
+  登入使用者 id 或 IP 分桶，底層走 `CACHE_STORE=redis`（已經是 Redis，不需要額外套件）。
+  `routes/api.php` 整個檔案包一層 `Route::middleware('throttle:api')`——不是只套
+  文件明講的 `/restaurants`，因為其他匿名可存取端點（`/diets`／`/geocode` 等）一樣有
+  被打爆的風險。
+- 6 個新測試（`tests/Feature/Api/RestaurantCachingTest.php`）：重複搜尋/詳情請求
+  **直接斷言 `DB::getQueryLog()` 是空陣列**（不是只驗證回應內容對，回應對不代表真的
+  沒打 DB）、不同篩選條件各自獨立快取、修改餐廳／修改 confidence score 都會讓 detail
+  cache 正確失效、超過限流回 429。
+
+**過程中做的自我驗證（不是寫完就交差）：**
+
+1. 拔掉 `findForDetail()` 的 `Cache::remember()` 重跑測試——「repeated detail request
+   hits cache not the database」真的紅了（`assertCount(0)` vs 實際 5 個 query）。
+2. 拔掉 `AppServiceProvider::boot()` 裡兩個 `::observe()` 註冊重跑測試——兩個
+   invalidation 測試都真的紅了（改了餐廳名字/confidence score，detail API 還是回舊值）。
+   加回去後全綠。
+3. **不只信任 phpunit 用的 array cache store**：用 `redis-cli -n 1 KEYS "*"`
+   直接看真的 Redis（`REDIS_CACHE_DB=1`），確認 `restaurant:1` 這個 key 真的存在，
+   而且 tags 機制產生的 hash key／`:timer` companion key 也在；用 tinker 改一筆餐廳
+   名稱後重打 API，確認真的從 DB 撈到新名稱，不是繼續吐舊的 Redis 快取內容；
+   `curl -sI` 看到 `X-RateLimit-Limit: 60`／`X-RateLimit-Remaining` header 真的存在。
+   這三步都是對著這台機器上真正在跑的 Redis／MySQL container 做的，不是只看
+   phpunit 綠燈就結案。
+
+**實測：**
+
+74 個測試（含新增 6 個）、229 個 assertion 全綠，Pint／PHPStan 乾淨。`docs/api.md` 新增
+Caching／Rate Limiting 兩個段落，`README.md` 的 Caching Strategy／Security 段落改成
+反映真實現況（原本這兩段其實是 Phase 11 寫 README 時就內容超前於實作的「應該有」，
+不是真的有——現在補齊，文件才跟程式碼一致）。
+
+**未完成 / 等待確認：**
+
+- Cache 命中率沒有另外記錄追蹤（見 [docs/observability.md](observability.md)），
+  只驗證過「有沒有打 DB」，沒有量測 production 流量下的實際命中率。
+- Rate limit 目前是全域 60/分鐘一組規則，沒有依端點類型（例如寫入類 vs 唯讀類）
+  細分不同限流值——這個專案的規模，細分限流的 ROI 目前偏低，先用同一組簡單規則。

@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\RecommendedRestaurantRequest;
 use App\Http\Requests\SearchRestaurantRequest;
 use App\Http\Resources\RestaurantResource;
-use App\Models\Restaurant;
 use App\Repositories\RestaurantRepository;
 use App\Services\Recommendation\RecommendationServiceInterface;
 use Illuminate\Http\JsonResponse;
@@ -58,15 +57,15 @@ class RestaurantController extends Controller
         ]);
     }
 
-    public function show(Restaurant $restaurant): JsonResponse
+    public function show(int $restaurant): JsonResponse
     {
-        abort_unless($restaurant->status === 'active', 404);
+        $model = $this->restaurants->findForDetail($restaurant);
 
-        $restaurant->load(['dietTypes', 'features', 'menuItems', 'confidenceScore']);
+        abort_if($model === null, 404);
 
         return response()->json([
             'success' => true,
-            'data' => new RestaurantResource($restaurant),
+            'data' => new RestaurantResource($model),
         ]);
     }
 }

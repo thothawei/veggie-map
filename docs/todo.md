@@ -106,6 +106,23 @@ progress.md。
 - [x] 5 個新測試（3 個 Service 邏輯＋2 個 HTTP），`docs/openapi.yaml`／`docs/api.md`／
       `docs/architecture.md` 同步更新
 
+## 補做：Redis Search/Detail Cache + Rate Limiting ✅ 已完成 2026-08-24
+
+同一輪重新對照 md 抓到的第二個、也是更嚴重的落差——「Redis Cache」「Rate Limiting」是
+總體規劃開頭核心能力清單項目，第十六/十七節明講要做，查證後發現是 0% 實作（只有
+geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自我驗證（拔掉重跑測試、
+真的看 Redis KEYS、curl 看 rate limit header）。
+
+- [x] `RestaurantRepository::search()`／`findForDetail()` 包 `Cache::tags()`／
+      `Cache::remember()`，300s／600s TTL
+- [x] `RestaurantObserver`／`RestaurantConfidenceScoreObserver` + 
+      `RestaurantCacheInvalidator`：寫入後清快取，不用 `Cache::flush()`
+- [x] `AppServiceProvider::boot()` 的 `RateLimiter::for('api', ...)`，60/分鐘，
+      Redis-based，套用到整個 `/api/v1/*`
+- [x] 6 個新測試（直接斷言 DB query 數為 0，不只驗證回應內容）
+- [x] `docs/api.md` 新增 Caching／Rate Limiting 段落，`README.md` 的 Caching
+      Strategy／Security 段落改成反映真實現況（原本是超前於實作的敘述）
+
 ## 已知技術債（progress.md 記錄，一併排入）
 
 - [ ] `users:promote {email}` Artisan 指令（目前只能手動改 DB 升 admin）
