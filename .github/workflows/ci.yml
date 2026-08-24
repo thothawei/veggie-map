@@ -45,6 +45,11 @@ jobs:
           extensions: pdo_mysql, mbstring, bcmath, gd, zip
           coverage: none
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
       - name: Copy .env
         run: cp .env.example .env
 
@@ -53,6 +58,14 @@ jobs:
 
       - name: Generate application key
         run: php artisan key:generate
+
+      - name: Build frontend assets
+        # `/` 現在是 Vue SPA shell（見 resources/views/app.blade.php），render 這個 view
+        # 需要 public/build/manifest.json，否則任何打 `/` 的 Feature test（例如
+        # tests/Feature/ExampleTest.php）都會在全新 checkout 上炸 ViteManifestNotFoundException。
+        run: |
+          npm ci
+          npm run build
 
       - name: Laravel Pint (style check)
         run: ./vendor/bin/pint --test

@@ -1,4 +1,6 @@
 *
 !private/
 !public/
+!mock/
+!mock/restaurants.json
 !.gitignore

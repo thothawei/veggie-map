@@ -1,0 +1,62 @@
+[
+    {
+        "source_id": "mock-node-1001",
+        "name": "小小蔬房",
+        "latitude": 25.0330,
+        "longitude": 121.5645,
+        "address": "台北市信義區松高路 1 號",
+        "city": "台北市",
+        "district": "信義區",
+        "phone": "02-2345-6789",
+        "website": null,
+        "diet_codes": ["vegan", "vegetarian_friendly"]
+    },
+    {
+        "source_id": "mock-node-1002",
+        "name": "阿嬤的菜",
+        "latitude": 25.0478,
+        "longitude": 121.5170,
+        "address": "台北市中山區林森北路 100 號",
+        "city": "台北市",
+        "district": "中山區",
+        "phone": null,
+        "website": "https://example.com/agrandma-veggie",
+        "diet_codes": ["ovo_lacto"]
+    },
+    {
+        "source_id": "mock-node-1003",
+        "name": "清心蔬食",
+        "latitude": 25.0338,
+        "longitude": 121.5495,
+        "address": "台北市大安區忠孝東路四段 200 號",
+        "city": "台北市",
+        "district": "大安區",
+        "phone": "02-8765-4321",
+        "website": null,
+        "diet_codes": ["vegan"]
+    },
+    {
+        "source_id": "mock-node-1004",
+        "name": "菩提素食",
+        "latitude": 24.1477,
+        "longitude": 120.6736,
+        "address": "台中市西區台灣大道二段 50 號",
+        "city": "台中市",
+        "district": "西區",
+        "phone": null,
+        "website": null,
+        "diet_codes": ["vegetarian", "vegetarian_friendly"]
+    },
+    {
+        "source_id": "mock-node-1005",
+        "name": "禪心蔬食坊",
+        "latitude": 22.6273,
+        "longitude": 120.3014,
+        "address": "高雄市苓雅區四維三路 88 號",
+        "city": "高雄市",
+        "district": "苓雅區",
+        "phone": "07-1234-5678",
+        "website": "https://example.com/zen-vegetarian",
+        "diet_codes": ["vegan", "vegetarian"]
+    }
+]
