@@ -40,6 +40,15 @@ class AppServiceProvider extends ServiceProvider
         // 見 docs/architecture.md「AI 預留」：第一版只有 RuleBasedRecommendationService，
         // 未來要換 AIRecommendationService 只改這一行綁定，Controller 不用動。
         $this->app->bind(RecommendationServiceInterface::class, RuleBasedRecommendationService::class);
+
+        // Telescope（debug 模式：檢視 request／SQL query／job／cache/exception）只在
+        // local／testing 註冊，不進 `bootstrap/providers.php` 的固定清單——避免它在
+        // production 多佔一份中介層開銷，也避免 `/telescope` 路由在 production 上存在
+        // （即使 TelescopeServiceProvider 的 gate() 已經預設擋掉沒有列進白名單的使用者，
+        // 兩層防護比只靠一層 gate 保守）。
+        if ($this->app->environment(['local', 'testing'])) {
+            $this->app->register(TelescopeServiceProvider::class);
+        }
     }
 
     /**

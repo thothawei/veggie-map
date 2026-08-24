@@ -239,6 +239,11 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 完整的「有 vs 沒有」對照表見 [docs/observability.md](docs/observability.md)，誠實記錄而非
 畫大餅。
 
+本機開發另外裝了 [Laravel Telescope](https://laravel.com/docs/telescope)（`http://localhost:8080/telescope`），
+可視覺化檢視 request／SQL query／job／cache hit-miss／exception，只在 `local`／`testing`
+環境註冊（見 `AppServiceProvider::register()`），production 不會載入這個 provider，
+`/telescope` 路由也不會存在——不是只靠 `TelescopeServiceProvider::gate()` 這一層防護。
+
 ## CI/CD
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，push/PR 到 `main` 時觸發，兩個平行 job：

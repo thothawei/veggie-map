@@ -853,3 +853,32 @@ Caching／Rate Limiting 兩個段落，`README.md` 的 Caching Strategy／Securi
   只驗證過「有沒有打 DB」，沒有量測 production 流量下的實際命中率。
 - Rate limit 目前是全域 60/分鐘一組規則，沒有依端點類型（例如寫入類 vs 唯讀類）
   細分不同限流值——這個專案的規模，細分限流的 ROI 目前偏低，先用同一組簡單規則。
+
+## 2026-08-24 — 補：安裝 Laravel Telescope（本機除錯工具）
+
+上一個 session 中斷前已裝到一半（`composer.json` 加了 `laravel/telescope`、
+`TelescopeServiceProvider`／`config/telescope.php`／migration 都已產生並跑過 migrate），
+但沒有 commit、也沒有寫進 `docs/todo.md`／`docs/progress.md`。接手後先驗證現況再決定
+要繼續完成還是回退：
+
+- `AppServiceProvider::register()` 只在 `local`／`testing` 環境才 `$this->app->register(TelescopeServiceProvider::class)`，
+  不進 `bootstrap/providers.php` 固定清單——production 不會多一層中介層開銷，`/telescope`
+  路由在 production 也不存在，比只靠 `TelescopeServiceProvider::gate()` 白名單多一層防護。
+  `laravel/telescope` 掛在 `require`（不是 `require-dev`），這是 Laravel 官方文件明講的
+  「只在特定環境註冊」模式所需的寫法——包管理層面它仍要能在任何環境被 autoload 到，
+  只是 provider 註冊本身被環境擋掉。
+- gate() 白名單目前是空陣列（`in_array($user->email, [])`），代表 production 環境下沒有
+  任何人能看 `/telescope`（即使繞過上面那層 provider 限制），這是刻意的保守預設，不是
+  漏寫。
+
+**自我驗證：**
+
+1. `php artisan migrate:status` 確認 `create_telescope_entries_table` 已經在 batch 2 跑過。
+2. `php artisan test`：74 個測試、229 個 assertion 全綠，跟裝之前的數字一致——確認
+   Telescope 沒有干擾既有功能。
+3. Pint `--test`／PHPStan level 5 都乾淨。
+4. 瀏覽器真的打開 `http://localhost:8080/telescope`，Requests 分頁真的顯示出剛才
+   `php artisan test` 過程中打過的 `/api/v1/diets`／`/api/v1/restaurants`／
+   `/api/v1/restaurants/1` 三筆真實請求記錄，不是空頁面或 500。
+
+`README.md` Observability 段落補一小段說明用途與環境限制範圍。
