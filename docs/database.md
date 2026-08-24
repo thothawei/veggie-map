@@ -46,6 +46,14 @@ Phase 0 產出，正式 migration 在 Phase 2 實作。這份文件是設計依�
 再對縮小後的候選集用 `ST_Distance_Sphere` 算精確距離並排序——避免對全表直接跑
 `ST_Distance_Sphere`（那樣即使有 Spatial Index 也無法被使用，等同全表掃描）。
 
+**座標軸順序陷阱（Phase 2 實測過）**：MySQL 8 對 SRID 4326 強制套用 EPSG:4326 定義的軸順序
+（緯度在前、經度在後），跟一般「經度, 緯度」的直覺相反。正確寫法是先用笛卡兒座標建立
+`POINT(lng, lat)`，再用 `ST_SRID(..., 4326)` 綁定，讓 MySQL 依 4326 規則重新解讀——
+寫入與查詢兩邊都要用同一種順序，細節見 `app/Models/Restaurant.php` 的註解跟
+`database/factories/RestaurantFactory.php` 的實作。如果改成直接
+`ST_GeomFromText("POINT($lng $lat)", 4326)`，順序在小範圍座標下不會報錯，只會安靜地把
+地圖左右鏡射，很難發現——Phase 3 寫 Repository 時不要重新發明這段。
+
 ### diet_types / restaurant_diet_types（Many-to-Many）
 
 `diet_types`：`id`, `code`（vegan/vegetarian/ovo_lacto/lacto/ovo/vegan_friendly/vegetarian_friendly）,

@@ -61,7 +61,31 @@ VeggieMap 的 User/Report 表單都會用到 email 驗證（Phase 4/5），屆�
   的工作，Phase 1 只要求「能跑起來」，先不提前做。
 - 尚未安裝 Sail／Horizon／Sanctum 等後續 Phase 才需要的套件，避免這個階段就把依賴裝一堆用不到的。
 
+## 2026-08-24 — Phase 2: Database
+
+**完成：**
+
+- 13 張表的 migration 全部依 `docs/database.md` 實作完成，欄位/型別/index 與文件一致
+  （`restaurants.location` 用 `POINT SRID 4326` + Spatial Index，其餘複合 index／unique 均對齊文件）。
+- 11 個 Eloquent Model（`Restaurant`／`DietType`／`Feature`／`MenuItem`／`RestaurantVerification`／
+  `RestaurantConfidenceScore`／`RestaurantReport`／`Favorite`／`Review`／`ExternalApiLog`，加上
+  更新後的 `User`）與對應關聯（`belongsToMany`／`hasMany`／`hasOne`／`belongsTo`）全部建立。
+  `restaurants.location` 沒有原生 Eloquent cast，寫入一律走 `DB::raw('ST_SRID(POINT(lng, lat), 4326)')`。
+- 10 個 Factory（含台灣城市/行政區的合理經緯度範圍，取代 Faker 預設的全球隨機座標）；
+  `diet_types`／`features` 是固定清單，改用 `DietTypeSeeder`／`FeatureSeeder` upsert 而非 factory 隨機產生。
+  `RestaurantSeeder` 產 20 家餐廳並掛上 diet types／features／3~8 筆 menu items。
+- 實測驗證：`php artisan migrate:fresh --seed --force` 全部 DONE；Tinker 內確認
+  `Restaurant::with(['dietTypes','features','menuItems'])` 關聯正確載入、`ST_Distance_Sphere` 半徑查詢
+  可正常排序（20 家餐廳、106 筆 menu items）。
+
+**未完成 / 等待確認：**
+
+- `restaurant_confidence_scores` 尚無 seed 資料（設計上由 Phase 6/7 的 `CalculateRestaurantScoreJob`
+  批次寫入，不在 Phase 2 範圍內）。
+- `composer audit` 的 `CVE-2026-48019`（email 驗證 CRLF injection）仍待處理，同 Phase 1 備註，
+  最晚 Phase 4/5 的 User/Report 表單要一併解決。
+
 ## 下一步（等待確認後）
 
-Phase 2：Database（migrations／models／relationships／factories／seeders／indexes），
-依 `docs/database.md` 的表格設計實作。
+Phase 3：API / Repository layer（半徑搜尋 Bounding Box + `ST_Distance_Sphere` 兩段式查詢、
+餐廳列表與詳情端點），依 `docs/api.md` 的端點設計實作。
