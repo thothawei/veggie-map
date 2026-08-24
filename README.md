@@ -204,6 +204,11 @@ npm run test         # Vitest，目前只涵蓋純邏輯（例如 lib/geo.ts 的
 技術債，見 [docs/todo.md](docs/todo.md)——等 Horizon 裝上、worker 跑起來後，把 `dispatchSync`
 改回 `dispatch()` 即可，Job 類別本身不用改。
 
+`routes/console.php` 已排程 `restaurants:recalculate-ratings`／`restaurants:calculate-scores`
+每天跑一次。`restaurants:sync` 因為這個專案沒有正式決定過要自動涵蓋哪些城市範圍，改用
+`EXTERNAL_API_SYNC_BBOXES` 環境變數控制（格式 `"minLat,minLng,maxLat,maxLng"`，多組用分號
+分隔）——預設留空，不會自動排程，避免自己編一組座標假裝是產品決策。
+
 ## Geospatial Search
 
 `restaurants.location` 是 `POINT SRID 4326` + Spatial Index。查詢分兩段：先用經緯度算出
@@ -262,8 +267,6 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Laravel Horizon + 真正的 queue worker（目前 `dispatchSync` 頂著）
 - 前端元件測試／Playwright E2E（目前 Vitest 只測 `lib/geo.ts` 這種純邏輯，golden path
   靠手動瀏覽器驗證）
-- `users:promote` Admin 帳號晉升指令
-- `routes/console.php` 排程自動跑 `restaurants:sync`／批次計算 Job
 - 實際 AWS 部署（部署文件已完成，見 [docs/deployment.md](docs/deployment.md)；
   需使用者確認 credentials 後才執行）
 - 更長期：AI 推薦、Menu OCR、使用者聲譽系統（見總體規劃文件，第一版 MVP 刻意不做）

@@ -912,3 +912,42 @@ Actions（每次 run 都是獨立 MySQL service container，不共用）也一�
 情境下「多個 session 共用同一個 docker-compose 測試資料庫」的已知風險——之後如果要
 同時開多個 session 對這個 repo 跑測試，要嘛錯開時間，要嘛之後才值得投資讓每個 session
 用獨立的測試庫（目前判斷 ROI 不到需要現在做的程度，先記錄下來）。
+
+## 2026-08-24 — 補：`routes/console.php` 排程（技術債清單第三項）
+
+`docs/todo.md`「已知技術債」列的第三項——`restaurants:sync`／`restaurants:recalculate-ratings`／
+`restaurants:calculate-scores` 原本都只能手動執行。
+
+- `restaurants:recalculate-ratings`／`restaurants:calculate-scores`：兩支都沒有必填參數，
+  直接 `Schedule::command(...)->daily()`，`php artisan schedule:list` 實測確認正確註冊、
+  `Next Due` 時間正常。
+- `restaurants:sync` 比較麻煩：`--bbox` 是必填參數（Phase 8 就這樣設計，避免一次撈全台灣），
+  但這個專案**從來沒有正式決定過要自動涵蓋哪些城市範圍**——查證 `docs/architecture.md`／
+  `docs/external-apis.md`／`config/services.php` 都沒有任何「預設涵蓋範圍」的紀錄，只有
+  Phase 8 測試用的 5 筆 mock fixture（台北/台中/高雄各一到三家）。如果我自己編一組
+  台灣城市座標當預設值排程，等於是在假裝這是一個做過的產品決策——比照 Phase 3 對
+  `open_now` 篩選參數的處理方式（查無對應設計時誠實回報、不擅自二選一），這裡改用
+  `EXTERNAL_API_SYNC_BBOXES` 環境變數（`config('services.sync_bboxes')`）控制：格式
+  `"minLat,minLng,maxLat,maxLng"`，多組用分號分隔，**留空就完全不排程**，不是空陣列
+  當一個隱性的「反正不會執行」佔位符。
+- `config/services.php` 新增 `sync_bboxes`（解析 env）、`.env.example` 補上
+  `EXTERNAL_API_SYNC_BBOXES=`（含說明為什麼預設空白）。
+- 3 個新測試（`tests/Feature/Console/ScheduleTest.php`）：確認兩支無參數指令有進排程、
+  確認 `sync_bboxes` 預設空陣列時 `restaurants:sync` 真的沒有被排進去（用
+  `app(Schedule::class)->events()` 直接檢查排程事件清單，不是只看程式碼字面）。
+
+**實測（不只信任測試綠燈）：**
+
+1. `php artisan schedule:list`：確認只有 `restaurants:recalculate-ratings`／
+   `restaurants:calculate-scores` 出現，`restaurants:sync` 沒有（預設 `EXTERNAL_API_SYNC_BBOXES`
+   空白）。
+2. 用 `docker compose exec -e EXTERNAL_API_SYNC_BBOXES="25.00,121.51,25.07,121.58;22.60,120.28,22.68,120.35"`
+   重跑 `schedule:list`：兩組 bbox 各自產生一條 `restaurants:sync --bbox='...'` 排程，
+   確認分號分隔解析邏輯是真的在解析環境變數，不是死代碼。
+3. 全部 79 個測試（含新增 5 個）、238 個 assertion 全綠，Pint／PHPStan 乾淨。
+
+**未完成 / 等待確認：**
+
+- `EXTERNAL_API_SYNC_BBOXES` 目前預設空白，代表**這個排程功能裝好了但預設不會實際跑**——
+  如果之後要讓它真的自動匯入資料，需要使用者/產品先決定要涵蓋哪些城市或商圈的 bbox，
+  這不是我該替專案決定的範圍。

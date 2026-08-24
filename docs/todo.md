@@ -128,5 +128,7 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
 - [x] `users:promote {email}` Artisan 指令（目前只能手動改 DB 升 admin）✅ 2026-08-24
 - [ ] 安裝 Laravel Horizon，把 `dispatchSync()` 改回 `dispatch()`（目前沒有 queue worker，
       所有 Job 用 `dispatchSync` 頂著，見 [progress.md](progress.md) Phase 6 決定）
-- [ ] `routes/console.php` 排程：定期跑 `restaurants:sync`、
+- [x] `routes/console.php` 排程：定期跑 `restaurants:sync`、
       `restaurants:recalculate-ratings`、`restaurants:calculate-scores`（目前只能手動執行）
+      ✅ 2026-08-24——細節見 progress.md，`restaurants:sync` 因為沒有正式決定過涵蓋範圍，
+      改用 `EXTERNAL_API_SYNC_BBOXES` 環境變數控制，留空就不排程

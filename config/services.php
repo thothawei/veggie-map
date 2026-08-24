@@ -49,4 +49,12 @@ return [
     // mock｜osm，見 App\Providers\AppServiceProvider 的 RestaurantProviderInterface 綁定。
     'restaurant_provider' => env('EXTERNAL_API_RESTAURANT_PROVIDER', 'mock'),
 
+    // routes/console.php 的排程要用，逗號分隔多組 "minLat,minLng,maxLat,maxLng"（用分號分隔
+    // 多組 bbox）。沒有預設值——這個專案沒有正式決定過要自動涵蓋哪些城市範圍，寧可不排程
+    // 也不要自己編一組座標假裝是產品決策，見 docs/todo.md。
+    'sync_bboxes' => array_values(array_filter(array_map(
+        'trim',
+        explode(';', (string) env('EXTERNAL_API_SYNC_BBOXES', ''))
+    ))),
+
 ];
