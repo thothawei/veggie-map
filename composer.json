@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.2",
         "laravel/framework": "^11.31",
+        "laravel/horizon": "^5.48",
         "laravel/sanctum": "^4.3",
         "laravel/telescope": "^5.22",
         "laravel/tinker": "^2.9"

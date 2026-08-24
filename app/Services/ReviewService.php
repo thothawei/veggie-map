@@ -43,11 +43,9 @@ class ReviewService
             ]);
         }, 3);
 
-        // dispatchSync 而不是 dispatch()：這個專案目前沒有跑 queue worker（見 docs/progress.md
-        // Phase 1 備註），QUEUE_CONNECTION=redis 下若真的用 dispatch() 丟到佇列，沒有 worker
-        // 消化的話 rating 就永遠不會更新，變成一個「看起來寫對但實際上什麼都沒發生」的死路徑。
-        // Job 本身仍實作 ShouldQueue，之後有 worker 了可以直接改回 dispatch()。
-        RecalculateRestaurantRatingJob::dispatchSync($restaurant->id);
+        // Horizon 已裝上、docker-compose 有跑 horizon worker（見 docs/progress.md），
+        // 真的丟進 QUEUE_CONNECTION=redis 佇列由 worker 非同步處理，不再是同步阻塞請求。
+        RecalculateRestaurantRatingJob::dispatch($restaurant->id);
 
         return $review;
     }

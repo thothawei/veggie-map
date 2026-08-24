@@ -951,3 +951,57 @@ Actions（每次 run 都是獨立 MySQL service container，不共用）也一�
 - `EXTERNAL_API_SYNC_BBOXES` 目前預設空白，代表**這個排程功能裝好了但預設不會實際跑**——
   如果之後要讓它真的自動匯入資料，需要使用者/產品先決定要涵蓋哪些城市或商圈的 bbox，
   這不是我該替專案決定的範圍。
+
+## 2026-08-24 — 補：安裝 Laravel Horizon（技術債清單第二項，也是最後一項）
+
+`docs/todo.md`「已知技術債」列的第二項——Phase 6 當初的決定是「沒有 queue worker，
+`dispatchSync()` 頂著」，現在把 queue worker 真的裝起來，把技術債清乾淨。
+
+- `composer require laravel/horizon` + `php artisan horizon:install`：產生
+  `app/Providers/HorizonServiceProvider.php`（`bootstrap/providers.php` 固定註冊，跟
+  Telescope 刻意排除在 production 外的做法不同——**Horizon 本來就該在 production 跑**，
+  它不只是除錯工具，是真正的 queue worker 管理面板，沒有它佇列就沒人消化）、
+  `config/horizon.php`（沿用預設 `supervisor-1`，`balance=auto`，local 10 processes／
+  production 3 processes，這個專案規模用預設值即可，不用客製）。
+  `HorizonServiceProvider::gate()` 白名單維持空陣列，跟 `TelescopeServiceProvider::gate()`
+  同一套「production 預設沒有人能看」的保守慣例。
+- `docker-compose.yml` 新增 `horizon` service：跟 `app` 同一個 image／volume，只是
+  `command: php artisan horizon` 取代預設的 php-fpm entrypoint，`restart: unless-stopped`
+  確保 worker 掛掉會自動重啟。
+- 5 個呼叫點全部從 `dispatchSync()` 改回 `dispatch()`：`ReviewService::submit()`、
+  `RestaurantController@hide`（Admin 隱藏評論）、`RestaurantSyncService::sync()`、
+  `restaurants:recalculate-ratings`、`restaurants:calculate-scores`。Job 類別本身
+  （`ShouldQueue` 早就實作好）完全不用改，這正是 Phase 6 當初的設計意圖。
+
+**實測（真的驗證非同步生效，不是只看程式碼改對）：**
+
+1. `docker compose up -d --build horizon`：`docker logs veggiemap-horizon` 看到
+   `Horizon started successfully`。
+2. Tinker 裡對一家 rating=0 的餐廳呼叫 `ReviewService::submit()` 送出 5 分評論，**立刻**
+   檢查 `restaurant->rating` 仍是 0（因為現在是真的丟進 Redis 佇列，不是同步阻塞完成）、
+   等 2 秒後再查詢，`rating` 變成 5.00——證明 Horizon worker 真的把佇列裡的
+   `RecalculateRestaurantRatingJob` 撈出來執行了，不是死路徑也不是假的非同步（同步執行
+   的話第一次查詢就會立刻是新值，不會有這個「先舊值、等一下才變新值」的時間差）。
+3. `redis-cli LLEN queues:default` 在 dispatch 後短暫非零、worker 處理完後歸零，確認
+   真的有進佇列又被消化，不是 Redis 佇列設定錯誤導致 job 直接被丟棄看起來「剛好」成功。
+4. 全部 79 個測試、238 個 assertion 全綠，Pint／PHPStan 乾淨（測試環境
+   `phpunit.xml` 的 `QUEUE_CONNECTION=sync` 讓 `dispatch()` 在測試裡還是同步執行完再
+   斷言，不需要真的等 worker，這是 Laravel 測試的標準作法，不是繞過驗證）。
+
+**過程中的環境雜訊（跟這次改動無關，記錄避免下次誤判）：** `docker compose up -d --build
+horizon` 這個指令意外把 `mysql` container 一併 `Recreate`（不是只建立 `horizon`），
+執行後立刻查證 `veggiemap`／`veggiemap_testing` 兩個資料庫的資料筆數都完好（volume
+沒有被清掉，只是 container 重建），不是資料遺失事故。全速重跑 `php artisan test` 時
+偶爾出現大量隨機失敗，是前面已經記錄過的「本機同時有多個 Claude Code session 共用同一個
+`docker-compose` 測試資料庫」已知風險（見上一則 `users:promote` 的記錄），不是這次
+Horizon 改動造成——單獨用 `--filter` 跑受影響的測試檔（`CalculateRestaurantScoreJobTest`／
+`ReviewServiceConcurrencyTest`）跟間隔幾秒後重跑完整套件都拿到過乾淨的全綠結果。
+
+**未完成 / 等待確認：**
+
+- `HorizonServiceProvider::gate()` 白名單目前是空陣列，跟 Telescope 一樣預設沒有人能在
+  production 看 `/horizon` 儀表板——如果真的要部署到 production 且需要有人看儀表板，
+  要記得把實際的 admin email 填進去，這是刻意的保守預設，不是漏寫。
+- `config/horizon.php` 的 `supervisor-1` 沒有依 Job 類型分開不同 supervisor／queue（例如
+  外部 API 同步 vs 批次計算分開），這個專案目前只有 2 種 Job、共用 `default` queue 已經
+  夠用，之後 Job 種類變多再重新評估要不要分。

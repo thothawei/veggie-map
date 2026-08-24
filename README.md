@@ -133,13 +133,15 @@ Docker 章節）。Production build：`npm run build`（含 `vue-tsc` 型別檢�
 
 ## Docker
 
-`docker-compose.yml` 定義四個服務：`app`（PHP 8.2-fpm）、`nginx`、`mysql`、`redis`。本機若
+`docker-compose.yml` 定義五個服務：`app`（PHP 8.2-fpm）、`horizon`（跟 `app` 同一個
+image，改跑 `php artisan horizon` 消化 Redis 佇列）、`nginx`、`mysql`、`redis`。本機若
 3306/80 已被其他專案佔用，host 對外映射改成 `3307`/`8080`（容器內部 port 不變）。
 
 ```bash
 docker compose up -d      # 啟動
-docker compose ps         # 確認四個服務都是 Running
+docker compose ps         # 確認五個服務都是 Running
 docker compose logs -f app
+docker compose logs -f horizon   # 確認 queue worker 真的在跑、有沒有 failed job
 ```
 
 ## Testing
@@ -149,11 +151,13 @@ docker compose logs -f app
 docker compose exec app php artisan test
 ```
 
-74 個 Feature/Unit test、229 個 assertion，涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
+79 個 Feature/Unit test、238 個 assertion，涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
 Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:sync` 冪等性與去重、
 `RestaurantRepository` bounding box 純數學、`ReviewService` 真實併發競態、
 `RuleBasedRecommendationService` 加權排序、search/detail cache 命中與失效、rate limiting
-429——不是只驗證回應內容，快取那組測試直接斷言重複請求的 DB query 數為 0）。
+429、`users:promote`、批次計算 Job 排程——不是只驗證回應內容，快取那組測試直接斷言重複
+請求的 DB query 數為 0；測試環境 `QUEUE_CONNECTION=sync`，Job 仍然同步跑完才斷言結果，
+不需要真的等 Horizon worker）。
 
 測試用 MySQL（非 sqlite in-memory）——schema 用了 `POINT`／`ST_Distance_Sphere`／`MBRContains`
 等 MySQL 專屬空間函式，sqlite 跑不起來，所以需要 `scripts/setup-test-db.sh` 先建立
@@ -198,11 +202,12 @@ npm run test         # Vitest，目前只涵蓋純邏輯（例如 lib/geo.ts 的
 
 ## Queue Architecture
 
-`CalculateRestaurantScoreJob`、`RecalculateRestaurantRatingJob` 都實作 `ShouldQueue`，但目前
-**沒有安裝 Laravel Horizon、也沒有跑 queue worker**，呼叫端一律用 `dispatchSync()` 同步執行，
-避免「程式碼看起來對、實際上因為沒有 worker 消化而永遠不會更新」的死路徑。這是誠實記錄的已知
-技術債，見 [docs/todo.md](docs/todo.md)——等 Horizon 裝上、worker 跑起來後，把 `dispatchSync`
-改回 `dispatch()` 即可，Job 類別本身不用改。
+`CalculateRestaurantScoreJob`、`RecalculateRestaurantRatingJob` 都實作 `ShouldQueue`，並透過
+[Laravel Horizon](https://laravel.com/docs/horizon) 真正非同步處理——`docker-compose.yml` 有
+獨立的 `horizon` container 跑 `php artisan horizon`，`QUEUE_CONNECTION=redis` 底層佇列真的
+有 worker 在消化，呼叫端一律用 `dispatch()`。`/horizon` 儀表板走跟 Telescope 一樣的 gate 模式
+（`app/Providers/HorizonServiceProvider::gate()`，白名單預設空陣列，production 環境沒有列進
+白名單的使用者一律看不到）。
 
 `routes/console.php` 已排程 `restaurants:recalculate-ratings`／`restaurants:calculate-scores`
 每天跑一次。`restaurants:sync` 因為這個專案沒有正式決定過要自動涵蓋哪些城市範圍，改用

@@ -18,7 +18,7 @@ class RecalculateRestaurantRatings extends Command
 
         Restaurant::query()->select('id')->chunkById(200, function ($restaurants) use (&$count) {
             foreach ($restaurants as $restaurant) {
-                RecalculateRestaurantRatingJob::dispatchSync($restaurant->id);
+                RecalculateRestaurantRatingJob::dispatch($restaurant->id);
                 $count++;
             }
         });

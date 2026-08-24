@@ -18,7 +18,7 @@ class CalculateRestaurantScores extends Command
 
         Restaurant::query()->select('id')->chunkById(200, function ($restaurants) use (&$count) {
             foreach ($restaurants as $restaurant) {
-                CalculateRestaurantScoreJob::dispatchSync($restaurant->id);
+                CalculateRestaurantScoreJob::dispatch($restaurant->id);
                 $count++;
             }
         });

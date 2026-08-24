@@ -45,7 +45,7 @@ class RestaurantSyncService
 
             $this->verifications->record($restaurant, 'external_source');
 
-            CalculateRestaurantScoreJob::dispatchSync($restaurant->id);
+            CalculateRestaurantScoreJob::dispatch($restaurant->id);
         }
 
         return $stats;

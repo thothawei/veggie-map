@@ -123,11 +123,13 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
 - [x] `docs/api.md` 新增 Caching／Rate Limiting 段落，`README.md` 的 Caching
       Strategy／Security 段落改成反映真實現況（原本是超前於實作的敘述）
 
-## 已知技術債（progress.md 記錄，一併排入）
+## 已知技術債（progress.md 記錄，一併排入）✅ 全部完成 2026-08-24
 
 - [x] `users:promote {email}` Artisan 指令（目前只能手動改 DB 升 admin）✅ 2026-08-24
-- [ ] 安裝 Laravel Horizon，把 `dispatchSync()` 改回 `dispatch()`（目前沒有 queue worker，
+- [x] 安裝 Laravel Horizon，把 `dispatchSync()` 改回 `dispatch()`（目前沒有 queue worker，
       所有 Job 用 `dispatchSync` 頂著，見 [progress.md](progress.md) Phase 6 決定）
+      ✅ 2026-08-24——`docker-compose.yml` 新增 `horizon` container，5 個呼叫點全部改回
+      `dispatch()`，真實驗證過非同步處理生效（見 progress.md）
 - [x] `routes/console.php` 排程：定期跑 `restaurants:sync`、
       `restaurants:recalculate-ratings`、`restaurants:calculate-scores`（目前只能手動執行）
       ✅ 2026-08-24——細節見 progress.md，`restaurants:sync` 因為沒有正式決定過涵蓋範圍，

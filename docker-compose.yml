@@ -12,6 +12,21 @@ services:
     networks:
       - veggiemap
 
+  horizon:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: veggiemap-horizon
+    command: php artisan horizon
+    restart: unless-stopped
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - veggiemap
+
   nginx:
     image: nginx:stable-alpine
     container_name: veggiemap-nginx
