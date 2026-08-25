@@ -1,0 +1,183 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { createMemoryHistory, createRouter, type Router } from 'vue-router';
+import { setViewportMatches } from '@/test/setup';
+
+const cities = [
+    { slug: 'taipei', label: '台北', country: '台灣', center: [25.033, 121.5654], zoom: 13, bbox: '24.9613,121.4570,25.2130,121.6663' },
+    { slug: 'taichung', label: '台中', country: '台灣', center: [24.1477, 120.6736], zoom: 13, bbox: '23.9500,120.4300,24.4500,121.4700' },
+    { slug: 'tokyo', label: '東京', country: '日本', center: [35.6762, 139.6503], zoom: 12, bbox: '35.5300,139.5600,35.8200,139.9200' },
+];
+
+function fakeRestaurant(id: number) {
+    return { id, name: `餐廳 ${id}`, address: `地址 ${id}`, latitude: 25.03, longitude: 121.56, rating: 4.2, rating_count: 10 };
+}
+
+let listPayload: { data: unknown[]; meta?: Record<string, unknown> } = { data: [] };
+const restaurantCalls: Record<string, unknown>[] = [];
+
+const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) => {
+    if (url === '/cities') return Promise.resolve({ data: { data: cities } });
+    if (url === '/restaurants') {
+        restaurantCalls.push(config?.params ?? {});
+
+        return Promise.resolve({ data: listPayload });
+    }
+
+    return Promise.resolve({ data: { data: [] } });
+});
+
+vi.mock('@/api/client', () => ({
+    default: { get: (...args: unknown[]) => get(...(args as [string, { params?: Record<string, unknown> }])) },
+}));
+
+const RestaurantListView = (await import('./RestaurantListView.vue')).default;
+
+function makeRouter(): Router {
+    return createRouter({
+        history: createMemoryHistory(),
+        routes: [
+            { path: '/restaurants', name: 'restaurants', component: RestaurantListView },
+            { path: '/restaurants/:id', name: 'restaurant-detail', component: { template: '<div />' } },
+        ],
+    });
+}
+
+async function mountList(url = '/restaurants') {
+    const router = makeRouter();
+    await router.push(url);
+    await router.isReady();
+
+    const wrapper = mount(RestaurantListView, { global: { plugins: [router] } });
+    await flushPromises();
+    await flushPromises();
+
+    return { wrapper, router };
+}
+
+function lastRestaurantCall(): Record<string, unknown> {
+    return restaurantCalls[restaurantCalls.length - 1];
+}
+
+describe('RestaurantListView 城市切換', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+    });
+
+    it('預設列出全部城市，不帶 bbox——維持這一頁原本的行為', async () => {
+        const { wrapper } = await mountList('/restaurants');
+
+        expect(lastRestaurantCall().bbox).toBeUndefined();
+        expect(wrapper.find('.scope').text()).toContain('全部城市');
+    });
+
+    it('網址指定城市時用該城市的 bbox 收窄', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taichung');
+
+        expect(lastRestaurantCall().bbox).toBe('23.9500,120.4300,24.4500,121.4700');
+        expect(wrapper.find('.scope').text()).toContain('台中');
+    });
+
+    it('用 bbox 而不是 city 欄位——匯入資料有 59% 的 city 是空的', async () => {
+        await mountList('/restaurants?city=tokyo');
+
+        expect(lastRestaurantCall().bbox).toBe('35.5300,139.5600,35.8200,139.9200');
+        expect(lastRestaurantCall().city).toBeUndefined();
+    });
+
+    it('切換城市會改網址並重新查詢', async () => {
+        const { wrapper, router } = await mountList('/restaurants?city=taipei');
+        const before = restaurantCalls.length;
+
+        const tokyo = wrapper.findAll('.city').find((b) => b.text() === '東京')!;
+        await tokyo.trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.city).toBe('tokyo');
+        expect(restaurantCalls.length).toBeGreaterThan(before);
+        expect(lastRestaurantCall().bbox).toBe('35.5300,139.5600,35.8200,139.9200');
+    });
+
+    it('切回「全部」會拿掉 bbox', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taichung');
+        expect(lastRestaurantCall().bbox).toBeDefined();
+
+        const all = wrapper.findAll('.city').find((b) => b.text() === '全部')!;
+        await all.trigger('click');
+        await flushPromises();
+
+        expect(lastRestaurantCall().bbox).toBeUndefined();
+    });
+
+    it('網址帶不認識的城市時退回全部，而不是查一個不存在的範圍', async () => {
+        const { wrapper } = await mountList('/restaurants?city=atlantis');
+
+        expect(lastRestaurantCall().bbox).toBeUndefined();
+        expect(wrapper.find('.scope').text()).toContain('全部城市');
+    });
+
+    it('搜尋關鍵字時保留目前城市範圍', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taichung');
+
+        await wrapper.find('input[type="search"]').setValue('素食');
+        await wrapper.find('.toolbar button').trigger('click');
+        await flushPromises();
+
+        expect(lastRestaurantCall().keyword).toBe('素食');
+        expect(lastRestaurantCall().bbox).toBe('23.9500,120.4300,24.4500,121.4700');
+    });
+
+    it('查無結果時的說明會指出目前限定在哪個城市', async () => {
+        listPayload = { data: [], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountList('/restaurants?city=tokyo');
+
+        expect(wrapper.find('.notice').text()).toContain('東京沒有符合條件的餐廳');
+        expect(wrapper.find('.notice').text()).toContain('切換到其他城市');
+    });
+});
+
+describe('RestaurantListView 分頁與計數', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+    });
+
+    it('還有下一頁時計數顯示 +，不把已載入筆數當成總數', async () => {
+        listPayload = { data: Array.from({ length: 20 }, (_, i) => fakeRestaurant(i)), meta: { next_cursor: 'abc' } };
+
+        const { wrapper } = await mountList('/restaurants?city=taipei');
+
+        expect(wrapper.find('.scope').text()).toContain('20+');
+    });
+
+    it('載入更多會帶上 cursor 並接在現有結果後面', async () => {
+        listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: 'cur-1' } };
+        const { wrapper } = await mountList('/restaurants?city=taipei');
+
+        listPayload = { data: [fakeRestaurant(2)], meta: { next_cursor: null } };
+        await wrapper.find('.more').trigger('click');
+        await flushPromises();
+
+        expect(lastRestaurantCall().cursor).toBe('cur-1');
+        expect(wrapper.findAll('li')).toHaveLength(2);
+    });
+
+    it('查詢失敗時顯示錯誤，不是靜默留著舊資料', async () => {
+        listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+        const { wrapper } = await mountList('/restaurants?city=taipei');
+
+        get.mockImplementationOnce(() => Promise.reject(new Error('boom')));
+        await wrapper.find('.toolbar button').trigger('click');
+        await flushPromises();
+
+        expect(wrapper.find('.notice.error').exists()).toBe(true);
+        expect(wrapper.findAll('li')).toHaveLength(0);
+    });
+});

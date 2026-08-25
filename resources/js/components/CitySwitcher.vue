@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { ALL_CITIES } from '@/composables/useCities';
 import type { City } from '@/types';
 
 const props = defineProps<{
     cities: City[];
     modelValue: string | null;
+    /** 列表頁需要「全部城市」這個選項；地圖頁沒有——地圖一定得看著某個地方。 */
+    allowAll?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -30,6 +33,20 @@ const groups = computed(() => {
 
 <template>
     <nav class="city-switcher" aria-label="選擇城市">
+        <div v-if="allowAll" class="city-group">
+            <div class="city-buttons">
+                <button
+                    type="button"
+                    class="city"
+                    :class="{ active: modelValue === ALL_CITIES }"
+                    :aria-pressed="modelValue === ALL_CITIES"
+                    @click="emit('update:modelValue', ALL_CITIES)"
+                >
+                    全部
+                </button>
+            </div>
+        </div>
+
         <div v-for="group in groups" :key="group.country" class="city-group">
             <span class="country">{{ group.country }}</span>
             <div class="city-buttons">

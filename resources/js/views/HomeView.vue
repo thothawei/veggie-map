@@ -1,21 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import client from '@/api/client';
 import RestaurantMap from '@/components/RestaurantMap.vue';
 import SearchBox from '@/components/SearchBox.vue';
 import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
+import { rememberCity, useCities } from '@/composables/useCities';
 import { haversineKm } from '@/lib/geo';
-import type { ApiSuccess, City, GeocodedPlace, Restaurant, RestaurantSearchParams } from '@/types';
+import type { ApiSuccess, GeocodedPlace, Restaurant, RestaurantSearchParams } from '@/types';
 
 const router = useRouter();
-const route = useRoute();
 
-const LAST_CITY_KEY = 'veggiemap:last-city';
+// 地圖一定得看著某個地方，所以退回清單第一個城市，並記住上次選的。
+const { cities, loading: citiesLoading, activeCity, selectCity } = useCities({ fallback: 'first', remember: true });
 
-const cities = ref<City[]>([]);
-const citiesLoading = ref(true);
 const restaurants = ref<Restaurant[]>([]);
 const recommended = ref<Restaurant[]>([]);
 const loading = ref(false);
@@ -25,19 +24,6 @@ const filters = ref<Partial<RestaurantSearchParams>>({});
 const mapRef = ref<InstanceType<typeof RestaurantMap> | null>(null);
 
 let currentBounds: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null = null;
-
-/**
- * 網址是「目前在哪個城市」的單一真相來源：切換器只負責改網址，實際飛過去由下面的
- * watch 處理。這樣上一頁／下一頁、重新整理、把連結貼給別人三件事自動都對，不用另外
- * 維護一份會跟網址對不起來的內部狀態。
- */
-const activeCity = computed<City | null>(() => {
-    if (!cities.value.length) return null;
-
-    const slug = route.query.city;
-
-    return cities.value.find((city) => city.slug === slug) ?? cities.value[0];
-});
 
 /**
  * 同時有「地圖移動完」「改篩選」「換城市」三個觸發來源，慢的舊請求可能在新請求之後
@@ -113,10 +99,6 @@ function handleLocate() {
     mapRef.value?.locateUser();
 }
 
-function selectCity(slug: string) {
-    router.push({ query: { ...route.query, city: slug } });
-}
-
 function goToDetail(restaurant: Restaurant) {
     router.push({ name: 'restaurant-detail', params: { id: restaurant.id } });
 }
@@ -126,33 +108,13 @@ watch(filters, loadByBounds, { deep: true });
 watch(activeCity, (city, previous) => {
     if (!city) return;
 
-    localStorage.setItem(LAST_CITY_KEY, city.slug);
+    rememberCity(city.slug);
 
     // 第一次是地圖自己用 :center 開好的，不用再飛一次（會多打一輪 API）。
     if (!previous) return;
     if (city.slug === previous.slug) return;
 
     mapRef.value?.jumpTo(city.center[0], city.center[1], city.zoom);
-});
-
-onMounted(async () => {
-    try {
-        const { data } = await client.get<ApiSuccess<City[]>>('/cities');
-        cities.value = data.data;
-    } finally {
-        citiesLoading.value = false;
-    }
-
-    if (!cities.value.length) return;
-
-    // 網址沒指定就沿用上次看的城市，兩者都沒有才用清單第一個。用 replace 而不是 push，
-    // 免得使用者一進站就在歷史紀錄裡多一筆、按上一頁還回不去。
-    if (!route.query.city) {
-        const remembered = localStorage.getItem(LAST_CITY_KEY);
-        const fallback = cities.value.find((city) => city.slug === remembered) ?? cities.value[0];
-
-        router.replace({ query: { ...route.query, city: fallback.slug } });
-    }
 });
 
 const hasResults = computed(() => restaurants.value.length > 0);

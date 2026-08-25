@@ -255,8 +255,26 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
 - [x] 反向驗證：拔距離防護 2 條紅、拔 slug fallback 1 條紅
 - [x] CI 的 Frontend job 本來就有 `npm run test`，不用改 workflow
 
-未完成：`RestaurantListView`／`SearchBox`／`AdminView` 仍無測試；仍無真瀏覽器 E2E
-（維持 Phase 10「這個規模 ROI 偏低」的判斷）。
+未完成：`SearchBox`／`AdminView` 仍無測試；仍無真瀏覽器 E2E（維持 Phase 10「這個規模
+ROI 偏低」的判斷）。
+
+## 補做：RestaurantListView 城市切換 ＋ `bbox` API 參數 ✅ 已完成 2026-08-25
+
+- [x] 新增 `bbox=minLat,minLng,maxLat,maxLng` 查詢參數。**既有兩種收窄方式都不能用**：
+      `city` 欄位不可靠；`radius` 上限 50km 而台中半對角線 59.6km、高雄 66.4km（實測 422）
+- [x] `RestaurantRepository` 抽出 `polygonFromCorners()` 給 bbox 與半徑兩條路徑共用；
+      帶 bbox 時不再套半徑截斷（會把矩形四角切掉）
+- [x] 格式錯的 bbox 一律 422，不靜默忽略（忽略＝從「查這座城市」變成「查全世界」）
+- [x] 抽出 `useCities` composable 給首頁與列表頁共用，`fallback` 區分兩頁差異；
+      列表頁維持原本「列出全部」的預設，`CitySwitcher` 加 `allowAll`
+- [x] 修掉自己引入的雙重請求（實測 network 面板每次進頁面送兩發，改成單一觸發）
+- [x] 後端 12 條 bbox 測試＋前端 11 條列表頁測試，含反向驗證（後端 4 紅、前端 5 紅）
+
+過程中兩個測試失敗查證後都是測試錯不是程式錯：`MBRContains` 邊界是嚴格排除（SQL 驗過）；
+測試資料庫沒 seed lookup 表所以 `Feature::where(...)->value('id')` 是 null。
+
+未完成：列表頁 `keyword` 沒進網址；匯入資料 `address` 常為空字串導致卡片多一行空白
+（既有問題，首頁也有）。細節見 progress.md。
 
 ## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成
 

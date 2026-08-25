@@ -55,7 +55,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 
 ## `GET /restaurants` 查詢參數
 
-`keyword`, `latitude`, `longitude`, `radius`（公里）, `city`, `district`, `diet`, `price_level`,
+`keyword`, `latitude`, `longitude`, `radius`（公里，上限 50）, `bbox`, `city`, `district`, `diet`, `price_level`,
 `rating_min`, `pet_friendly`, `parking`, `open_now`, `sort`（distance/rating/popular/newest，
 預設 `distance`；帶 `latitude`+`longitude` 才可用 `distance`）, `page`, `per_page`（預設 20，上限 100）。
 
@@ -63,7 +63,25 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 
 ```
 GET /api/v1/restaurants?latitude=24.1477&longitude=120.6736&radius=5&diet=vegan&pet_friendly=1
+GET /api/v1/restaurants?bbox=23.9500,120.4300,24.4500,121.4700&sort=newest
 ```
+
+
+### `bbox`：矩形範圍查詢
+
+格式 `"minLat,minLng,maxLat,maxLng"`。前端城市切換用這個參數，**不是 `city` 欄位**——
+匯入資料裡 59% 的 `city` 是空的、同一個城市有「臺中市／台中市」兩種寫法、東京的節點
+填的是「渋谷区」這類行政區（2026-08-25 實測）。
+
+也不能用 `latitude`+`radius` 代替：`radius` 上限 50km，而台中 bbox 的半對角線是 59.6km、
+高雄 66.4km，換算後會直接被驗證擋下。
+
+- 可與 `keyword`、`diet`、`parking` 等其他篩選併用。
+- 同時帶 `latitude`+`longitude` 時，範圍仍由矩形決定（不會再套半徑把四角切掉），
+  座標只用來算距離供 `sort=distance` 使用。
+- 格式錯誤、角落顛倒、座標超出範圍都回 422，不會靜默忽略——靜默忽略會讓
+  「查這座城市」變成「查全世界」。
+- 邊界是**嚴格排除**的（底層是 MySQL `MBRContains`），剛好壓在邊界上的座標不會被收錄。
 
 ## `GET /geocode` — 地址搜尋（Phase 8.5）
 

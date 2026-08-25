@@ -67,22 +67,36 @@ class RestaurantRepository
             $sort = $filters['sort'] ?? ($hasCoords ? 'distance' : 'newest');
             $perPage = min((int) ($filters['per_page'] ?? 20), 100);
 
-            if ($hasCoords) {
-                $lat = (float) $filters['latitude'];
-                $lng = (float) $filters['longitude'];
+            $corners = isset($filters['bbox']) ? $this->parseBbox((string) $filters['bbox']) : null;
+
+            if ($hasCoords || $corners !== null) {
+                $lat = (float) ($filters['latitude'] ?? 0);
+                $lng = (float) ($filters['longitude'] ?? 0);
                 $radiusKm = (float) ($filters['radius'] ?? 5);
 
+                // bbox 優先：明確給定的矩形就是邊界本身，不需要再從半徑推一個出來。
                 $inner = $this->baseQuery($filters)
                     ->whereRaw('MBRContains(ST_SRID(ST_GeomFromText(?), 4326), location)', [
-                        $this->boundingBoxPolygon($lat, $lng, $radiusKm),
-                    ])
-                    ->selectRaw('restaurants.*, ST_Distance_Sphere(location, ST_SRID(POINT(?, ?), 4326)) as distance', [
+                        $corners !== null
+                            ? $this->polygonFromCorners(...$corners)
+                            : $this->boundingBoxPolygon($lat, $lng, $radiusKm),
+                    ]);
+
+                if (! $hasCoords) {
+                    // 沒有中心點就算不出距離，也就不需要外層那圈 fromSub。
+                    $query = $inner;
+                } else {
+                    $inner->selectRaw('restaurants.*, ST_Distance_Sphere(location, ST_SRID(POINT(?, ?), 4326)) as distance', [
                         $lng, $lat,
                     ]);
 
-                $query = Restaurant::query()
-                    ->fromSub($inner, 'restaurants')
-                    ->where('distance', '<=', $radiusKm * 1000);
+                    $query = Restaurant::query()->fromSub($inner, 'restaurants');
+
+                    // 帶 bbox 時邊界已經由矩形決定，再套半徑會把矩形四角切掉。
+                    if ($corners === null) {
+                        $query->where('distance', '<=', $radiusKm * 1000);
+                    }
+                }
             } else {
                 $query = $this->baseQuery($filters);
             }
@@ -159,11 +173,38 @@ class RestaurantRepository
         $latDelta = $radiusKm / 111.32;
         $lngDelta = $radiusKm / (111.32 * max(cos(deg2rad($lat)), 0.000001));
 
-        $minLat = $lat - $latDelta;
-        $maxLat = $lat + $latDelta;
-        $minLng = $lng - $lngDelta;
-        $maxLng = $lng + $lngDelta;
+        return $this->polygonFromCorners(
+            $lat - $latDelta,
+            $lng - $lngDelta,
+            $lat + $latDelta,
+            $lng + $lngDelta,
+        );
+    }
 
+    /**
+     * @return array{0: float, 1: float, 2: float, 3: float}|null
+     */
+    private function parseBbox(string $bbox): ?array
+    {
+        $parts = array_map('trim', explode(',', $bbox));
+
+        if (count($parts) !== 4) {
+            return null;
+        }
+
+        [$minLat, $minLng, $maxLat, $maxLng] = array_map('floatval', $parts);
+
+        return [$minLat, $minLng, $maxLat, $maxLng];
+    }
+
+    /**
+     * "minLat,minLng,maxLat,maxLng" → WKT polygon。城市範圍本來就是矩形（見
+     * config/cities.php 與 EXTERNAL_API_SYNC_BBOXES），用 bbox 直接篩比「中心點＋半徑」
+     * 精準，也不受 radius 上限 50km 的限制——台中半對角線 59.6km、高雄 66.4km，
+     * 換算成半徑會直接被驗證擋下。
+     */
+    private function polygonFromCorners(float $minLat, float $minLng, float $maxLat, float $maxLng): string
+    {
         return "POLYGON(({$minLng} {$minLat}, {$maxLng} {$minLat}, {$maxLng} {$maxLat}, {$minLng} {$maxLat}, {$minLng} {$minLat}))";
     }
 }

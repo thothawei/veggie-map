@@ -1432,3 +1432,62 @@ stub 一個並提供 `setViewportMatches()` 讓測試切換寬窄螢幕）。
 - `RestaurantListView`／`SearchBox`／`AdminView` 仍無元件測試，這次只覆蓋多城市相關路徑。
 - 仍然沒有跨頁面的 E2E（真瀏覽器點擊、真後端）。維持 Phase 10 的判斷：這個規模先不投入。
 - `RestaurantListView` 依舊沒有城市概念，只有地圖首頁支援切換。
+
+## 2026-08-25 — RestaurantListView 城市切換（含新增 `bbox` API 參數）
+
+首頁有城市切換、列表頁沒有。補上時撞到一個設計問題，值得記。
+
+**先查證再設計：既有的兩種收窄方式都不能用。**
+
+1. `city` 欄位——已知不可靠（59% 空、「臺中市／台中市」兩種寫法、東京填「渋谷区」）。
+2. `latitude`+`radius`——**這個是這次才發現的**：`SearchRestaurantRequest` 的 `radius`
+   有 `max:50`，而各城市 bbox 的半對角線是台北 17.5km、台中 **59.6km**、高雄 **66.4km**、
+   台南 48.9km、東京 22.9km。台中與高雄直接超標，實際 curl 也確認回 422。
+
+所以新增 `bbox` 參數（`"minLat,minLng,maxLat,maxLng"`）。這不是硬塞的新概念——
+`RestaurantRepository` 本來就用 `MBRContains` 加 bounding box 當第一段查詢，只是那個矩形
+是從「中心點＋半徑」推出來的；bbox 只是讓呼叫端直接給定矩形。抽出
+`polygonFromCorners()` 給兩條路徑共用。
+
+- 帶 bbox 且不帶座標時，跳過外層 `fromSub`（沒有中心點就算不出距離，也不需要那圈包裝）。
+- 帶 bbox **且**帶座標時，邊界仍由矩形決定，不再套 `distance <= radius`——否則會把矩形
+  四角切掉；座標只用來算距離供 `sort=distance` 使用。
+- 格式錯的 bbox 一律 422，不靜默忽略：忽略會讓「查這座城市」變成「查全世界」，
+  使用者只會看到莫名其妙的結果而不是錯誤。四種錯法（非座標／數量不對／角落顛倒／
+  座標超範圍）都實際 curl 驗過。
+
+**兩個測試失敗，查證後都是我的測試錯，不是程式錯：**
+
+1. 「邊界應該包含」——直接下 SQL 驗，`MBRContains` 對邊界是**嚴格排除**的（角落回 0、
+   內縮 1e-9 回 1）。我的斷言是假設不是規格。改成把真實行為釘住（測試名稱也改成
+   `..._is_exclusive`），並在註解說明為何不做 epsilon 補償：那會連帶改到既有半徑搜尋的
+   語意，而 OSM 座標 7 位小數、我們的 bbox 4 位，剛好壓線的機率趨近於零。
+2. 「bbox + parking 篩選」回 0——因為**測試資料庫沒有 seed lookup 表**（`TestCase` 沒跑
+   seeder），`Feature::where('code','parking')->value('id')` 拿到 null，attach 等於沒做。
+   改用 `Feature::factory()->create(['code' => 'parking'])`。同一組 filter 在 dev DB 上
+   跑得出 3 筆，這就是判斷「不是 repository 邏輯錯」的依據。
+
+**前端：抽出 `useCities` composable。** 首頁與列表頁都要「從網址解析目前城市」，複製一份
+遲早會走鐘。composable 用 `fallback` 選項區分兩頁的差異：地圖頁 `'first'`（地圖一定得看著
+某個地方），列表頁 `'all'`（**維持它原本「列出全部」的行為**，城市是可選的收窄條件，
+不是必選——否則就是把既有功能拿掉）。`CitySwitcher` 加 `allowAll` prop 顯示「全部」。
+
+重構首頁時靠上一輪剛補的 11 條測試確認沒改壞，這正是那批測試的用途。
+
+**實測抓到一個我自己引入的浪費：** 列表頁一開始在 setup 直接 `search(true)`，城市清單載完
+後 `watch(activeCity)` 又查一次——瀏覽器 network 面板看到**每次進頁面送出兩個請求**
+（一個沒 bbox、一個有）。改成用一個 `searchScope` computed 統一觸發：清單沒載完是 null
+不查，載完變成 bbox 或 `ALL_CITIES`，之後只有換城市才會變。重測確認只剩一個請求。
+
+**驗證：** 後端 107 個測試、342 個 assertion 全綠（新增 12 條 bbox 測試）；前端 43 個測試
+（新增 11 條列表頁測試）；Pint／PHPStan／ESLint／vue-tsc／build 乾淨。瀏覽器實測台南與
+東京的列表都正確限定範圍、placeholder 帶城市名、計數顯示「台南：20+ 家」。
+反向驗證：拔掉 repository 的 bbox 分支 → 後端 4 條紅；拔掉列表頁查詢參數的 bbox →
+前端 5 條紅。
+
+**未完成 / 等待確認：**
+
+- 列表頁的 `keyword` 沒有進網址（只有 `city` 有），所以搜尋結果的連結分享出去不會帶關鍵字。
+- 匯入資料的 `address` 常是空字串（OSM 沒有 `addr:street`），列表卡片會多一行空白。
+  這是既有的顯示問題、首頁推薦卡片也有，不是這次引入，沒有一併改。
+- `SearchBox`／`AdminView`／`RestaurantDetailView` 仍無元件測試。
