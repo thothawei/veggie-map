@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\RestaurantReportResource;
 use App\Models\RestaurantReport;
+use App\Services\ReportConsequenceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -49,10 +50,9 @@ class RestaurantReportController extends Controller
     }
 
     /**
-     * 只更新這筆回報自己的審核狀態，不會反過來自動改動被回報的餐廳資料
-     * （例如 type=closed 不會自動把 restaurant.status 改成 inactive）——
-     * docs/api.md／docs/database.md 都沒有定義這種連動規則，寧可讓 Admin
-     * 自己另外去改餐廳，也不要憑空猜一個沒人要求的自動化行為。
+     * 核准後的連動（例如 exclusive 店 not_vegetarian → 降為 friendly）走
+     * config/diet.php 的 report_actions，沒列的 type 仍是 noop——跟 Phase 7
+     * 「不要猜 closed 該不該下架」同一原則，只是 Phase C 把有產品決定的兩種寫進 config。
      */
     private function review(Request $request, RestaurantReport $report, string $status): JsonResponse
     {
@@ -65,6 +65,10 @@ class RestaurantReportController extends Controller
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
         ]);
+
+        if ($status === 'approved') {
+            app(ReportConsequenceService::class)->apply($report->fresh(['restaurant.dietTypes']) ?? $report);
+        }
 
         return response()->json([
             'success' => true,

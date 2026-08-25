@@ -4,7 +4,9 @@ namespace Tests\Feature\Api;
 
 use App\Models\DietType;
 use App\Models\Feature;
+use App\Models\MenuItem;
 use App\Models\Restaurant;
+use App\Support\DietCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -182,6 +184,37 @@ class RestaurantTest extends TestCase
             ->assertJsonPath('data.id', $restaurant->id)
             ->assertJsonPath('data.confidence_score', null)
             ->assertJsonStructure(['data' => ['diet_types', 'venue_kind', 'venue_badge', 'venue_summary', 'features', 'menu_items']]);
+    }
+
+    public function test_show_includes_menu_empty_message_when_there_are_no_items(): void
+    {
+        $restaurant = Restaurant::factory()->create(['source' => 'osm']);
+        $friendly = DietType::factory()->create(['code' => 'vegetarian_friendly']);
+        $restaurant->dietTypes()->attach($friendly);
+
+        $this->getJson("/api/v1/restaurants/{$restaurant->id}")
+            ->assertOk()
+            ->assertJsonPath('data.menu_items', [])
+            ->assertJsonPath('data.menu_empty_message', DietCatalog::menuEmptyMessage('friendly', 'osm'))
+            ->assertJsonPath('data.venue_kind', 'friendly');
+    }
+
+    public function test_show_omits_empty_message_and_labels_items_from_config_when_menu_exists(): void
+    {
+        $restaurant = Restaurant::factory()->create();
+        MenuItem::factory()->create([
+            'restaurant_id' => $restaurant->id,
+            'name' => '白飯',
+            'diet_type' => 'vegan',
+        ]);
+
+        $response = $this->getJson("/api/v1/restaurants/{$restaurant->id}")
+            ->assertOk()
+            ->assertJsonPath('data.menu_items.0.name', '白飯')
+            ->assertJsonPath('data.menu_items.0.diet_type', 'vegan')
+            ->assertJsonPath('data.menu_items.0.diet_label', DietCatalog::menuItemDietLabel('vegan'));
+
+        $this->assertArrayNotHasKey('menu_empty_message', $response->json('data'));
     }
 
     public function test_show_returns_404_for_missing_restaurant(): void

@@ -52,6 +52,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 | POST | `/admin/reports/{id}/reject` | 駁回回報（Phase 7） | 必須（admin） |
 | GET | `/admin/reviews` | 評論列表，含 hidden（Phase 7） | 必須（admin） |
 | POST | `/admin/reviews/{id}/hide` | 隱藏評論（Phase 7） | 必須（admin） |
+| POST | `/admin/restaurants/{id}/menu-items` | 新增菜單（Phase C，diet_type 合法值見 `GET /diets` 的 `meta.menu_item_diets`） | 必須（admin） |
 
 ## `GET /restaurants` 查詢參數
 
@@ -73,7 +74,16 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 （文案來自 `config/diet.php` 的 `copy`，不是前端寫死）。有任何 exclusive diet 就是
 純素食店；否則有 friendly diet 就是素食友善。
 
-`GET /diets` 每筆有 `kind`／`group_label`，`meta.venue_scope` 是篩選參數名、預設值與選項。
+`GET /diets` 每筆有 `kind`／`group_label`，`meta.venue_scope` 是篩選參數名、預設值與選項，
+`meta.menu_item_diets` 是菜單層 `diet_type` 的 code／label（詳情頁分組與寫入驗證都讀這份，
+不要在前端再寫一份 enum）。
+
+詳情頁的 `menu_items` 每筆帶 `diet_label`。沒有菜單時帶 `menu_empty_message`（文案依
+`venue_kind` 與 `source` 來自 `config/diet.php` copy），OSM 同步**不會編造**菜單。
+
+Admin 核准 `not_vegetarian`／`menu_changed` 之後的連動見 `config/diet.php` 的
+`report_actions`（exclusive 店降為 friendly、過期菜單清空）。沒列的 type（例如 `closed`）
+仍只改回報狀態、不動餐廳。
 
 
 ### `bbox`：矩形範圍查詢

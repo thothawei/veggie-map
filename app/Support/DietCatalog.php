@@ -382,7 +382,7 @@ class DietCatalog
     }
 
     /**
-     * @return array{badge: string, short: string}|null
+     * @return array{badge: string, short: string, menu_empty: string, menu_empty_osm: string}|null
      */
     public static function copyForKind(?string $kind): ?array
     {
@@ -390,7 +390,7 @@ class DietCatalog
             return null;
         }
 
-        /** @var array{badge?: string, short?: string}|null $copy */
+        /** @var array{badge?: string, short?: string, menu_empty?: string, menu_empty_osm?: string}|null $copy */
         $copy = config("diet.copy.{$kind}");
 
         if (! is_array($copy)) {
@@ -400,7 +400,109 @@ class DietCatalog
         return [
             'badge' => (string) ($copy['badge'] ?? ''),
             'short' => (string) ($copy['short'] ?? ''),
+            'menu_empty' => (string) ($copy['menu_empty'] ?? ''),
+            'menu_empty_osm' => (string) ($copy['menu_empty_osm'] ?? ''),
         ];
+    }
+
+    public static function menuEmptyMessage(?string $kind, ?string $source = null): string
+    {
+        $copy = self::copyForKind($kind);
+
+        if ($copy !== null) {
+            if ($source === 'osm' && $copy['menu_empty_osm'] !== '') {
+                return $copy['menu_empty_osm'];
+            }
+
+            if ($copy['menu_empty'] !== '') {
+                return $copy['menu_empty'];
+            }
+        }
+
+        return (string) config('diet.copy.menu_empty_fallback', '菜單尚未建檔。');
+    }
+
+    /**
+     * @return list<array{code: string, label: string}>
+     */
+    public static function menuItemDiets(): array
+    {
+        /** @var list<array<string, mixed>> $items */
+        $items = config('diet.menu_item_diets', []);
+
+        return array_map(fn (array $item): array => [
+            'code' => (string) $item['code'],
+            'label' => (string) $item['label'],
+        ], $items);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function menuItemDietCodes(): array
+    {
+        return array_column(self::menuItemDiets(), 'code');
+    }
+
+    public static function menuItemDietLabel(string $code): string
+    {
+        foreach (self::menuItemDiets() as $item) {
+            if ($item['code'] === $code) {
+                return $item['label'];
+            }
+        }
+
+        return $code;
+    }
+
+    /**
+     * exclusive code 對到同 osm_tag 的 friendly code。ovo_lacto 這種沒有 OSM 標籤的
+     * 沒有對應友善類型，降級時直接拿掉，不在這裡寫 vegan → vegan_friendly。
+     */
+    public static function friendlyCounterpart(string $exclusiveCode): ?string
+    {
+        $from = null;
+
+        foreach (self::types() as $type) {
+            if ($type['code'] === $exclusiveCode) {
+                $from = $type;
+                break;
+            }
+        }
+
+        if ($from === null || $from['kind'] !== 'exclusive' || $from['osm_tag'] === null) {
+            return null;
+        }
+
+        foreach (self::types() as $type) {
+            if ($type['kind'] === 'friendly' && $type['osm_tag'] === $from['osm_tag']) {
+                return $type['code'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, array<string, string>>
+     */
+    public static function reportActions(): array
+    {
+        /** @var array<string, array<string, string>> $actions */
+        $actions = config('diet.report_actions', []);
+
+        return $actions;
+    }
+
+    public static function reportAction(string $type, ?string $kind): string
+    {
+        $forType = self::reportActions()[$type] ?? [];
+
+        if ($kind !== null && isset($forType[$kind])) {
+            return (string) $forType[$kind];
+        }
+
+        return isset($forType['*']) ? (string) $forType['*'] : 'noop';
     }
 
     public static function externalSourceScore(?string $venueKind): int

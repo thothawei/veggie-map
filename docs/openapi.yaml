@@ -377,6 +377,13 @@ paths:
                                   properties:
                                     value: { type: string }
                                     label: { type: string }
+                          menu_item_diets:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                code: { type: string }
+                                label: { type: string }
 
   /features:
     get:
@@ -602,6 +609,44 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /admin/restaurants/{id}/menu-items:
+    post:
+      operationId: createMenuItem
+      tags: [Admin]
+      summary: 新增菜單（admin 限定；diet_type 合法值見 GET /diets 的 meta.menu_item_diets）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, diet_type]
+              properties:
+                name: { type: string }
+                description: { type: string, nullable: true }
+                price: { type: number, format: float, nullable: true }
+                diet_type: { type: string }
+                is_available: { type: boolean }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/MenuItem" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
   /admin/reviews:
     get:
       operationId: listAdminReviews
@@ -794,7 +839,8 @@ components:
         name: { type: string }
         description: { type: string, nullable: true }
         price: { type: number, format: float, nullable: true }
-        diet_type: { type: string, enum: [vegan, vegetarian, non_vegetarian, unknown] }
+        diet_type: { type: string }
+        diet_label: { type: string }
         is_available: { type: boolean }
 
     Restaurant:
@@ -848,6 +894,10 @@ components:
         menu_items:
           type: array
           items: { $ref: "#/components/schemas/MenuItem" }
+        menu_empty_message:
+          type: string
+          nullable: true
+          description: 詳情頁且菜單為空時才出現，文案來自 config/diet.php copy
         confidence_score:
           type: integer
           nullable: true

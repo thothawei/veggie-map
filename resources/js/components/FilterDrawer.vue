@@ -2,8 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import client from '@/api/client';
 import { FEATURE_CODES, type FeatureCode } from '@/lib/features';
-import { applyVenueScopeMeta, venueScopeDefault, venueScopeMeta } from '@/lib/dietCatalog';
-import type { ApiSuccess, DietType, Feature, RestaurantSearchParams, VenueScopeMeta } from '@/types';
+import { applyMenuItemDiets, applyVenueScopeMeta, venueScopeDefault, venueScopeMeta } from '@/lib/dietCatalog';
+import type { ApiSuccess, DietType, Feature, MenuItemDiet, RestaurantSearchParams, VenueScopeMeta } from '@/types';
 
 const filters = defineModel<Partial<RestaurantSearchParams>>('filters', { required: true });
 
@@ -84,6 +84,7 @@ onMounted(async () => {
 
     const meta = dietsRes.data.meta?.venue_scope as VenueScopeMeta | undefined;
     applyVenueScopeMeta(meta);
+    applyMenuItemDiets(dietsRes.data.meta?.menu_item_diets as MenuItemDiet[] | undefined);
     scopeMeta.value = venueScopeMeta();
 });
 

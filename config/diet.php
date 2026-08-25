@@ -136,10 +136,31 @@ return [
         'exclusive' => [
             'badge' => '素食餐廳',
             'short' => '整間店都是素食',
+            'menu_empty' => '此店為素食餐廳，菜單尚未建檔。',
+            'menu_empty_osm' => 'OSM 標示此店為素食餐廳，菜單尚未建檔。',
         ],
         'friendly' => [
             'badge' => '素食友善',
             'short' => '菜單有素食（無肉）選項',
+            'menu_empty' => '標示有素食選項，菜單尚未建檔。',
+            'menu_empty_osm' => 'OSM 標示此店有素食選項，菜單尚未建檔。',
+        ],
+        'menu_empty_fallback' => '菜單尚未建檔。',
+    ],
+
+    /*
+    | Admin 核准回報之後要對餐廳做什麼。key 是 restaurant_reports.type，
+    | 內層是 venue kind（exclusive／friendly）或 *（任何 kind，含沒掛 diet 的店）。
+    | 動作名稱必須是 ReportConsequenceService 認得的字，不是 Controller 裡的 switch。
+    | 沒列的 type（closed、wrong_info…）維持 Phase 7：只改回報狀態、不動餐廳。
+    */
+    'report_actions' => [
+        'not_vegetarian' => [
+            'exclusive' => 'demote_to_friendly',
+            'friendly' => 'remove_exclusive_codes',
+        ],
+        'menu_changed' => [
+            '*' => 'clear_menu_items',
         ],
     ],
 

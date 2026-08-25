@@ -1,5 +1,41 @@
 # Progress Log
 
+## 2026-08-25 — P0 Phase C：菜單層葷／素
+
+**完成：**
+
+- `config/diet.php` 的 `menu_item_diets` 當菜單 diet 單一真相：`GET /diets` meta、
+  `CreateMenuItemRequest`、`MenuItemResource.diet_label`、`MenuItemFactory`、詳情頁
+  分組標籤都讀它，Vue 沒有寫死「全素／葷食」。
+- 詳情頁有菜單才依 meta 順序分組；空陣列顯示 `menu_empty_message`（exclusive／
+  friendly × osm／其他，文案在 `copy`）。OSM sync 不編造 `menu_items`（既有
+  匯入測試加了 count=0）。沒做 cuisine 當假菜色。
+- `POST /api/v1/admin/restaurants/{id}/menu-items`，Policy 只有 admin。菜單異動
+  走 `MenuItemObserver` 清 detail cache。
+- 回報核准連動放 `report_actions`：`not_vegetarian` 對 exclusive 店
+  `demote_to_friendly`（同 osm_tag 對到 friendly code，不是寫死 vegan→vegan_friendly）、
+  對 friendly 店 `remove_exclusive_codes`；`menu_changed` 清空菜單。`closed` 仍 noop。
+  Controller 只呼叫 `ReportConsequenceService`。
+
+**驗收（瀏覽器）：** 種子店「Lakin, Hartmann and Roob 蔬食」菜單分成全素／素食／葷食／
+未標示；東京 CoCo壱番屋（OSM 友善、0 筆菜單）顯示「OSM 標示此店有素食選項，菜單尚未
+建檔。」、畫面上 0 道菜。Admin 新增走測試庫／元件測試，沒對開發庫的 OSM 店寫入。
+
+**驗收時修掉的 bug：** `clear_menu_items` 原本用 `each()`（offset 分頁）一邊翻頁一邊
+刪，1005 筆的菜單實測只刪掉 1000 筆、殘留 5 筆。改成 `lazyById()`（以 id 遞增取批，
+刪除不影響下一批），並補上 1005 筆的回歸測試——拔掉修正該測試會紅。
+
+**反向：** 暫時拿掉核准後的 `apply()`，「exclusive 店 not_vegetarian 降為 friendly」
+那條從 vegan_friendly 變成還停在 vegan，確認不是裝飾品。
+
+**已知取捨：** `ovo_lacto`（沒有 OSM 標籤、沒有友善對應）的店被核准 `not_vegetarian`
+之後 diet 會清空而不是降級——實測 codes 變成 `[]`。這是 `friendlyCounterpart()` 明寫的
+行為（不硬湊 vegan→vegan_friendly），不是漏寫。
+
+後端 183 個測試、538 assertion 全綠；前端 101 個；Pint／PHPStan／vue-tsc／build 乾淨。
+
+---
+
 ## 2026-08-25 — P0 Phase B：台灣也收友善店
 
 **完成：**

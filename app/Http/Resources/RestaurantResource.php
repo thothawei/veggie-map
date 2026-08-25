@@ -48,6 +48,13 @@ class RestaurantResource extends JsonResource
             'venue_summary' => $this->when($presentation !== null, $presentation['summary'] ?? null),
             'features' => $this->whenLoaded('features', fn () => $this->features->pluck('code')),
             'menu_items' => MenuItemResource::collection($this->whenLoaded('menuItems')),
+            'menu_empty_message' => $this->when(
+                $this->relationLoaded('menuItems') && $this->menuItems->isEmpty(),
+                fn () => DietCatalog::menuEmptyMessage(
+                    is_array($presentation) ? $presentation['kind'] : null,
+                    $this->source,
+                ),
+            ),
             'confidence_score' => $this->whenLoaded('confidenceScore', fn () => $this->confidenceScore?->score),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

@@ -2,10 +2,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { createPinia, setActivePinia } from 'pinia';
+import { resetVenueScopeMeta } from '@/lib/dietCatalog';
+import { useAuthStore } from '@/stores/auth';
 
+const post = vi.fn();
 const get = vi.fn((url: string) => {
+    if (url === '/me/favorites') {
+        return Promise.resolve({ data: { data: [] } });
+    }
     if (url === '/diets') {
-        return Promise.resolve({ data: { data: [{ code: 'vegan', label: '全素（Vegan）' }] } });
+        return Promise.resolve({
+            data: {
+                data: [{ code: 'vegan', label: '全素（Vegan）' }],
+                meta: {
+                    menu_item_diets: [
+                        { code: 'vegan', label: '植物性' },
+                        { code: 'vegetarian', label: '素食' },
+                        { code: 'non_vegetarian', label: '含肉' },
+                        { code: 'unknown', label: '未標示' },
+                    ],
+                },
+            },
+        });
     }
     if (url === '/features') {
         return Promise.resolve({ data: { data: [{ code: 'takeout', label: '外帶' }] } });
@@ -24,7 +42,10 @@ const get = vi.fn((url: string) => {
                     venue_badge: '素食餐廳',
                     venue_summary: '整間店都是素食',
                     features: ['takeout'],
-                    menu_items: [],
+                    menu_items: [
+                        { id: 11, name: '白飯', diet_type: 'vegan', diet_label: '全素', price: 30, is_available: true },
+                        { id: 12, name: '牛肉麵', diet_type: 'non_vegetarian', diet_label: '葷食', price: 150, is_available: true },
+                    ],
                     website: 'javascript:alert(1)',
                 },
             },
@@ -46,18 +67,43 @@ const get = vi.fn((url: string) => {
             },
         });
     }
+    if (url === '/restaurants/3') {
+        return Promise.resolve({
+            data: {
+                data: {
+                    id: 3,
+                    name: '友善火鍋',
+                    address: '',
+                    rating: 0,
+                    rating_count: 0,
+                    diet_types: ['vegetarian_friendly'],
+                    venue_kind: 'friendly',
+                    venue_badge: '素食友善',
+                    features: [],
+                    menu_items: [],
+                    menu_empty_message: 'OSM 標示此店有素食選項，菜單尚未建檔。',
+                },
+            },
+        });
+    }
 
     return Promise.reject(new Error('network'));
 });
 
 vi.mock('@/api/client', () => ({
-    default: { get: (...args: unknown[]) => get(...(args as [string])), post: vi.fn() },
+    default: { get: (...args: unknown[]) => get(...(args as [string])), post: (...args: unknown[]) => post(...args) },
 }));
 
 const RestaurantDetailView = (await import('./RestaurantDetailView.vue')).default;
 
-async function mountDetail(id: string) {
+async function mountDetail(id: string, role: 'user' | 'admin' | null = null) {
     setActivePinia(createPinia());
+    if (role) {
+        const auth = useAuthStore();
+        auth.token = 't';
+        auth.user = { id: 1, name: '測', email: 'a@b.c', role, created_at: '2026-01-01' };
+    }
+
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
@@ -80,6 +126,7 @@ async function mountDetail(id: string) {
 describe('RestaurantDetailView', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        resetVenueScopeMeta();
     });
 
     it('飲食與特色顯示中文標籤，不是 raw code', async () => {
@@ -89,10 +136,52 @@ describe('RestaurantDetailView', () => {
         expect(wrapper.text()).toContain('外帶');
         expect(wrapper.text()).toContain('素食餐廳');
         expect(wrapper.text()).toContain('整間店都是素食');
-        expect(wrapper.text()).not.toContain('vegan');
         expect(wrapper.text()).not.toContain('takeout');
         expect(wrapper.find('a[href^="javascript"]').exists()).toBe(false);
         expect(wrapper.text()).not.toContain('官方網站');
+    });
+
+    it('有菜單時依 /diets meta 分組，不是寫死全素／葷食', async () => {
+        const { wrapper } = await mountDetail('1');
+        const headings = wrapper.findAll('.menu-group h3').map((node) => node.text());
+
+        expect(headings).toEqual(['植物性', '含肉']);
+        expect(wrapper.text()).toContain('白飯');
+        expect(wrapper.text()).toContain('牛肉麵');
+        expect(wrapper.find('.menu-empty').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('vegan');
+        expect(wrapper.text()).not.toContain('non_vegetarian');
+    });
+
+    it('無菜單的友善店顯示尚未建檔，不渲染假菜色', async () => {
+        const { wrapper } = await mountDetail('3');
+
+        expect(wrapper.text()).toContain('OSM 標示此店有素食選項，菜單尚未建檔。');
+        expect(wrapper.findAll('.menu li')).toHaveLength(0);
+        expect(wrapper.text()).not.toContain('白飯');
+        expect(wrapper.text()).not.toContain('牛肉麵');
+    });
+
+    it('admin 新增菜單會打寫入 API', async () => {
+        post.mockResolvedValue({ data: { data: { id: 99 } } });
+        const { wrapper } = await mountDetail('3', 'admin');
+
+        expect(wrapper.text()).toContain('新增菜色');
+        await wrapper.find('.menu-form input[type="text"]').setValue('高麗菜');
+        await wrapper.find('.menu-form').trigger('submit');
+        await flushPromises();
+
+        expect(post).toHaveBeenCalledWith('/admin/restaurants/3/menu-items', {
+            name: '高麗菜',
+            diet_type: 'vegan',
+            price: undefined,
+        });
+    });
+
+    it('一般使用者看不到新增菜單表單', async () => {
+        const { wrapper } = await mountDetail('3', 'user');
+
+        expect(wrapper.find('.menu-form').exists()).toBe(false);
     });
 
     it('id 變更會重新載入，不是留著上一間的資料', async () => {

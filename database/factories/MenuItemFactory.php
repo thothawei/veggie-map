@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\MenuItem;
 use App\Models\Restaurant;
+use App\Support\DietCatalog;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,7 +19,7 @@ class MenuItemFactory extends Factory
             'name' => fake()->words(2, true),
             'description' => fake()->optional()->sentence(),
             'price' => fake()->randomFloat(2, 60, 480),
-            'diet_type' => fake()->randomElement(['vegan', 'vegetarian', 'non_vegetarian', 'unknown']),
+            'diet_type' => fake()->randomElement(DietCatalog::menuItemDietCodes()),
             'is_available' => true,
         ];
     }

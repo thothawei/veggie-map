@@ -212,6 +212,9 @@ Index：`feature_id`。
 | diet_type | enum(vegan,vegetarian,non_vegetarian,unknown) |
 | is_available | boolean, default true |
 
+合法值與顯示標籤以 `config/diet.php` 的 `menu_item_diets` 為準，不要在 FormRequest／前端另寫一份。
+DB enum 目前跟 config 對齊；要加新的 menu diet code 需要 migration。
+
 Index：`restaurant_id`（詳情頁列出菜單的主要查詢路徑）。
 
 ### restaurant_verifications

@@ -1,4 +1,4 @@
-import type { VenueScopeMeta } from '@/types';
+import type { MenuItemDiet, VenueScopeMeta } from '@/types';
 
 const FALLBACK: VenueScopeMeta = {
     param: 'venue_scope',
@@ -8,6 +8,7 @@ const FALLBACK: VenueScopeMeta = {
 };
 
 let cached: VenueScopeMeta = { ...FALLBACK, values: [] };
+let cachedMenuItemDiets: MenuItemDiet[] = [];
 
 export function applyVenueScopeMeta(meta: VenueScopeMeta | undefined | null): void {
     if (!meta?.param) {
@@ -22,6 +23,10 @@ export function applyVenueScopeMeta(meta: VenueScopeMeta | undefined | null): vo
     };
 }
 
+export function applyMenuItemDiets(items: MenuItemDiet[] | undefined | null): void {
+    cachedMenuItemDiets = Array.isArray(items) ? items : [];
+}
+
 export function venueScopeMeta(): VenueScopeMeta {
     return cached;
 }
@@ -34,7 +39,12 @@ export function venueScopeDefault(): string {
     return cached.default;
 }
 
+export function menuItemDiets(): MenuItemDiet[] {
+    return cachedMenuItemDiets;
+}
+
 /** 測試用：把模組狀態還原成尚未打過 /diets 的 fallback。 */
 export function resetVenueScopeMeta(): void {
     cached = { ...FALLBACK, values: [] };
+    cachedMenuItemDiets = [];
 }

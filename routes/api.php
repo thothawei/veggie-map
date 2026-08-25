@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\MenuItemController as AdminMenuItemController;
 use App\Http\Controllers\Api\Admin\RestaurantReportController as AdminRestaurantReportController;
 use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Api\AuthController;
@@ -49,6 +50,8 @@ Route::middleware('throttle:api')->group(function () {
 
             Route::get('/reviews', [AdminReviewController::class, 'index']);
             Route::post('/reviews/{review}/hide', [AdminReviewController::class, 'hide']);
+
+            Route::post('/restaurants/{restaurant}/menu-items', [AdminMenuItemController::class, 'store']);
         });
     });
 });

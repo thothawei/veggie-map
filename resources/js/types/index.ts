@@ -33,12 +33,18 @@ export interface City {
     bbox: string;
 }
 
+export interface MenuItemDiet {
+    code: string;
+    label: string;
+}
+
 export interface MenuItem {
     id: number;
     name: string;
     description: string | null;
     price: number | null;
     diet_type: string;
+    diet_label?: string;
     is_available: boolean;
 }
 
@@ -66,6 +72,7 @@ export interface Restaurant {
     venue_summary?: string | null;
     features?: string[];
     menu_items?: MenuItem[];
+    menu_empty_message?: string | null;
     confidence_score?: number | null;
     created_at: string;
     updated_at: string;

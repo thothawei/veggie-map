@@ -84,6 +84,10 @@ OSM 的 `diet:vegetarian` / `diet:vegan` 標籤有兩個我們在意的值：`on
 沒有 `osm_tag` 的手動類型（例如蛋奶素）會留下。特色仍用 `syncWithoutDetaching`。
 友善店的 `external_source` 分數走 `config/diet.php` 的 `confidence`，低於 exclusive。
 
+**OSM 沒有逐道菜單。** `restaurants:sync` 不編造 `menu_items`。詳情頁沒菜單時顯示
+`menu_empty_message`（友善店：「OSM 標示此店有素食選項，菜單尚未建檔。」），菜單來源是
+Admin 寫入或種子資料，不是 Open Food Facts。
+
 ## OSM 標籤 → features 對應（2026-08-25 決定）
 
 匯入時順便把 OSM 的設施標籤轉成 `features.code`。對應與**每個標籤收哪些值**如下：

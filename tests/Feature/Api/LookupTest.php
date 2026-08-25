@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Feature;
+use App\Support\DietCatalog;
 use Database\Seeders\DietTypeSeeder;
 use Database\Seeders\FeatureSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -23,6 +24,11 @@ class LookupTest extends TestCase
             ->assertJsonFragment(['code' => 'vegetarian_friendly', 'kind' => 'friendly'])
             ->assertJsonPath('meta.venue_scope.param', 'venue_scope')
             ->assertJsonPath('meta.venue_scope.default', 'exclusive');
+
+        $this->assertSame(
+            DietCatalog::menuItemDietCodes(),
+            array_column($this->getJson('/api/v1/diets')->json('meta.menu_item_diets'), 'code'),
+        );
     }
 
     public function test_features_returns_seeded_list(): void

@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { isAxiosError } from 'axios';
 import client from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { useFavoritesStore } from '@/stores/favorites';
 import { extractApiErrorMessage } from '@/lib/apiError';
+import { applyMenuItemDiets, menuItemDiets } from '@/lib/dietCatalog';
 import { safeHttpUrl } from '@/lib/redirect';
-import type { ApiSuccess, DietType, Feature, Restaurant } from '@/types';
+import type { ApiSuccess, DietType, Feature, MenuItem, MenuItemDiet, Restaurant } from '@/types';
 
 const props = defineProps<{ id: string }>();
 
@@ -19,14 +20,47 @@ const notFound = ref(false);
 const loadError = ref<string | null>(null);
 const dietLabels = ref<Record<string, string>>({});
 const featureLabels = ref<Record<string, string>>({});
+const dishDiets = ref<MenuItemDiet[]>([]);
 
 const reviewRating = ref(5);
 const reviewComment = ref('');
 const submittingReview = ref(false);
 const reviewError = ref<string | null>(null);
 
+const newItem = reactive({ name: '', price: '', diet_type: '' });
+const addingItem = ref(false);
+const addItemError = ref<string | null>(null);
+
 const isFavorite = computed(() => (restaurant.value ? favorites.isFavorite(restaurant.value.id) : false));
 const websiteUrl = computed(() => safeHttpUrl(restaurant.value?.website));
+
+const menuGroups = computed(() => {
+    const items = restaurant.value?.menu_items ?? [];
+    if (items.length === 0) {
+        return [];
+    }
+
+    const groups = new Map<string, { code: string; label: string; items: MenuItem[] }>();
+    for (const diet of dishDiets.value) {
+        groups.set(diet.code, { code: diet.code, label: diet.label, items: [] });
+    }
+
+    for (const item of items) {
+        const existing = groups.get(item.diet_type);
+        if (existing) {
+            existing.items.push(item);
+            continue;
+        }
+
+        groups.set(item.diet_type, {
+            code: item.diet_type,
+            label: item.diet_label || item.diet_type,
+            items: [item],
+        });
+    }
+
+    return [...groups.values()].filter((group) => group.items.length > 0);
+});
 
 function labelFor(code: string, labels: Record<string, string>): string {
     return labels[code] ?? code;
@@ -59,6 +93,11 @@ async function loadLookups() {
     ]);
     dietLabels.value = Object.fromEntries(dietsRes.data.data.map((item) => [item.code, item.label]));
     featureLabels.value = Object.fromEntries(featuresRes.data.data.map((item) => [item.code, item.label]));
+    applyMenuItemDiets(dietsRes.data.meta?.menu_item_diets as MenuItemDiet[] | undefined);
+    dishDiets.value = menuItemDiets();
+    if (!newItem.diet_type && dishDiets.value[0]) {
+        newItem.diet_type = dishDiets.value[0].code;
+    }
 }
 
 async function toggleFavorite() {
@@ -85,6 +124,26 @@ async function submitReview() {
         reviewError.value = extractApiErrorMessage(error, '送出評論失敗');
     } finally {
         submittingReview.value = false;
+    }
+}
+
+async function submitMenuItem() {
+    if (!restaurant.value || !newItem.name.trim()) return;
+    addingItem.value = true;
+    addItemError.value = null;
+    try {
+        await client.post(`/admin/restaurants/${restaurant.value.id}/menu-items`, {
+            name: newItem.name.trim(),
+            diet_type: newItem.diet_type,
+            price: newItem.price === '' ? undefined : Number(newItem.price),
+        });
+        newItem.name = '';
+        newItem.price = '';
+        await load();
+    } catch (error: unknown) {
+        addItemError.value = extractApiErrorMessage(error, '新增菜單失敗');
+    } finally {
+        addingItem.value = false;
     }
 }
 
@@ -134,15 +193,46 @@ watch(() => props.id, load, { immediate: true });
                 <span v-for="code in restaurant.features" :key="code" class="tag feature">{{ labelFor(code, featureLabels) }}</span>
             </div>
 
-            <section v-if="restaurant.menu_items?.length">
+            <section class="menu">
                 <h2>菜單</h2>
-                <ul>
-                    <li v-for="item in restaurant.menu_items" :key="item.id">
-                        {{ item.name }}
-                        <span v-if="item.price !== null">NT$ {{ item.price }}</span>
-                        <span class="diet-type">({{ labelFor(item.diet_type, dietLabels) }})</span>
-                    </li>
-                </ul>
+                <template v-if="menuGroups.length">
+                    <section v-for="group in menuGroups" :key="group.code" class="menu-group">
+                        <h3>{{ group.label }}</h3>
+                        <ul>
+                            <li v-for="item in group.items" :key="item.id">
+                                {{ item.name }}
+                                <span v-if="item.price !== null">NT$ {{ item.price }}</span>
+                            </li>
+                        </ul>
+                    </section>
+                </template>
+                <p v-else role="status" class="menu-empty">
+                    {{ restaurant.menu_empty_message }}
+                </p>
+
+                <form v-if="auth.isAdmin" class="menu-form" @submit.prevent="submitMenuItem">
+                    <h3>新增菜色</h3>
+                    <label>
+                        名稱
+                        <input v-model="newItem.name" type="text" required maxlength="255" />
+                    </label>
+                    <label>
+                        葷素
+                        <select v-model="newItem.diet_type">
+                            <option v-for="diet in dishDiets" :key="diet.code" :value="diet.code">
+                                {{ diet.label }}
+                            </option>
+                        </select>
+                    </label>
+                    <label>
+                        價格
+                        <input v-model="newItem.price" type="number" min="0" step="1" />
+                    </label>
+                    <p v-if="addItemError" class="error">{{ addItemError }}</p>
+                    <button type="submit" :disabled="addingItem">
+                        {{ addingItem ? '新增中…' : '新增' }}
+                    </button>
+                </form>
             </section>
 
             <section class="review-form" v-if="auth.isAuthenticated">
@@ -238,8 +328,33 @@ header {
     color: #c53030;
 }
 
-.diet-type {
-    color: #718096;
-    font-size: 0.8rem;
+.menu-group {
+    margin: 0.75rem 0;
+}
+
+.menu-group h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1rem;
+    color: #2f855a;
+}
+
+.menu-empty {
+    color: #4a5568;
+}
+
+.menu-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 400px;
+    margin-top: 1rem;
+}
+
+.menu-form input,
+.menu-form select {
+    display: block;
+    width: 100%;
+    margin-top: 0.2rem;
+    padding: 0.35rem;
 }
 </style>

@@ -4,7 +4,7 @@
 > [progress.md](progress.md) 的 commit/push 慣例），不要一次全做。
 >
 > 2026-08-25 重新對照總 Prompt 後：Phase 0～13 主線已完成。
-> **下一批產品工作是 P0 葷素混合店 Phase A→B→C**；其餘未閉環項目在「剩餘：規劃明寫但還沒閉環」。
+> **P0 葷素混合店 Phase A／B／C 已完成**；其餘未閉環項目在「剩餘：規劃明寫但還沒閉環」。
 
 ## Phase 8.5 — 地址搜尋（Geocoding，優先）✅ 已完成 2026-08-24
 
@@ -346,9 +346,8 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 「寫進規格、後來擱置或只做半套」的項目。下面依「規劃有沒有明寫」整理，不是憑空加功能。
 完成一項就打勾＋更新 [progress.md](progress.md)，不要一次全做。
 
-**下一批產品工作**：葷素混合店 Phase A → B → C（見下方 P0）。設計原則是活用型——
-標籤對應、收錄規則、預設篩選、文案分組全部走 config／API，禁止在 Controller、
-Repository、Vue 元件裡寫死 code 清單或「台灣一定 only」。
+**下一批產品工作**：P1 閉環（可信度寫入、重複審核、`open_now`／營業時間、回報
+`closed` 核准後要不要下架）。P0 Phase A／B／C 已完成。
 
 ---
 
@@ -456,28 +455,31 @@ Phase B 完成的驗收：台南／台中／台北／高雄 bbox 內都有 frien
 
 ---
 
-### Phase C — 菜單層葷／素
+### Phase C — 菜單層葷／素 ✅ 已完成 2026-08-25
 
 目標：有菜單資料就分組顯示；沒有就說明「標示有素食選項，菜單尚未建檔」。
 **不要**為了填菜單去接 Open Food Facts 或隨機食物圖。
 
-- [ ] 菜單 `diet_type` 合法值與 label 來自 `config/diet.php` 的 `menu_item_diets`；
-      FormRequest／Resource／前端共用，不在三處各寫一份 enum
-- [ ] 詳情頁：有 `menu_items` 才渲染分組（素食／全素／葷食／未標示）；空陣列走
-      誠實空狀態，文案依該店 `kind` 而變（friendly vs exclusive）
-- [ ] 種子／factory 的菜單 diet 從同一份 config 抽，不要 factory 裡寫死四個字串
-      卻跟 config 漂移
-- [ ] 寫入 API（使用者或之後的店家）：`POST /restaurants/{id}/menu-items`
-      （或先只做 Admin），驗證 diet_type ∈ config；Policy 先最小（登入或 admin）
-- [ ] OSM 仍然沒有逐道菜單——sync **不編造** menu_items。可選：OSM `cuisine` 等
-      標籤若要當提示，也必須走 config 對應表，沒對上就忽略
-- [ ] 回報 `menu_changed`／`not_vegetarian` 核准後的動作放 config 對照表
-      （例如 exclusive 店核准 not_vegetarian → 降為 friendly 或下架；friendly 店
-      → 拿掉 exclusive codes）。不要在 Admin controller 寫死 switch。
-- [ ] 測試：無菜單友善店不渲染假菜色；有菜單才分組；非法 diet_type 422
+- [x] 菜單 `diet_type` 合法值與 label 來自 `config/diet.php` 的 `menu_item_diets`；
+      FormRequest／Resource／前端共用（`GET /diets` 的 `meta.menu_item_diets`），
+      不在三處各寫一份 enum
+- [x] 詳情頁：有 `menu_items` 才渲染分組（順序與標籤來自 meta）；空陣列走
+      誠實空狀態，文案依該店 `kind`＋`source` 而變
+- [x] 種子／factory 的菜單 diet 從同一份 config 抽
+- [x] `POST /admin/restaurants/{id}/menu-items`（先做 Admin），驗證 diet_type ∈ config；
+      `MenuItemPolicy::create` 只有 admin
+- [x] OSM sync **不編造** menu_items（測過 count=0）。沒做 cuisine→菜單提示——
+      那會看起來像假菜色，跟「誠實空狀態」打架
+- [x] 回報 `menu_changed`／`not_vegetarian` 核准後的動作放 `config/diet.php`
+      `report_actions`；`ReportConsequenceService` 讀 config，Controller 不寫 switch。
+      `closed` 仍 noop（還沒有產品決定）
+- [x] 測試：無菜單友善店不渲染假菜色；有菜單才分組（標籤來自 meta 不是寫死
+      「全素」）；非法 diet_type 422；config 拿掉 unknown 後寫入會 422。
+      反向：拔掉核准後的 apply()，降級測試真的紅
 
 Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯入的友善店詳情沒有假菜單、
-有「尚未建檔」說明；新增一筆菜單（若做了寫入 API）會出現在對應分組。
+有「尚未建檔」說明；Admin 新增一筆菜單會出現在對應分組（HTTP＋元件測試驗過；
+沒在開發庫真的寫入，避免動真實 OSM 資料）。
 
 ---
 
@@ -517,10 +519,10 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       OpenAPI 拿掉，不要留一個永遠 422 或被忽略的參數。
 
 - [ ] **回報核准後要不要動餐廳（第十二、十八節）**
-      `ProcessUserReportJob` 規劃有、後來改成同步寫入（知情決定，不必再做一個空 Job）。
-      真正缺的是規則：`type=closed` 核准後要不要把 `restaurant.status` 改 `inactive`、
-      `not_vegetarian` 要不要撤 diet／降 confidence。Phase 7 刻意不猜。需要產品先定
-      對照表，再接到 Admin approve。
+      `not_vegetarian`／`menu_changed` 已由 **P0 Phase C** 接到
+      `config/diet.php` 的 `report_actions`（exclusive → 降為 friendly；菜單過期則清空）。
+      還缺：`type=closed` 核准後要不要把 `restaurant.status` 改 `inactive`。
+      沒列在 `report_actions` 的 type 維持 noop，不要在 Controller 加 switch。
 
 ### P1 — 規劃明寫的體驗／契約缺口
 

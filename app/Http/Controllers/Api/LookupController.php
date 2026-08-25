@@ -23,6 +23,7 @@ class LookupController extends Controller
             'data' => DietTypeResource::collection(DietType::orderBy('id')->get())->resolve(),
             'meta' => [
                 'venue_scope' => DietCatalog::venueScopeMeta(),
+                'menu_item_diets' => DietCatalog::menuItemDiets(),
             ],
         ]);
     }

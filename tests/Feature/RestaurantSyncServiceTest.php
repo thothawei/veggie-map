@@ -73,6 +73,8 @@ class RestaurantSyncServiceTest extends TestCase
         $this->assertDatabaseHas('restaurant_confidence_scores', [
             'restaurant_id' => $restaurant->id,
         ]);
+
+        $this->assertSame(0, $restaurant->menuItems()->count());
     }
 
     public function test_sync_replaces_osm_managed_diet_types_instead_of_accumulating(): void

@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\MenuItem;
 use App\Models\Restaurant;
 use App\Models\RestaurantConfidenceScore;
+use App\Observers\MenuItemObserver;
 use App\Observers\RestaurantConfidenceScoreObserver;
 use App\Observers\RestaurantObserver;
 use App\Services\External\GeocodingProviderInterface;
@@ -66,6 +68,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Restaurant::observe(RestaurantObserver::class);
         RestaurantConfidenceScore::observe(RestaurantConfidenceScoreObserver::class);
+        MenuItem::observe(MenuItemObserver::class);
 
         // 見總體規劃第十六節：/api/v1/restaurants 用 Redis-based rate limiter（底層
         // Cache::store() 走 CACHE_STORE=redis，不用額外套件）。依登入使用者 id 或 IP 分桶，
