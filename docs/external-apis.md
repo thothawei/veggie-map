@@ -74,6 +74,34 @@ OSM 社群的標註慣例不同——這不是偏好問題，是同一套規則�
 ドトールコーヒーショップ 這類連鎖店——它們因為「有純素選項」而入列，不是素食餐廳。
 這是選 `yes` 必然帶來的結果，不是 bug。
 
+## OSM 標籤 → features 對應（2026-08-25 決定）
+
+匯入時順便把 OSM 的設施標籤轉成 `features.code`。對應與**每個標籤收哪些值**如下：
+
+| features.code | OSM 標籤 | 收錄的值 |
+| --- | --- | --- |
+| `takeout` | `takeaway` | `yes`, `only` |
+| `delivery` | `delivery` | `yes` |
+| `outdoor_seating` | `outdoor_seating` | `yes`, `patio`, `veranda`, `terrace`, `garden`, `rooftop`, `sidewalk`, `street`, `pedestrian_zone` |
+| `wifi` | `internet_access` | `wlan`, `yes` |
+| `reservation` | `reservation` | `yes`, `required`, `recommended` |
+| `pet_friendly` | `dog` | `yes`, `leashed` |
+
+**值的白名單是重點，不能寫成「有這個標籤就算有這個特色」。** 實測台中 177 筆＋東京 210 筆的
+標籤分布：`outdoor_seating=no` 有 32 筆、比 `yes` 的 10 筆還多，`wheelchair=no` 14 筆、
+`delivery=no` 5 筆。只看 key 存在會把明確標示「沒有」的店標成「有」——把使用者騙去白跑一趟，
+比漏收嚴重得多。
+
+**沒有對應的兩個特色**：`parking` 與 `family_friendly` 在兩地共 387 筆節點裡是 **0 筆**
+（含 `capacity:parking`／`kids_area` 等變體都查過）。OSM 對餐廳節點沒有通用的停車標註慣例。
+寧可讓這兩個篩選維持空的，也不硬湊一個不成立的對應。
+
+**尚未使用的訊號**：`wheelchair` 在兩地共 52 筆（東京 49、台中 3），是目前最豐富的
+未使用標籤，但我們的 `features` 表沒有對應項目。要不要新增是產品決定。
+
+同步用 `syncWithoutDetaching`：每天的自動同步只補充 OSM 知道的部分，不會洗掉 Admin 或
+使用者手動加上的特色。
+
 ## Failure Handling 對應（總 prompt 第二十節）
 
 Overpass／Nominatim 都是「免費但不保證 SLA」的公開服務，因此：

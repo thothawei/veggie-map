@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\DietType;
+use App\Models\Feature;
 use App\Models\Restaurant;
 use App\Services\External\BoundingBox;
 use App\Services\External\RestaurantData;
@@ -133,5 +134,101 @@ class RestaurantSyncServiceTest extends TestCase
     public function test_command_requires_bbox(): void
     {
         $this->artisan('restaurants:sync')->assertExitCode(1);
+    }
+
+    public function test_sync_attaches_features_from_provider(): void
+    {
+        Feature::factory()->create(['code' => 'takeout']);
+        Feature::factory()->create(['code' => 'wifi']);
+
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-f1',
+                name: '有外帶有 wifi',
+                latitude: 25.03,
+                longitude: 121.55,
+                featureCodes: ['takeout', 'wifi'],
+            ),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-f1')->firstOrFail();
+
+        $this->assertEqualsCanonicalizing(
+            ['takeout', 'wifi'],
+            $restaurant->features->pluck('code')->all(),
+        );
+    }
+
+    public function test_sync_ignores_feature_codes_that_do_not_exist(): void
+    {
+        // 對不上任何已知 code 的一律丟掉，不硬塞——跟 diet types 同一套規則。
+        Feature::factory()->create(['code' => 'takeout']);
+
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-f2',
+                name: '有一個未知特色',
+                latitude: 25.03,
+                longitude: 121.55,
+                featureCodes: ['takeout', 'teleportation'],
+            ),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-f2')->firstOrFail();
+
+        $this->assertSame(['takeout'], $restaurant->features->pluck('code')->all());
+    }
+
+    public function test_sync_does_not_wipe_features_added_by_hand(): void
+    {
+        // 每天自動同步不該把 Admin 或使用者手動加上的特色洗掉；OSM 只負責補充它知道的部分。
+        $takeout = Feature::factory()->create(['code' => 'takeout']);
+        $parking = Feature::factory()->create(['code' => 'parking']);
+
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-f3',
+                name: '手動加過停車',
+                latitude: 25.03,
+                longitude: 121.55,
+                featureCodes: ['takeout'],
+            ),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-f3')->firstOrFail();
+        $restaurant->features()->syncWithoutDetaching($parking);
+
+        // 第二次同步（模擬隔天排程），OSM 依然只回報 takeout。
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $this->assertEqualsCanonicalizing(
+            ['takeout', 'parking'],
+            $restaurant->fresh()->features->pluck('code')->all(),
+        );
+        $this->assertSame($takeout->id, $restaurant->fresh()->features->firstWhere('code', 'takeout')->id);
+    }
+
+    public function test_sync_without_feature_codes_leaves_the_restaurant_untouched(): void
+    {
+        Feature::factory()->create(['code' => 'takeout']);
+
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-f4',
+                name: '沒有任何特色',
+                latitude: 25.03,
+                longitude: 121.55,
+            ),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $this->assertCount(0, Restaurant::where('source_id', 'node-f4')->firstOrFail()->features);
     }
 }

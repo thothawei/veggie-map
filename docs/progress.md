@@ -1596,3 +1596,70 @@ FilterDrawer 畫不出晶片，篩選相關測試會測到空畫面。
   但對其他 API 使用端不太友善，要不要放寬是後端 API 設計決定。
 - OSM 匯入沒有帶入任何 feature，`pet_friendly`／`parking` 篩選在真實資料上無效。
 - 匯入資料的 `address` 常是空字串，卡片會多一行空白（既有問題）。
+
+## 2026-08-25 — OSM 同步帶入 features
+
+上一則的未完成項：592 筆匯入資料裡有 features 的是 0 筆，`RestaurantSyncService` 只同步
+`dietTypes`。
+
+**先量再對應，不憑印象。** 直接抓台中 177 筆＋東京 210 筆節點回來統計標籤分布：
+
+| features.code | OSM 標籤 | 台中 | 東京 |
+| --- | --- | --- | --- |
+| `takeout` | `takeaway` | 45 | 32 |
+| `outdoor_seating` | `outdoor_seating` | 1 | 44 |
+| `delivery` | `delivery` | 10 | 6 |
+| `wifi` | `internet_access` | 2 | 16 |
+| `reservation` | `reservation` | 0 | 12 |
+| `pet_friendly` | `dog` | 0 | 3 |
+| **`parking`** | — | **0** | **0** |
+| **`family_friendly`** | — | **0** | **0** |
+
+**統計順便揭露一個很容易寫錯的陷阱：很多標籤的值是 `no`。** `outdoor_seating=no` 有 32 筆、
+比 `yes` 的 10 筆還多，`wheelchair=no` 14 筆、`delivery=no` 5 筆。如果照直覺寫成「有這個
+標籤就掛上特色」，會把 32 家明確標示沒有戶外座位的店標成有。**把使用者騙去白跑一趟，比
+漏收嚴重得多**，所以對應表是「標籤 → 特色 + 值的白名單」，不是單純的 key 對應。
+
+`parking` 與 `family_friendly` 查證後確認 OSM 對餐廳節點沒有通用標註慣例（`capacity:parking`／
+`kids_area` 等變體也都是 0），所以不做對應——寧可讓那兩個篩選維持空的，也不硬湊。
+
+**實作**：`RestaurantData` 加 `featureCodes`，`OsmRestaurantProvider::featureCodes()` 依
+對應表產生，`RestaurantSyncService::syncFeatures()` 用 `syncWithoutDetaching` 寫入——
+跟 diet types 同一套規則（對不上的 code 丟掉），而且**每天的自動同步不會洗掉 Admin 或
+使用者手動加上的特色**，OSM 只負責補充它知道的部分。
+
+**實跑五個城市的結果**（0 → 138 筆有特色）：
+
+```
+takeout 111 / wifi 19 / outdoor_seating 18 / delivery 14 / reservation 9 / pet_friendly 3
+```
+
+順帶把台北補完整了：先前只跑過市中心那組小 bbox（106 筆），這次跑設定裡的完整台北市範圍，
+`created 116 / updated 106`——總數 592 → 708。
+
+**驗證**：`pet_friendly=1` 從只有種子資料變成 7 筆（3 筆真的來自東京的 `dog=yes`）；
+`parking=1` 仍然只有種子資料、OSM 匯入 0 筆，跟事前預測一致。後端 132 個測試、368 個
+assertion 全綠（新增 25 條：provider 21 條含兩組 dataProvider、sync service 4 條）。
+反向驗證：拔掉 `syncFeatures()` 呼叫 → 3 條紅。
+
+### 做完才看清楚的落差（重要）
+
+實測 `?takeout=1` 時發現**這個參數根本沒有被處理**。查 `RestaurantRepository::baseQuery()`：
+特色篩選只支援 `pet_friendly` 與 `parking` 兩個——**而那正是唯二無法從 OSM 取得的**。
+現在的狀況是：
+
+- 有資料但**不能篩**：`takeout`(111)、`wifi`(19)、`outdoor_seating`(18)、`delivery`(14)、
+  `reservation`(9)
+- 能篩但**幾乎沒資料**：`parking`(OSM 0 筆)、`pet_friendly`(3 筆)
+
+也就是說這次匯入的資料，除了 `pet_friendly` 之外使用者都用不到。要讓它真的可用，需要把
+特色篩選改成泛用的（例如 `?feature=takeout` 或 `?features=takeout,wifi`），
+`FilterDrawer` 也從寫死兩個晶片改成依 `/features` 動態渲染。這會動到 API 契約與 UI，
+是設計決定，沒有擅自做。
+
+**未完成 / 等待確認：**
+
+- **上面那個落差是這次最該接著處理的事**：匯進來的特色目前大多沒有查詢入口。
+- `wheelchair` 兩地共 52 筆（東京 49、台中 3）是最豐富的未使用標籤，但 `features` 表沒有
+  對應項目，要不要新增是產品決定。
+- `internet_access=yes` 被當成 wifi（理論上可能是有線），這是實務判斷，已在程式碼註解說明。

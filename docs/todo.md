@@ -299,8 +299,24 @@ ROI 偏低」的判斷）。
       新增 `apiFilterParams()` 在請求邊界轉成 `1`，並補測試釘住
 - [x] 前端測試 54 → 74，含反向驗證 6 條紅；瀏覽器實測回填／寫入／清除／上一頁
 
-未完成：OSM 匯入沒帶入任何 feature（592 筆全都沒有），所以這兩個篩選在真實資料上仍是
-空的；API 不接受 `parking=true` 只接受 `1`/`0`。細節見 progress.md。
+未完成：API 不接受 `parking=true` 只接受 `1`/`0`。細節見 progress.md。
+
+## 補做：OSM 同步帶入 features ✅ 已完成 2026-08-25
+
+- [x] 先抓台中 177＋東京 210 筆節點統計標籤分布再決定對應，不憑印象
+- [x] 對應表是「標籤 → 特色 ＋ **值的白名單**」：`outdoor_seating=no` 有 32 筆比 `yes`
+      的 10 筆還多，只看 key 存在會把明確說沒有的店標成有
+- [x] `parking`／`family_friendly` 查證後 OSM 無可用標籤（387 筆節點 0 筆），不硬湊對應
+- [x] `syncWithoutDetaching`：自動同步不會洗掉手動加上的特色
+- [x] 五個城市實跑：有 features 的匯入資料 0 → **138** 筆
+      （takeout 111／wifi 19／outdoor_seating 18／delivery 14／reservation 9／pet_friendly 3）
+- [x] 順帶把台北補成完整市範圍（原本只跑過市中心小 bbox），總數 592 → 708
+- [x] 後端測試 107 → 132，含反向驗證 3 條紅
+
+**⚠️ 接著最該做的**：特色篩選目前只支援 `pet_friendly` 與 `parking`——正是唯二無法從 OSM
+取得的兩個。有資料的 takeout(111)/wifi(19)/outdoor_seating(18)/delivery(14)/reservation(9)
+全部沒有查詢入口。要改成泛用篩選（`?feature=takeout`）＋ FilterDrawer 依 `/features`
+動態渲染，這會動到 API 契約與 UI，需要先決定。
 
 ## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成
 

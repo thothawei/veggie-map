@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\CalculateRestaurantScoreJob;
 use App\Models\DietType;
+use App\Models\Feature;
 use App\Models\Restaurant;
 use App\Services\External\BoundingBox;
 use App\Services\External\RestaurantData;
@@ -26,6 +27,7 @@ class RestaurantSyncService
     {
         $stats = ['created' => 0, 'updated' => 0, 'duplicates_flagged' => 0, 'skipped' => 0];
         $dietTypeIds = DietType::pluck('id', 'code');
+        $featureIds = Feature::pluck('id', 'code');
 
         foreach ($this->provider->fetch($bbox) as $data) {
             if (trim($data->name) === '') {
@@ -38,6 +40,7 @@ class RestaurantSyncService
             $stats[$wasRecentlyCreated ? 'created' : 'updated']++;
 
             $this->syncDietTypes($restaurant, $data->dietCodes, $dietTypeIds);
+            $this->syncFeatures($restaurant, $data->featureCodes, $featureIds);
 
             if ($this->flagPossibleDuplicates($restaurant)) {
                 $stats['duplicates_flagged']++;
@@ -117,6 +120,26 @@ class RestaurantSyncService
 
         if ($ids->isNotEmpty()) {
             $restaurant->dietTypes()->syncWithoutDetaching($ids);
+        }
+    }
+
+    /**
+     * 跟 diet types 同一套做法：對不上任何已知 code 的一律丟掉，不硬塞。用
+     * `syncWithoutDetaching` 而不是 `sync`——使用者或 Admin 手動加上的特色不該被
+     * 每天的自動同步洗掉，OSM 只負責補充它知道的部分。
+     *
+     * @param  string[]  $featureCodes
+     * @param  Collection<string, int>  $featureIds
+     */
+    private function syncFeatures(Restaurant $restaurant, array $featureCodes, $featureIds): void
+    {
+        $ids = collect($featureCodes)
+            ->map(fn (string $code) => $featureIds->get($code))
+            ->filter()
+            ->values();
+
+        if ($ids->isNotEmpty()) {
+            $restaurant->features()->syncWithoutDetaching($ids);
         }
     }
 

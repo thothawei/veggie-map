@@ -172,4 +172,96 @@ class OsmRestaurantProviderTest extends TestCase
         $this->assertSame('HTTP_500', $log->error_code);
         $this->assertSame(500, $log->status);
     }
+
+    /**
+     * @dataProvider featureTagCases
+     *
+     * @param  string[]  $expected
+     */
+    public function test_maps_osm_tags_to_feature_codes(array $tags, array $expected): void
+    {
+        Http::fake(['*' => Http::response(['elements' => [[
+            'id' => 1,
+            'lat' => 25.03,
+            'lon' => 121.55,
+            'tags' => array_merge(['name' => '測試店'], $tags),
+        ]]])]);
+
+        $results = (new OsmRestaurantProvider)->fetch($this->bbox());
+
+        $this->assertEqualsCanonicalizing($expected, $results[0]->featureCodes);
+    }
+
+    public static function featureTagCases(): array
+    {
+        return [
+            '外帶' => [['takeaway' => 'yes'], ['takeout']],
+            '只做外帶' => [['takeaway' => 'only'], ['takeout']],
+            '外送' => [['delivery' => 'yes'], ['delivery']],
+            '戶外座位' => [['outdoor_seating' => 'yes'], ['outdoor_seating']],
+            '露臺也算戶外座位' => [['outdoor_seating' => 'patio'], ['outdoor_seating']],
+            'wifi' => [['internet_access' => 'wlan'], ['wifi']],
+            '可訂位' => [['reservation' => 'yes'], ['reservation']],
+            '需訂位也算可訂位' => [['reservation' => 'required'], ['reservation']],
+            '可帶寵物' => [['dog' => 'yes'], ['pet_friendly']],
+            '牽繩也算可帶寵物' => [['dog' => 'leashed'], ['pet_friendly']],
+            '多個特色' => [
+                ['takeaway' => 'yes', 'delivery' => 'yes', 'internet_access' => 'wlan'],
+                ['takeout', 'delivery', 'wifi'],
+            ],
+            '沒有任何特色標籤' => [[], []],
+        ];
+    }
+
+    /**
+     * @dataProvider negativeTagCases
+     */
+    public function test_negative_tag_values_do_not_become_features(string $tag, string $value): void
+    {
+        // 這是整個對應最容易寫錯的地方：只看 key 存在就掛上特色的話，實測台中＋東京共
+        // 387 筆節點裡 `outdoor_seating=no` 有 32 筆（比 yes 的 10 筆還多）、
+        // `delivery=no` 5 筆，全都會被標成「有」。把明確說沒有的店標成有，
+        // 比漏收嚴重得多——使用者會白跑一趟。
+        Http::fake(['*' => Http::response(['elements' => [[
+            'id' => 1,
+            'lat' => 25.03,
+            'lon' => 121.55,
+            'tags' => ['name' => '測試店', $tag => $value],
+        ]]])]);
+
+        $results = (new OsmRestaurantProvider)->fetch($this->bbox());
+
+        $this->assertSame([], $results[0]->featureCodes, "{$tag}={$value} 不該被當成有這個特色");
+    }
+
+    public static function negativeTagCases(): array
+    {
+        return [
+            '沒有外帶' => ['takeaway', 'no'],
+            '沒有外送' => ['delivery', 'no'],
+            '沒有戶外座位' => ['outdoor_seating', 'no'],
+            '沒有網路' => ['internet_access', 'no'],
+            '不能訂位' => ['reservation', 'no'],
+            '不能帶寵物' => ['dog', 'no'],
+            '無法辨識的值' => ['takeaway', 'maybe'],
+            '空字串' => ['delivery', ''],
+        ];
+    }
+
+    public function test_features_without_a_usable_osm_tag_are_left_alone(): void
+    {
+        // parking 與 family_friendly 在台中＋東京共 387 筆節點裡是 0 筆（含
+        // capacity:parking／kids_area 等變體）。沒有可用標籤就不硬湊對應——
+        // 寧可讓那兩個篩選維持空的，也不要標錯。
+        Http::fake(['*' => Http::response(['elements' => [[
+            'id' => 1,
+            'lat' => 25.03,
+            'lon' => 121.55,
+            'tags' => ['name' => '測試店', 'takeaway' => 'yes', 'capacity' => '30', 'smoking' => 'no'],
+        ]]])]);
+
+        $results = (new OsmRestaurantProvider)->fetch($this->bbox());
+
+        $this->assertSame(['takeout'], $results[0]->featureCodes);
+    }
 }

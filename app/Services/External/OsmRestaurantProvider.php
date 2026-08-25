@@ -26,6 +26,33 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
     public const DIET_MODES = [self::DIET_ONLY, self::DIET_YES];
 
     /**
+     * OSM 標籤 → features.code 的對應，以及**每個標籤要收哪些值**。
+     *
+     * 值的白名單是重點，不能寫成「有這個標籤就算有這個特色」：2026-08-25 實測台中 177 筆＋
+     * 東京 210 筆的標籤分布，`outdoor_seating=no` 有 32 筆、比 `yes` 的 10 筆還多，
+     * `wheelchair=no` 14 筆、`delivery=no` 5 筆。只看 key 存在會把明確標示「沒有」的店
+     * 標成「有」——這種錯比漏收嚴重得多，使用者會白跑一趟。
+     *
+     * 沒有列在這裡的特色是查證後確認 OSM 沒有可用標籤：`parking` 與 `family_friendly`
+     * 在兩地共 387 筆節點裡是 0 筆（含 `capacity:parking`／`kids_area` 等變體都沒有）。
+     * 寧可讓那兩個篩選維持空的，也不硬湊一個不成立的對應。
+     *
+     * @var array<string, array{feature: string, values: string[]}>
+     */
+    private const FEATURE_TAG_MAP = [
+        'takeaway' => ['feature' => 'takeout', 'values' => ['yes', 'only']],
+        'delivery' => ['feature' => 'delivery', 'values' => ['yes']],
+        // patio／veranda／terrace 這類值本身就代表「有戶外座位」，只是講明是哪一種。
+        'outdoor_seating' => ['feature' => 'outdoor_seating', 'values' => [
+            'yes', 'patio', 'veranda', 'terrace', 'garden', 'rooftop', 'sidewalk', 'street', 'pedestrian_zone',
+        ]],
+        // internet_access=yes 理論上可能是有線，但在餐廳／咖啡店的實務標註幾乎都是 wifi。
+        'internet_access' => ['feature' => 'wifi', 'values' => ['wlan', 'yes']],
+        'reservation' => ['feature' => 'reservation', 'values' => ['yes', 'required', 'recommended']],
+        'dog' => ['feature' => 'pet_friendly', 'values' => ['yes', 'leashed']],
+    ];
+
+    /**
      * 收錄規則依國別而異，因為 OSM 標籤慣例不同（2026-08-25 實測）：台中市 177/220 家標
      * `only`（80%），東京 23 区只有 46/210（22%），日本社群慣用 `yes`。套同一套規則會讓
      * 其中一邊失真，所以規則跟著同步範圍走，見 config/services.php 的 sync_regions。
@@ -175,10 +202,28 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
                 phone: $tags['phone'] ?? $tags['contact:phone'] ?? null,
                 website: $tags['website'] ?? $tags['contact:website'] ?? null,
                 dietCodes: $dietCodes,
+                featureCodes: $this->featureCodes($tags),
             );
         }
 
         return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $tags
+     * @return string[]
+     */
+    private function featureCodes(array $tags): array
+    {
+        $codes = [];
+
+        foreach (self::FEATURE_TAG_MAP as $tag => $mapping) {
+            if (in_array($tags[$tag] ?? null, $mapping['values'], true)) {
+                $codes[] = $mapping['feature'];
+            }
+        }
+
+        return $codes;
     }
 
     private function buildAddress(array $tags): ?string
