@@ -322,7 +322,7 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
   資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
 
-目前進度：**Phase 2 完成**。已可用的端點：
+目前進度：**Phase 3 完成**（Agent 執行迴圈可跑，全程用 MockProvider 驗證，未呼叫真 API）。已可用的端點：
 
 | Method | Path | 說明 |
 |---|---|---|
@@ -337,6 +337,17 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 
 角色權限：`viewer` 唯讀；`developer` 可增修專案與任務但不可刪專案；`manager` 再加上刪除與
 Agent 設定；`admin` 全開；餐廳地圖的一般 `user` 完全進不來。
+
+**Agent 執行迴圈**（`App\AiOffice\Runtime\AgentRuntime`）：載入 Agent 與任務 → 呼叫 LLM →
+解析工具呼叫 → 檢查權限 → 執行工具 → 把結果回給模型 → 直到拿到最終答案。每次執行寫一筆
+`ai_office_task_runs`（失敗的不覆蓋、不刪除），每次 LLM 請求寫一筆 `ai_office_token_usages`。
+
+三道硬上限來自 `config/ai_office.php`，撞到就中止並記 `AgentError`：步數、工具呼叫次數、
+token 預算。工具權限**預設拒絕**——沒有在 `ai_office_agent_permissions` 明確授權的能力一律
+擋下；標成 `approval` 的（例如 `deploy_production`）不執行，任務轉成等待審核。
+
+LLM provider 可替換（`claude` / `mock`），預設 `mock`；設定成不存在的 provider 會直接 throw
+而不是靜默退回，避免「看起來正常、其實一個字都沒送出去」。
 
 ## Future Roadmap
 

@@ -78,6 +78,7 @@ class Task extends Model
         return $this->hasMany(self::class, 'parent_task_id');
     }
 
+    /** @return BelongsTo<Agent, $this> */
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class, 'assigned_agent_id');
@@ -110,6 +111,7 @@ class Task extends Model
         )->withTimestamps();
     }
 
+    /** @return HasMany<TaskRun, $this> */
     public function runs(): HasMany
     {
         return $this->hasMany(TaskRun::class);

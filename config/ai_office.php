@@ -41,10 +41,26 @@ return [
             'claude' => [
                 'api_key' => env('ANTHROPIC_API_KEY'),
                 'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
-                'model' => env('AI_OFFICE_CLAUDE_MODEL', 'claude-sonnet-5'),
+                'model' => env('AI_OFFICE_CLAUDE_MODEL', 'claude-opus-5'),
+                // 非串流請求的輸出上限。壓太低會讓回覆在句子中間被截斷、
+                // 迫使整輪重來，比多給一點額度貴。
+                'max_tokens' => (int) env('AI_OFFICE_CLAUDE_MAX_TOKENS', 16000),
                 'timeout' => (int) env('AI_OFFICE_LLM_TIMEOUT', 120),
             ],
             'mock' => [],
+        ],
+
+        /*
+        | 每百萬 token 的美元單價，TokenUsageService 用它估算成本。
+        |
+        | 放設定檔不寫在程式裡：價格會變、也會有新模型，改價不該動到程式碼。
+        | 找不到對應模型時估成 0——寧可少報，也不要在成本報表裡放一個沒有來源的數字。
+        */
+        'pricing' => [
+            'claude-opus-5' => ['input' => 5.00, 'output' => 25.00],
+            'claude-sonnet-5' => ['input' => 3.00, 'output' => 15.00],
+            'claude-haiku-4-5' => ['input' => 1.00, 'output' => 5.00],
+            'mock-1' => ['input' => 0, 'output' => 0],
         ],
     ],
 

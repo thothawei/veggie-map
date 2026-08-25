@@ -99,7 +99,11 @@ User → POST /api/v1/ai-office/projects        （Controller，同步只建 Pro
 
 沿用現有版本，AI Office 不新增 major 相依。預期只需新增：
 
-- 後端：無必要新套件（Anthropic API 用 Laravel 內建 `Http` client 打，不引入 SDK，避免版本綁定）。
+- 後端：**`anthropic-ai/sdk`（官方 Anthropic PHP SDK）**。原本計畫寫的是「用 Laravel 內建
+  `Http` client 自己打、不引入 SDK」，Phase 3 實作時改變決定：request/response 的欄位命名、
+  thinking 區塊、tool_use 區塊的形狀都會隨 API 演進，自己拼 JSON 等於把這些變動的維護責任
+  攬到本專案身上。SDK 的 camelCase 具名參數會自動對應到線上的 snake_case。
+  安裝的是 `^0.43.0`，未新增其他相依。
 - 前端：沿用 axios / Pinia。DAG 視覺化第一版用純 SVG 手繪（規格 §49「不需要非常複雜」），不引入 d3。
 
 任何要新增套件的時刻，先確認與 Laravel 11 / PHP 8.2 / Vite 6 相容才動 lock file。
@@ -286,8 +290,8 @@ AI Office 需要的增量：
 | --- | --- | --- | --- |
 | 1 | §72 P1 | 基礎設施驗證（Laravel/MySQL/Redis/Docker/Sanctum 皆已存在）、`config/ai_office.php` 設定骨架、`.env.example` 補鍵、RBAC 四角色擴充、真實 health/readiness 端點 + 測試 | ✅ 完成 |
 | 2 | §72 P2 | 16 張 migration + 16 個 Model + Project/Task CRUD + Agent 唯讀 + TaskDependency（含環偵測）+ 初始 Agent seeder | ✅ 完成 |
-| 3 | §72 P3 | LlmProviderInterface / ClaudeProvider / MockProvider / AgentRuntime（先用 Mock 驗） | ← 現在做 |
-| 4 | §72 P4 | AgentOrchestrator / CeoPlanner（JSON schema 驗證）/ AgentSelector / Queue / Retry | |
+| 3 | §72 P3 | LlmProviderInterface / ClaudeProvider / MockProvider / AgentRuntime + AgentLoopGuard + PermissionGate + TokenUsageService（全程用 Mock 驗，未呼叫真 API） | ✅ 完成 |
+| 4 | §72 P4 | AgentOrchestrator / CeoPlanner（JSON schema 驗證）/ AgentSelector / Queue / Retry | ← 現在做 |
 | 5 | §72 P5 | 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist | |
 | 6 | §72 P6 | Approval / RiskLevel / human-in-the-loop | |
 | 7 | §72 P7 | Activity + SSE + Agent/Task 狀態即時推送 | |
