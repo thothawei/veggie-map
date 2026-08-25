@@ -2641,3 +2641,51 @@ Nominatim 也接上，而且價值更高：它在**使用者請求路徑上**，
 
 後端 458 → **465 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
 **反向驗證**：把 Overpass 的開路判斷改成 `if (false)` → 1 條紅。
+
+---
+
+## 2026-08-26 — 重複餐廳的 Admin 審核（第二十二節閉環）
+
+`is_possible_duplicate` 從 Phase 8 就會被寫入（同步時「同名＋距離 <100m」把兩筆
+都標起來），但在這之前**沒有任何地方看得到這個標記**——標了沒人看等於沒標。
+
+### 為什麼沒有「合併」
+
+規格寫「不要自動刪除，標記供 Admin 審核」，我再往前想一步：連手動合併也不做。
+兩筆同名又相近，也可能是同一條街上的兩家分店（台中的連鎖素食店就有這種情況）。
+合併會把一家真實存在的店從地圖上抹掉，而且不可逆。
+
+Admin 能做的只有兩件事：
+- `keep` — 這筆留著，清掉標記
+- `deactivate` — 這筆是重複的，`status` 改 `inactive`
+
+下架而不是刪除：判斷錯了救得回來，`reviews`／`favorites` 的外鍵也不會跟著消失。
+前端與 FormRequest 兩邊都沒有 merge 這個選項，不是「先不做」而是刻意不提供。
+
+### 分組不能只看 `name`
+
+全台灣可能有五家同名的素食店，它們不是重複。所以先依 `name` 分組，再在組內
+依 100m 貪婪分群——跟 `flagPossibleDuplicates` 用同一個門檻常數的語意。
+標記過的筆數本來就少、同組通常就兩筆，不需要完整的聚類演算法。
+
+### `stale` 這個狀態
+
+同組另一筆被處理掉之後，剩下那筆的標記就是過期的。GET 裡**不偷偷改資料**，
+而是回一個 `stale: true` 讓 Admin 一鍵清掉。前端有一條測試守著它會被標示出來，
+免得看起來像「還有一筆重複沒處理」。
+
+### route model binding 的陷阱
+
+`Restaurant::resolveRouteBinding()` 只認 `status = active`（Phase 5 為了擋
+pending 餐廳加的）。這個清單本來就會包含已下架的重複筆，用預設 binding 的話，
+要清掉一筆已下架餐廳的過期標記會直接 404。改成在 Controller 裡自己
+`findOrFail`，並補一條測試。
+
+順帶補上 `RestaurantPolicy`——`docs/api.md` 從 Phase 11 就列了它，但檔案一直
+不存在。現在是真的有了（只管 admin 的重複審核，餐廳沒有公開寫入端點）。
+
+### 驗證
+
+後端 465 → **472 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
+前端 243 → **248 個測試全綠**（`AdminView.test.ts` 是這個檔案的第一組元件測試，
+順便補上 todo 裡「AdminView 仍無元件測試」那一項的一部分）。

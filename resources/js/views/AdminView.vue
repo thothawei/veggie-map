@@ -19,7 +19,27 @@ interface AdminReview {
     comment: string | null;
 }
 
-const tab = ref<'reports' | 'reviews'>('reports');
+/** 重複審核的一組候選。同名且 100m 內的餐廳被歸在一起，見後端 §22 的說明。 */
+interface DuplicateGroup {
+    name: string;
+    /** 只剩一筆＝同組的另一筆已經處理掉，這個標記是過期的。 */
+    stale: boolean;
+    restaurants: Array<{
+        id: number;
+        name: string;
+        address: string;
+        city: string | null;
+        district: string | null;
+        source: string;
+        source_id: string | null;
+        status: string;
+    }>;
+}
+
+type Tab = 'reports' | 'reviews' | 'duplicates';
+
+const tab = ref<Tab>('reports');
+const duplicates = ref<DuplicateGroup[]>([]);
 const reports = ref<AdminReport[]>([]);
 const reviews = ref<AdminReview[]>([]);
 const loading = ref(false);
@@ -46,6 +66,25 @@ async function loadReviews() {
     }
 }
 
+async function loadDuplicates() {
+    loading.value = true;
+    try {
+        const response = await client.get<ApiSuccess<DuplicateGroup[]>>('/admin/duplicates');
+        duplicates.value = response.data.data;
+    } finally {
+        loading.value = false;
+    }
+}
+
+/**
+ * 只有「保留」與「下架」兩個動作，沒有合併——兩筆同名又相近，也可能是同一條街上
+ * 的兩家分店，合併會把一家真實存在的店抹掉而且不可逆（見後端 Controller 註解）。
+ */
+async function resolveDuplicate(id: number, action: 'keep' | 'deactivate') {
+    await client.post(`/admin/restaurants/${id}/duplicate`, { action });
+    await loadDuplicates();
+}
+
 async function approve(report: AdminReport) {
     await client.post(`/admin/reports/${report.id}/approve`);
     await loadReports();
@@ -61,10 +100,12 @@ async function hide(review: AdminReview) {
     await loadReviews();
 }
 
-function switchTab(target: 'reports' | 'reviews') {
+function switchTab(target: Tab) {
     tab.value = target;
+
     if (target === 'reports') loadReports();
-    else loadReviews();
+    else if (target === 'reviews') loadReviews();
+    else loadDuplicates();
 }
 
 onMounted(loadReports);
@@ -79,6 +120,9 @@ onMounted(loadReports);
             </button>
             <button type="button" :class="{ active: tab === 'reviews' }" @click="switchTab('reviews')">
                 評論管理
+            </button>
+            <button type="button" :class="{ active: tab === 'duplicates' }" @click="switchTab('duplicates')">
+                重複審核
             </button>
         </nav>
 
@@ -106,6 +150,34 @@ onMounted(loadReports);
                 </div>
             </li>
             <p v-if="!reviews.length">目前沒有評論。</p>
+        </ul>
+
+        <ul v-if="tab === 'duplicates' && !loading" class="duplicates">
+            <li v-for="(group, index) in duplicates" :key="`${group.name}-${index}`">
+                <strong>{{ group.name }}</strong>
+                <span v-if="group.stale" class="stale">同組的另一筆已處理，這個標記已過期</span>
+                <table>
+                    <tbody>
+                        <tr v-for="restaurant in group.restaurants" :key="restaurant.id">
+                            <td>
+                                {{ restaurant.address || '地址未提供' }}
+                                <small>{{ restaurant.source }}{{ restaurant.source_id ? ` #${restaurant.source_id}` : '' }}・{{ restaurant.status }}</small>
+                            </td>
+                            <td class="actions">
+                                <button type="button" @click="resolveDuplicate(restaurant.id, 'keep')">保留</button>
+                                <button
+                                    type="button"
+                                    class="danger"
+                                    @click="resolveDuplicate(restaurant.id, 'deactivate')"
+                                >
+                                    下架
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </li>
+            <p v-if="!duplicates.length">目前沒有被標記為可能重複的餐廳。</p>
         </ul>
     </div>
 </template>
@@ -166,5 +238,28 @@ li {
 .actions .danger {
     color: #c53030;
     border-color: #feb2b2;
+}
+
+.duplicates table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5rem;
+}
+
+.duplicates td {
+    padding: 0.35rem 0;
+    vertical-align: top;
+    border-top: 1px solid #edf2f7;
+}
+
+.duplicates small {
+    display: block;
+    color: #718096;
+}
+
+.duplicates .stale {
+    margin-left: 0.5rem;
+    color: #975a16;
+    font-size: 0.85rem;
 }
 </style>

@@ -385,7 +385,7 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 - [x] 搜尋自動完成 `GET /restaurants/suggest`（店名／料理種類／行政區）✅ 2026-08-26
 - [x] 列表 API `select()` 收欄位 ✅ 2026-08-26
 - [x] External API circuit breaker ✅ 2026-08-26
-- [ ] `possible_duplicate` Admin 審核入口
+- [x] `possible_duplicate` Admin 審核入口 ✅ 2026-08-26
 - [ ] 詳情頁走 slug
 
 ---
@@ -544,11 +544,12 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       `restaurant_claim`／`photo_verified` 仍屬 Roadmap（店家認領／照片上傳），
       刻意不開手動入口。
 
-- [ ] **`possible_duplicate` 供 Admin 審核（第二十二節）**
-      同步時「同名＋距離 <100m」會把兩筆都標 `is_possible_duplicate=1`，**不自動刪**。
-      Admin API／`AdminView` 都沒有列出或合併／駁回重複的入口，標記等於沒人看。
-      需要：`GET /admin/duplicates`（或既有 admin 加一個分頁）＋明確的「保留／忽略」
-      動作（不要做成自動合併）。
+- [x] **`possible_duplicate` 供 Admin 審核（第二十二節）✅ 2026-08-26**
+      `GET /admin/duplicates`（依「同名＋100m 內」分組，`stale` 標出過期標記）＋
+      `POST /admin/restaurants/{id}/duplicate`（`keep`／`deactivate`）。
+      **刻意沒有 merge／delete**：兩筆同名又相近也可能是同一條街上的兩家分店，
+      合併會把一家真實存在的店抹掉且不可逆。`AdminView` 加了「重複審核」分頁。
+      順帶補上 `RestaurantPolicy`（`docs/api.md` 早就列了但檔案不存在）。
 
 - [x] **`open_now`／營業時間（第八、二十八節）✅ 2026-08-26**
       `restaurants.opening_hours`（OSM 原始字串）＋`restaurants.timezone`（依座標落在哪個
@@ -646,7 +647,7 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 ### P2 — 測試缺口（已判定過 ROI，仍列出來備查）
 
-- [ ] `SearchBox`／`AdminView`／`RestaurantDetailView` 仍無元件測試
+- [ ] `RestaurantDetailView` 仍無元件測試（`SearchBox` 已於 2026-08-26 補、`AdminView` 補了重複審核那一段）
 - [ ] 沒有 Playwright／真瀏覽器 E2E（Phase 10 判斷這個規模 ROI 偏低，維持）
 - [ ] OpenAPI 沒有 contract test（Dredd／Schemathesis）；寫規格時只手動抽測過部分端點
 

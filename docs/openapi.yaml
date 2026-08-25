@@ -149,6 +149,64 @@ paths:
                       meta: { $ref: "#/components/schemas/CursorMeta" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /admin/duplicates:
+    get:
+      operationId: listDuplicateRestaurants
+      tags: [Admin]
+      summary: 可能重複的餐廳（依「同名＋100m 內」分組）
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        stale:
+                          type: boolean
+                          description: true＝同組另一筆已處理，這個標記已過期
+                        restaurants:
+                          type: array
+                          items: { type: object }
+        "403":
+          description: 非 admin
+
+  /admin/restaurants/{id}/duplicate:
+    post:
+      operationId: resolveDuplicateRestaurant
+      tags: [Admin]
+      summary: 處置一筆重複標記（保留或下架，沒有合併／刪除）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [keep, deactivate] }
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: 非 admin
+        "422":
+          description: action 不合法
+
   /restaurants/suggest:
     get:
       operationId: suggestRestaurants

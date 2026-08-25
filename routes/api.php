@@ -8,6 +8,7 @@ use App\AiOffice\Http\Controllers\ProjectController as AiOfficeProjectController
 use App\AiOffice\Http\Controllers\TaskController as AiOfficeTaskController;
 use App\AiOffice\Http\Controllers\TaskDependencyController as AiOfficeTaskDependencyController;
 use App\AiOffice\Http\Controllers\UsageController as AiOfficeUsageController;
+use App\Http\Controllers\Api\Admin\DuplicateRestaurantController as AdminDuplicateRestaurantController;
 use App\Http\Controllers\Api\Admin\MenuItemController as AdminMenuItemController;
 use App\Http\Controllers\Api\Admin\RestaurantReportController as AdminRestaurantReportController;
 use App\Http\Controllers\Api\Admin\RestaurantVerificationController as AdminRestaurantVerificationController;
@@ -104,6 +105,13 @@ Route::middleware('throttle:api')->group(function () {
             Route::post('/reviews/{review}/hide', [AdminReviewController::class, 'hide']);
 
             Route::post('/restaurants/{restaurant}/menu-items', [AdminMenuItemController::class, 'store']);
+
+            // 重複標記的審核（第二十二節）。同步只標記，這裡是唯一的處置出口。
+            Route::get('/duplicates', [AdminDuplicateRestaurantController::class, 'index']);
+            Route::post(
+                '/restaurants/{restaurant}/duplicate',
+                [AdminDuplicateRestaurantController::class, 'resolve'],
+            );
             Route::get('/verification-types', [AdminRestaurantVerificationController::class, 'types']);
             Route::post('/restaurants/{restaurant}/verifications', [AdminRestaurantVerificationController::class, 'store']);
         });
