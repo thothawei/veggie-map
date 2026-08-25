@@ -2547,3 +2547,55 @@ HTTP 測試與元件測試。
 
 後端 446 → **450 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
 前端 233 → **238 個測試全綠**，vue-tsc／ESLint 乾淨。
+
+---
+
+## 2026-08-26 — 搜尋自動完成（搜尋強化第四項）
+
+先前使用者必須「猜完整的店名」才搜得到東西：輸入框只在按 Enter 時打 geocode，
+打對一半沒有任何回饋。`GET /restaurants/suggest` 補上這段。
+
+### 為什麼回三種型別，而不是一串店名
+
+打「日式」時，使用者要的是**一次選起「日式料理」這個分類**，不是看到五家碰巧
+店名有「日式」的店。所以建議分成三組，各自對應不同的後續動作：
+
+- 店名 → 直接跳那家店的詳情
+- 料理種類 → 用該標籤做一次關鍵字搜尋
+- 行政區 → 用該區名做一次關鍵字搜尋
+
+料理種類**只回實際上有餐廳掛著的分類**（`whereHas('restaurants')`）——建議一個
+點下去 0 筆的分類等於騙使用者，這條有專門的測試。行政區直接查 `restaurants` 的
+既有值而不是寫死清單：涵蓋範圍是由匯入資料決定的。
+
+### 沒有重用 search()
+
+建議清單要的是三種不同型別的候選，而 `search()` 只回餐廳列。硬湊的話上面那個
+「分類」建議就做不出來。但相關性排序是共用的：`RestaurantSuggestionRepository`
+直接用 `KeywordSearch::relevanceExpression()`，不會出現「搜尋跟建議排序不一樣」。
+
+建議查詢只 `select(['id','name','city','district'])`——自動完成是每打一個字就查
+一次的路徑，撈整列（含 `description`／`location`）特別浪費。
+
+### 前端：debounce ＋ 序號雙保險
+
+不節流的話「台中一中街」六個字就是六次請求。debounce 250ms 減少請求數，序號
+（`suggestSeq`）保證只有最後一次的回應會被採用——慢的舊回應不會蓋掉新的。
+
+建議 API 失敗時**安靜地不給建議**，不設 error：跳一個紅字說「建議載入失敗」只會
+干擾打字，而且使用者仍然可以直接按搜尋。
+
+**沒有把城市帶進建議查詢**：城市切換器顯示的是「台中」，而 `restaurants.city` 存的
+是「台中市」（還有「臺中市」與大量空字串，見 `LookupController::cities` 的註解）。
+拿顯示標籤去比對會把建議整批濾光。API 本身支援 `city` 參數，留給資料乾淨的使用端。
+
+### 路由順序
+
+`/restaurants/suggest` 必須排在 `/restaurants/{restaurant}` 前面，否則會被當成一家
+id=suggest 的餐廳而 404。有一條測試明確守著這件事。
+
+### 驗證
+
+後端 450 → **458 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
+前端 238 → **243 個測試全綠**（含用 fake timers 驗證 debounce 真的只發一次請求），
+vue-tsc／ESLint 乾淨。OpenAPI 過 `@redocly/cli lint`。

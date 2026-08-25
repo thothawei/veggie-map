@@ -116,6 +116,20 @@ export interface Restaurant {
     updated_at: string;
 }
 
+/** GET /restaurants/suggest 的一筆店名建議。刻意只有建議清單需要的欄位。 */
+export interface SuggestedRestaurant {
+    id: number;
+    name: string;
+    city: string | null;
+    district: string | null;
+}
+
+export interface RestaurantSuggestions {
+    restaurants: SuggestedRestaurant[];
+    cuisines: Cuisine[];
+    districts: Array<{ city: string; district: string }>;
+}
+
 export interface GeocodedPlace {
     display_name: string;
     latitude: number;

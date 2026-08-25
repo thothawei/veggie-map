@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RecommendedRestaurantRequest;
 use App\Http\Requests\SearchRestaurantRequest;
+use App\Http\Requests\SuggestRestaurantRequest;
 use App\Http\Resources\RestaurantResource;
 use App\Repositories\RestaurantRepository;
+use App\Repositories\RestaurantSuggestionRepository;
 use App\Services\Recommendation\RecommendationServiceInterface;
 use Illuminate\Http\JsonResponse;
 
@@ -15,7 +17,25 @@ class RestaurantController extends Controller
     public function __construct(
         private readonly RestaurantRepository $restaurants,
         private readonly RecommendationServiceInterface $recommendations,
+        private readonly RestaurantSuggestionRepository $suggestions,
     ) {}
+
+    /**
+     * 搜尋建議（自動完成）。回三種型別：店名、料理種類、行政區——使用者打「日式」
+     * 時要能一次選起「日式料理」這個分類，而不是只看到一串店名。
+     */
+    public function suggest(SuggestRestaurantRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->suggestions->suggest(
+                (string) $validated['q'],
+                isset($validated['city']) ? (string) $validated['city'] : null,
+            ),
+        ]);
+    }
 
     public function index(SearchRestaurantRequest $request): JsonResponse
     {

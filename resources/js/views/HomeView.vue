@@ -177,7 +177,7 @@ function handleLocateFailed() {
     locateError.value = '無法取得目前位置，請檢查定位權限後再試。';
 }
 
-function goToDetail(restaurant: Restaurant) {
+function goToDetail(restaurant: Restaurant | { id: number }) {
     router.push({ name: 'restaurant-detail', params: { id: restaurant.id } });
 }
 
@@ -219,7 +219,11 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
             />
 
             <div class="hero-controls">
-                <SearchBox @place-selected="handlePlaceSelected" @keyword-search="handleKeywordSearch" />
+                <SearchBox
+                    @place-selected="handlePlaceSelected"
+                    @keyword-search="handleKeywordSearch"
+                    @restaurant-selected="goToDetail"
+                />
                 <button type="button" class="locate-button" @click="handleLocate">📍 使用目前位置</button>
             </div>
             <p v-if="locateError" class="locate-error" role="alert">{{ locateError }}</p>

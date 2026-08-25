@@ -149,6 +149,60 @@ paths:
                       meta: { $ref: "#/components/schemas/CursorMeta" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /restaurants/suggest:
+    get:
+      operationId: suggestRestaurants
+      tags: [Restaurants]
+      summary: 搜尋建議（自動完成）
+      description: >
+        回三種型別的建議：店名（依相關性）、料理種類（只回實際上有餐廳掛著的分類）、
+        行政區（直接查既有資料，不是寫死清單）。每類最多 5 筆，Redis cache 60s。
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, maxLength: 100 }
+        - name: city
+          in: query
+          schema: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      restaurants:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            name: { type: string }
+                            city: { type: string, nullable: true }
+                            district: { type: string, nullable: true }
+                      cuisines:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            code: { type: string }
+                            label: { type: string }
+                      districts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            city: { type: string }
+                            district: { type: string }
+        "422":
+          description: q 未提供或過長
+
   /restaurants/recommended:
     get:
       operationId: getRecommendedRestaurants

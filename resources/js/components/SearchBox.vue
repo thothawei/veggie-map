@@ -1,19 +1,81 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import client from '@/api/client';
 import { extractApiErrorMessage } from '@/lib/apiError';
-import type { ApiSuccess, GeocodedPlace } from '@/types';
+import type { ApiSuccess, GeocodedPlace, RestaurantSuggestions, SuggestedRestaurant } from '@/types';
 
 const emit = defineEmits<{
     (e: 'place-selected', place: GeocodedPlace): void;
     (e: 'keyword-search', keyword: string): void;
+    (e: 'restaurant-selected', restaurant: SuggestedRestaurant): void;
 }>();
 
 const query = ref('');
 const results = ref<GeocodedPlace[]>([]);
+const suggestions = ref<RestaurantSuggestions>({ restaurants: [], cuisines: [], districts: [] });
 const loading = ref(false);
 const showResults = ref(false);
 const error = ref<string | null>(null);
+
+/** 建議清單的觸發門檻。1 個中文字就有意義，但 1 個英文字母沒有。 */
+const SUGGEST_MIN_LENGTH = 1;
+const SUGGEST_DEBOUNCE_MS = 250;
+
+/**
+ * 逐字查詢必須節流：不節流的話「台中一中街」六個字就是六次請求，而且慢的舊回應
+ * 可能蓋掉新的。這裡用 debounce ＋ 序號雙保險——debounce 減少請求數，序號保證
+ * 只有最後一次的回應會被採用。
+ */
+let debounceTimer: number | undefined;
+let suggestSeq = 0;
+
+const hasSuggestions = computed(
+    () => suggestions.value.restaurants.length > 0
+        || suggestions.value.cuisines.length > 0
+        || suggestions.value.districts.length > 0,
+);
+
+function onInput() {
+    const q = query.value.trim();
+
+    window.clearTimeout(debounceTimer);
+
+    if (q.length < SUGGEST_MIN_LENGTH) {
+        suggestions.value = { restaurants: [], cuisines: [], districts: [] };
+        showResults.value = false;
+
+        return;
+    }
+
+    showResults.value = true;
+    debounceTimer = window.setTimeout(() => void loadSuggestions(q), SUGGEST_DEBOUNCE_MS);
+}
+
+async function loadSuggestions(q: string) {
+    const seq = ++suggestSeq;
+
+    try {
+        const response = await client.get<ApiSuccess<RestaurantSuggestions>>('/restaurants/suggest', {
+            // 刻意不帶 city：城市切換器顯示的是「台中」，而 restaurants.city 存的是
+            // 「台中市」（還有「臺中市」與大量空字串，見 LookupController::cities 註解）。
+            // 拿顯示標籤去比對會把建議全部濾光。API 本身支援 city 參數，給資料乾淨的
+            // 使用端用。
+            params: { q },
+        });
+
+        if (seq !== suggestSeq) return;
+
+        suggestions.value = response.data.data;
+    } catch {
+        if (seq !== suggestSeq) return;
+
+        // 建議只是輔助，失敗就安靜地不給建議——使用者仍然可以直接按搜尋。
+        // 這裡刻意不設 error：跳一個紅字說「建議載入失敗」只會干擾打字。
+        suggestions.value = { restaurants: [], cuisines: [], districts: [] };
+    }
+}
+
+onBeforeUnmount(() => window.clearTimeout(debounceTimer));
 
 async function search() {
     const q = query.value.trim();
@@ -73,6 +135,18 @@ function searchByKeyword() {
     emit('keyword-search', keyword);
 }
 
+function selectRestaurant(restaurant: SuggestedRestaurant) {
+    showResults.value = false;
+    emit('restaurant-selected', restaurant);
+}
+
+/** 選料理種類／行政區＝用那個詞做一次關鍵字搜尋，後端本來就比對這兩種欄位。 */
+function selectTerm(term: string) {
+    query.value = term;
+    showResults.value = false;
+    emit('keyword-search', term);
+}
+
 function select(place: GeocodedPlace) {
     query.value = place.display_name;
     showResults.value = false;
@@ -86,6 +160,7 @@ function select(place: GeocodedPlace) {
             v-model="query"
             type="search"
             placeholder="搜尋地點或餐廳，例如「台中一中街」「拉麵」"
+            @input="onInput"
             @keyup.enter="search"
             @focus="showResults = query.trim().length > 0"
             @blur="handleBlur"
@@ -96,10 +171,42 @@ function select(place: GeocodedPlace) {
             <li class="keyword-option" @mousedown.prevent="searchByKeyword">
                 搜尋餐廳「{{ query.trim() }}」（店名、菜色、料理種類）
             </li>
+            <li
+                v-for="restaurant in suggestions.restaurants"
+                :key="`r-${restaurant.id}`"
+                class="suggestion"
+                @mousedown.prevent="selectRestaurant(restaurant)"
+            >
+                {{ restaurant.name }}
+                <span v-if="restaurant.district || restaurant.city" class="hint">
+                    {{ [restaurant.city, restaurant.district].filter(Boolean).join(' ') }}
+                </span>
+            </li>
+
+            <li
+                v-for="cuisine in suggestions.cuisines"
+                :key="`c-${cuisine.code}`"
+                class="suggestion"
+                @mousedown.prevent="selectTerm(cuisine.label)"
+            >
+                {{ cuisine.label }}<span class="hint">料理種類</span>
+            </li>
+
+            <li
+                v-for="district in suggestions.districts"
+                :key="`d-${district.city}-${district.district}`"
+                class="suggestion"
+                @mousedown.prevent="selectTerm(district.district)"
+            >
+                {{ district.city }} {{ district.district }}<span class="hint">地區</span>
+            </li>
+
             <li v-for="place in results" :key="place.display_name" @mousedown.prevent="select(place)">
                 {{ place.display_name }}
             </li>
-            <li v-if="!loading && results.length === 0" class="empty-item">找不到符合的地點</li>
+            <li v-if="!loading && results.length === 0 && !hasSuggestions" class="empty-item">
+                找不到符合的地點
+            </li>
         </ul>
         <p v-if="error" class="empty" role="alert">{{ error }}</p>
     </div>
@@ -167,6 +274,12 @@ button:disabled {
 }
 
 /* 不是選項，只是說明，所以不給 hover 也不給游標。 */
+.results .hint {
+    margin-left: 0.5rem;
+    color: #718096;
+    font-size: 0.8rem;
+}
+
 .results .empty-item {
     color: #718096;
     cursor: default;

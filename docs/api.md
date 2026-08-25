@@ -56,6 +56,28 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 | GET | `/admin/verification-types` | 可手動寫入的驗證類型（code／label／分數，來自 `config/vegetarian.php`） | 必須（admin） |
 | POST | `/admin/restaurants/{id}/verifications` | 手動記錄一筆驗證，寫完立刻重算素食可信度 | 必須（admin） |
 
+## `GET /restaurants/suggest` 搜尋建議（自動完成）
+
+`?q=關鍵字&city=台中市`（`city` 選填）。回三種型別的建議，每類最多 5 筆：
+
+```json
+{
+  "success": true,
+  "data": {
+    "restaurants": [{ "id": 7, "name": "十方齋", "city": "台中市", "district": "西區" }],
+    "cuisines": [{ "code": "japanese", "label": "日式料理" }],
+    "districts": [{ "city": "台中市", "district": "西區" }]
+  }
+}
+```
+
+- **店名**依相關性排序（同 `sort=relevance` 的權重），只回 `active` 的店。
+- **料理種類**比對 `config/cuisine.php` 的中文標籤與 code，且**只回實際上有餐廳
+  掛著的分類**——建議一個點下去 0 筆的分類等於騙使用者。
+- **行政區**直接查 `restaurants` 的既有值，不是寫死清單：涵蓋範圍由匯入資料決定。
+- Redis cache 60s（`restaurants:suggest:{hash}`，tag `restaurants`）。自動完成是
+  逐字打出來的，同一個前綴會被反覆查詢，正是 cache 最有效的形狀。
+
 ## `GET /restaurants` 查詢參數
 
 `keyword`, `latitude`, `longitude`, `radius`（公里，上限 50）, `bbox`, `city`, `district`, `diet`,

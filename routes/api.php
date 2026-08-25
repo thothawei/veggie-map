@@ -28,6 +28,8 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('throttle:api')->group(function () {
     Route::get('/restaurants', [RestaurantController::class, 'index']);
     Route::get('/restaurants/recommended', [RestaurantController::class, 'recommended']);
+    // 必須排在 /restaurants/{restaurant} 前面，否則會被當成一家 id=suggest 的餐廳。
+    Route::get('/restaurants/suggest', [RestaurantController::class, 'suggest']);
     Route::get('/restaurants/{restaurant}', [RestaurantController::class, 'show']);
     Route::get('/restaurants/{restaurant}/reviews', [ReviewController::class, 'index']);
 

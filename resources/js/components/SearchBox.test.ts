@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import SearchBox from './SearchBox.vue';
 
@@ -63,5 +63,97 @@ describe('SearchBox', () => {
         // 舊版在這裡直接 return，按 Enter 完全沒反應。
         expect(wrapper.find('.keyword-option').exists()).toBe(true);
         expect(get).not.toHaveBeenCalledWith('/geocode', { params: { q: '麵' } });
+    });
+});
+
+describe('SearchBox 自動完成', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        get.mockReset();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    function suggestPayload(data: Partial<{
+        restaurants: unknown[];
+        cuisines: unknown[];
+        districts: unknown[];
+    }>) {
+        return {
+            data: {
+                data: { restaurants: [], cuisines: [], districts: [], ...data },
+            },
+        };
+    }
+
+    async function typeAndSettle(wrapper: ReturnType<typeof mount>, value: string) {
+        await wrapper.find('input').setValue(value);
+        await vi.advanceTimersByTimeAsync(300);
+        await flushPromises();
+    }
+
+    it('打字後（節流過去）才查建議，不是每個字元一次請求', async () => {
+        get.mockResolvedValue(suggestPayload({}));
+
+        const wrapper = mount(SearchBox);
+        await wrapper.find('input').setValue('十');
+        await wrapper.find('input').setValue('十方');
+        await wrapper.find('input').setValue('十方齋');
+
+        expect(get).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(300);
+        await flushPromises();
+
+        expect(get).toHaveBeenCalledTimes(1);
+        expect(get).toHaveBeenCalledWith('/restaurants/suggest', { params: { q: '十方齋' } });
+    });
+
+    it('選店名建議會發 restaurant-selected，不是關鍵字搜尋', async () => {
+        get.mockResolvedValue(suggestPayload({
+            restaurants: [{ id: 7, name: '十方齋', city: '台中市', district: '西區' }],
+        }));
+
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '十方齋');
+
+        const item = wrapper.findAll('.suggestion').find((li) => li.text().includes('十方齋'))!;
+        await item.trigger('mousedown');
+
+        expect(wrapper.emitted('restaurant-selected')?.[0]?.[0]).toMatchObject({ id: 7 });
+        expect(wrapper.emitted('keyword-search')).toBeFalsy();
+    });
+
+    it('選料理種類＝用那個標籤做關鍵字搜尋', async () => {
+        get.mockResolvedValue(suggestPayload({ cuisines: [{ code: 'japanese', label: '日式料理' }] }));
+
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '日式');
+
+        const item = wrapper.findAll('.suggestion').find((li) => li.text().includes('日式料理'))!;
+        await item.trigger('mousedown');
+
+        expect(wrapper.emitted('keyword-search')?.[0]).toEqual(['日式料理']);
+    });
+
+    it('建議 API 失敗時安靜地不給建議，不跳錯誤紅字干擾打字', async () => {
+        get.mockRejectedValue(new Error('network'));
+
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '十方齋');
+
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+        expect(wrapper.findAll('.suggestion')).toHaveLength(0);
+    });
+
+    it('有建議時不顯示「找不到符合的地點」', async () => {
+        get.mockResolvedValue(suggestPayload({ cuisines: [{ code: 'japanese', label: '日式料理' }] }));
+
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '日式');
+
+        expect(wrapper.text()).not.toContain('找不到符合的地點');
     });
 });
