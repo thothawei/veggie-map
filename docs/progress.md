@@ -1767,3 +1767,49 @@ assertion 全綠（新增 25 條：provider 21 條含兩組 dataProvider、sync 
 - `wheelchair` 兩地共 52 筆（東京 49、台中 3）是最豐富的未使用標籤，但 `features` 表沒有
   對應項目，要不要新增是產品決定。
 - `internet_access=yes` 被當成 wifi（理論上可能是有線），這是實務判斷，已在程式碼註解說明。
+
+## 2026-08-25 — UI 接上後端已回傳卻沒人用的欄位（距離／評分）
+
+接手時發現 repo 已被另一個 session 推進 6 個 commit（特色篩選接齊 8 碼、純素食店／友善店
+分流、venue_scope、菜單葷素、AI Office Phase 1），我上一輪指出的「特色有資料卻沒查詢入口」
+已經被補上。所以這輪改成**盤點後端能力與前端顯示的落差**。
+
+**先量涵蓋率再決定做什麼，避免重蹈「停車篩選」覆轍。** 後端支援但前端沒接的有三個：
+
+| 欄位 | 有值筆數 | 其中 OSM 匯入 | 決定 |
+| --- | --- | --- | --- |
+| `price_level` | 20 / 1159 | **0** | ❌ 不做 UI |
+| `rating_min`（篩選） | rating>0 只有 1 / 1159 | **0** | ❌ 不做 UI |
+| `distance_meters` | 每次帶座標查詢都有 | — | ✅ 做 |
+
+價位與最低評分做出來會是第二個「停車篩選」——UI 完整、按下去永遠沒結果。只做距離。
+
+**順帶抓到一個一直在說謊的顯示。** 1159 筆餐廳裡只有 1 筆有評分，其餘全部印成
+「⭐ 0.0 (0)」——把「還沒有人評分」顯示成「評分 0 分」。同一張卡片上，唯一有用的訊號
+（距離）沒顯示，卻塞了一個對 99.9% 的店都不成立的零分。改成 `formatRating()`：
+沒有評分就寫「尚無評分」。
+
+新增 `resources/js/lib/format.ts`（`formatDistance`／`formatRating`）讓地圖 popup（字串拼接）
+與卡片（template）共用同一份規則。距離一公里內取整到十位——後端回的是 389.4 這種小數，
+GPS 本身就有誤差，寫「389.4 公尺」是假精確。
+
+接上四個顯示點：地圖 popup、首頁推薦卡、列表頁卡片、詳細頁評分。
+
+**驗證**：前端 104 → 118 個測試（新增 14 條）。反向驗證：把 `formatDistance` 的公尺分支
+與 `formatRating` 的無評分分支拔掉 → **7 條紅**，涵蓋三個顯示點。瀏覽器實測台北首頁
+（730 公尺／1.2 公里／尚無評分）、列表頁、詳細頁都正確；地圖 popup 因為點 marker 會直接
+導頁，改由元件測試斷言實際傳給 Leaflet 的字串。
+
+**環境注意（不是程式碼問題）**：跑後端測試時 50 個失敗，訊息是
+`veggiemap_testing.migrations doesn't exist` 與 `Table already exists`——`git status` 顯示
+**另一個 session 正在同一個工作目錄寫 AI Office Phase 2**（16 張未追蹤的 migration、
+controllers、models，還改了 `routes/api.php`／`bootstrap/providers.php`／`DatabaseSeeder`），
+兩邊同時對共用測試庫跑 migration。這輪我一個 PHP 檔案都沒動，提交時**逐一列出檔案而不是
+`git add -A`**，避免把別人進行中的工作掃進我的 commit。
+
+**未完成 / 等待確認：**
+
+- `price_level`／`rating_min` 的 UI 先不做，等真的有資料來源再說（OSM 沒有這兩種標籤，
+  評分要等使用者評論累積）。
+- 列表頁用 bbox 查詢所以沒有 `distance_meters`，距離只在首頁地圖那條路徑顯示。
+  要讓列表也有距離，得在使用者授權定位後把座標一起送出，是另一個題目。

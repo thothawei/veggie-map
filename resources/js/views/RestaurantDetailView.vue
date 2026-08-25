@@ -209,7 +209,12 @@ watch(() => props.id, load, { immediate: true });
                 </button>
             </header>
 
-            <p class="rating">⭐ {{ restaurant.rating.toFixed(1) }}（{{ restaurant.rating_count }} 則評論）</p>
+            <p class="rating">
+                <template v-if="restaurant.rating_count">
+                    ⭐ {{ restaurant.rating.toFixed(1) }}（{{ restaurant.rating_count }} 則評論）
+                </template>
+                <template v-else>尚無評分</template>
+            </p>
             <p v-if="restaurant.confidence_score !== null && restaurant.confidence_score !== undefined">
                 素食可信度：{{ restaurant.confidence_score }} / 100
             </p>

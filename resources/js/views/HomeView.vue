@@ -8,6 +8,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { rememberCity, useCities } from '@/composables/useCities';
 import { apiFilterParams, useFilterQuery } from '@/composables/useFilterQuery';
+import { formatDistance, formatRating } from '@/lib/format';
 import { formatBbox } from '@/lib/geo';
 import type { ApiSuccess, GeocodedPlace, Restaurant } from '@/types';
 
@@ -221,7 +222,12 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                         :data-kind="restaurant.venue_kind ?? undefined"
                     >{{ restaurant.venue_badge }}</span>
                     <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
-                    <span>⭐ {{ restaurant.rating.toFixed(1) }} ({{ restaurant.rating_count }})</span>
+                    <span class="meta">
+                        <span v-if="formatDistance(restaurant.distance_meters)" class="distance">
+                            {{ formatDistance(restaurant.distance_meters) }}
+                        </span>
+                        <span class="rating">{{ formatRating(restaurant.rating, restaurant.rating_count) }}</span>
+                    </span>
                     <span v-if="restaurant.address?.trim()" class="address">{{ restaurant.address }}</span>
                 </button>
             </div>
@@ -351,6 +357,23 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 
 .card:hover {
     border-color: #2f855a;
+}
+
+.card .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.card .distance {
+    color: #2f855a;
+    font-weight: 600;
+}
+
+.card .rating {
+    color: #718096;
 }
 
 .card .address {

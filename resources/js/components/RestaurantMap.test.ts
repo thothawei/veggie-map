@@ -135,6 +135,74 @@ describe('RestaurantMap popup', () => {
         expect(html).toContain('&lt;script&gt;');
     });
 
+
+    it('popup 顯示距離——後端每次距離查詢都回 distance_meters，先前完全沒用到', () => {
+        mount(RestaurantMap, {
+            props: {
+                restaurants: [{
+                    id: 1,
+                    name: '尚蔬苑',
+                    address: '信義路',
+                    latitude: 25.03,
+                    longitude: 121.56,
+                    rating: 0,
+                    rating_count: 0,
+                    distance_meters: 538.7,
+                } as Restaurant],
+                center: [25.033, 121.5654],
+                zoom: 13,
+            },
+        });
+
+        const html = String(bindPopup.mock.calls[0][0]);
+        expect(html).toContain('540 公尺');
+    });
+
+    it('沒有距離時不顯示距離那一行，而不是印出 null', () => {
+        mount(RestaurantMap, {
+            props: {
+                restaurants: [{
+                    id: 1,
+                    name: '沒有距離',
+                    address: '某處',
+                    latitude: 25.03,
+                    longitude: 121.56,
+                    rating: 0,
+                    rating_count: 0,
+                } as Restaurant],
+                center: [25.033, 121.5654],
+                zoom: 13,
+            },
+        });
+
+        const html = String(bindPopup.mock.calls[0][0]);
+        expect(html).not.toContain('公尺');
+        expect(html).not.toContain('null');
+    });
+
+    it('沒有人評分時 popup 說「尚無評分」，不是 ⭐ 0.0 (0)', () => {
+        // 1159 筆餐廳裡只有 1 筆有評分，這個分支才是絕大多數情況。
+        mount(RestaurantMap, {
+            props: {
+                restaurants: [{
+                    id: 1,
+                    name: '新匯入的店',
+                    address: '某路',
+                    latitude: 25.03,
+                    longitude: 121.56,
+                    rating: 0,
+                    rating_count: 0,
+                } as Restaurant],
+                center: [25.033, 121.5654],
+                zoom: 13,
+            },
+        });
+
+        const html = String(bindPopup.mock.calls[0][0]);
+        expect(html).toContain('尚無評分');
+        expect(html).not.toContain('0.0');
+    });
+
     it('popup 顯示 API 帶回的 venue_badge，文案不是寫死在元件裡', () => {
         mount(RestaurantMap, {
             props: {

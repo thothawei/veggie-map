@@ -6,6 +6,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { ALL_CITIES, useCities } from '@/composables/useCities';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
+import { formatRating } from '@/lib/format';
 import type { ApiSuccess, Restaurant } from '@/types';
 
 const router = useRouter();
@@ -187,7 +188,7 @@ watch(committedKeyword, (value) => {
                         :data-kind="restaurant.venue_kind ?? undefined"
                     >{{ restaurant.venue_badge }}</span>
                     <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
-                    <span>⭐ {{ restaurant.rating.toFixed(1) }} ({{ restaurant.rating_count }})</span>
+                    <span class="rating">{{ formatRating(restaurant.rating, restaurant.rating_count) }}</span>
                     <span v-if="restaurant.address?.trim()" class="address">{{ restaurant.address }}</span>
                 </button>
             </li>

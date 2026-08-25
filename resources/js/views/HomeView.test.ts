@@ -25,6 +25,7 @@ function fakeRestaurant(id: number) {
 let restaurantsPayload: { data: unknown[]; meta?: Record<string, unknown> } = { data: [] };
 const restaurantCalls: Record<string, unknown>[] = [];
 const recommendedCalls: Record<string, unknown>[] = [];
+let recommendedPayload: { data: unknown[] } = { data: [] };
 
 const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) => {
     if (url === '/cities') return Promise.resolve({ data: { data: cities } });
@@ -34,7 +35,7 @@ const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) =
     }
     if (url === '/restaurants/recommended') {
         recommendedCalls.push(config?.params ?? {});
-        return Promise.resolve({ data: { data: [] } });
+        return Promise.resolve({ data: recommendedPayload });
     }
     if (url === '/diets') return Promise.resolve({ data: { data: [] } });
 
@@ -247,5 +248,53 @@ describe('HomeView 地圖範圍', () => {
         expect(restaurantsParams).not.toHaveProperty('radius');
         expect(recommendedParams?.bbox).toBe('24.9,121.4,25.1,121.7');
         expect(recommendedParams).not.toHaveProperty('radius');
+    });
+});
+
+describe('HomeView 推薦卡片的距離與評分', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        restaurantsPayload = { data: [], meta: { next_cursor: null } };
+        recommendedPayload = { data: [] };
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('顯示後端算好的距離——先前這個欄位每次都回卻沒人用', async () => {
+        recommendedPayload = { data: [{ ...fakeRestaurant(1), distance_meters: 389.4 }] };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.card .distance').text()).toBe('390 公尺');
+    });
+
+    it('沒有距離就不顯示那一格，不是留一個空白或 null', async () => {
+        recommendedPayload = { data: [fakeRestaurant(1)] };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.card .distance').exists()).toBe(false);
+        expect(wrapper.find('.card').text()).not.toContain('null');
+    });
+
+    it('沒有人評分時說「尚無評分」，不是 ⭐ 0.0 (0)', async () => {
+        // OSM 匯入的 1000+ 筆餐廳一筆評分都沒有，這是絕大多數卡片的實際樣子。
+        recommendedPayload = { data: [{ ...fakeRestaurant(1), rating: 0, rating_count: 0 }] };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.card .rating').text()).toBe('尚無評分');
+        expect(wrapper.find('.card').text()).not.toContain('0.0');
+    });
+
+    it('有評分時照常顯示星等與人數', async () => {
+        recommendedPayload = { data: [{ ...fakeRestaurant(1), rating: 4.25, rating_count: 12 }] };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.card .rating').text()).toBe('⭐ 4.3（12）');
     });
 });
