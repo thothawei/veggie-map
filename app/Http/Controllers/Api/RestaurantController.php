@@ -79,9 +79,19 @@ class RestaurantController extends Controller
         ]);
     }
 
-    public function show(int $restaurant): JsonResponse
+    /**
+     * 詳情吃 slug 或 id。
+     *
+     * 規劃寫的是 `/restaurants/{slug}`（第二十六節），但既有的前端連結、分享出去的
+     * 網址、以及測試都用數字 id，直接換掉會全部斷。所以兩種都收：純數字當 id，
+     * 其餘當 slug——`slug` 欄位本身不可能是純數字（見 RestaurantSyncService::uniqueSlug
+     * 的 fallback 是 `osm-node-123` 這種形狀），不會有歧義。
+     */
+    public function show(string $restaurant): JsonResponse
     {
-        $model = $this->restaurants->findForDetail($restaurant);
+        $model = ctype_digit($restaurant)
+            ? $this->restaurants->findForDetail((int) $restaurant)
+            : $this->restaurants->findForDetailBySlug($restaurant);
 
         abort_if($model === null, 404);
 

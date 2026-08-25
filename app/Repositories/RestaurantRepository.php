@@ -67,12 +67,38 @@ class RestaurantRepository
      */
     public function findForDetail(int $id): ?Restaurant
     {
-        return Cache::remember("restaurant:{$id}", 600, function () use ($id) {
-            return Restaurant::query()
-                ->where('status', 'active')
-                ->with(['dietTypes', 'features', 'menuItems', 'confidenceScore', 'openingHours'])
-                ->find($id);
-        });
+        return Cache::remember(
+            "restaurant:{$id}",
+            600,
+            fn () => $this->detailQuery()->find($id),
+        );
+    }
+
+    /**
+     * slug 版本（總 Prompt 第二十六節的 `/restaurants/{slug}`）。
+     *
+     * 快取 key 用 slug 而不是先查 id 再轉——先查 id 的話就白做了快取（進 controller
+     * 前已經打過一次 DB），那正是 `findForDetail()` 當初不用 route model binding 的理由。
+     * 代價是同一家餐廳會有兩份快取（id 與 slug 各一），所以
+     * `RestaurantCacheInvalidator` 兩個 key 都要清。
+     */
+    public function findForDetailBySlug(string $slug): ?Restaurant
+    {
+        return Cache::remember(
+            'restaurant:slug:'.$slug,
+            600,
+            fn () => $this->detailQuery()->where('slug', $slug)->first(),
+        );
+    }
+
+    /**
+     * @return Builder<Restaurant>
+     */
+    private function detailQuery(): Builder
+    {
+        return Restaurant::query()
+            ->where('status', 'active')
+            ->with(['dietTypes', 'features', 'menuItems', 'confidenceScore', 'openingHours']);
     }
 
     /**

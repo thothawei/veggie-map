@@ -10,7 +10,7 @@ import { rememberCity, useCities } from '@/composables/useCities';
 import { apiFilterParams, useFilterQuery } from '@/composables/useFilterQuery';
 import { formatAddress, formatConfidence, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
 import { formatBbox } from '@/lib/geo';
-import type { ApiSuccess, GeocodedPlace, Restaurant } from '@/types';
+import type { ApiSuccess, GeocodedPlace, Restaurant, SuggestedRestaurant } from '@/types';
 
 const router = useRouter();
 const route = useRoute();
@@ -177,8 +177,13 @@ function handleLocateFailed() {
     locateError.value = '無法取得目前位置，請檢查定位權限後再試。';
 }
 
-function goToDetail(restaurant: Restaurant | { id: number }) {
-    router.push({ name: 'restaurant-detail', params: { id: restaurant.id } });
+function goToDetail(restaurant: Restaurant | SuggestedRestaurant) {
+    // slug 優先：網址看得懂是規劃第二十六節的目的。建議清單只回四個欄位、沒有
+    // slug，那就退回 id——後端兩種都收。
+    router.push({
+        name: 'restaurant-detail',
+        params: { id: 'slug' in restaurant ? restaurant.slug : restaurant.id },
+    });
 }
 
 watch(filters, loadByBounds, { deep: true });

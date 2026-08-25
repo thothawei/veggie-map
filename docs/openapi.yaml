@@ -342,14 +342,21 @@ paths:
                         items: { $ref: "#/components/schemas/Restaurant" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
-  /restaurants/{id}:
+  /restaurants/{idOrSlug}:
     get:
       operationId: getRestaurant
       tags: [Restaurants]
-      summary: 詳情（含 diet_types／features／menu_items／confidence_score）
+      summary: 詳情（含 diet_types／features／menu_items／confidence_score／營業時間）
+      description: >
+        路徑參數是數字 id 或 slug（第二十六節）。純數字視為 id，其餘視為 slug——
+        slug 不可能是純數字，所以沒有歧義。舊的數字連結仍然有效。
       security: []
       parameters:
-        - $ref: "#/components/parameters/RestaurantId"
+        - name: idOrSlug
+          in: path
+          required: true
+          schema: { type: string }
+          example: shi-fang-zhai
       responses:
         "200":
           description: OK

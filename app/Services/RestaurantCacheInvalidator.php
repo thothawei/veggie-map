@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Restaurant;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -15,6 +16,16 @@ class RestaurantCacheInvalidator
     public static function invalidate(int $restaurantId): void
     {
         Cache::forget("restaurant:{$restaurantId}");
+
+        // 詳情可以用 id 或 slug 取得（第二十六節），兩者各有一份快取。只清 id 那份
+        // 的話，`/restaurants/{slug}` 會繼續吐 600 秒的舊資料——而那正是前端在用的
+        // 那條路徑，等於快取失效對使用者完全沒生效。
+        $slug = Restaurant::withoutGlobalScopes()->whereKey($restaurantId)->value('slug');
+
+        if ($slug !== null) {
+            Cache::forget('restaurant:slug:'.$slug);
+        }
+
         Cache::tags(['restaurants'])->flush();
     }
 }

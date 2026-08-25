@@ -458,3 +458,36 @@ describe('RestaurantListView 篩選進網址', () => {
         expect(wrapper.find('.cuisines').text()).toBe('泰式料理');
     });
 });
+
+describe('RestaurantListView 詳情連結', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+    });
+
+    it('有 slug 就用 slug 進詳情——規劃第二十六節要人看得懂的網址', async () => {
+        listPayload = {
+            data: [{ ...fakeRestaurant(1), slug: 'shi-fang-zhai' }],
+            meta: { next_cursor: null },
+        };
+
+        const { wrapper, router } = await mountList('/restaurants?city=taipei');
+
+        await wrapper.findAll('li button')[0].trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.path).toBe('/restaurants/shi-fang-zhai');
+    });
+
+    it('沒有 slug 時退回 id，舊連結不會因此壞掉', async () => {
+        listPayload = { data: [fakeRestaurant(7)], meta: { next_cursor: null } };
+
+        const { wrapper, router } = await mountList('/restaurants?city=taipei');
+
+        await wrapper.findAll('li button')[0].trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.path).toBe('/restaurants/7');
+    });
+});

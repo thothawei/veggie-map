@@ -7,8 +7,9 @@ const router = createRouter({
         { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
         { path: '/restaurants', name: 'restaurants', component: () => import('@/views/RestaurantListView.vue') },
         {
-            // 後端 GET /restaurants/{id} 目前是 id-based route model binding（見
-            // docs/api.md），沒有 slug 查詢支援，前端路徑也用 id，不假裝有 slug 查詢能力。
+            // 後端 GET /restaurants/{idOrSlug} 兩種都收（第二十六節）。參數名維持
+            // `id` 是為了不動既有的 `params: { id }` 呼叫端；值可以是數字或 slug。
+            // 舊的數字連結因此仍然有效——分享出去的網址不會因為改路由而失效。
             path: '/restaurants/:id',
             name: 'restaurant-detail',
             component: () => import('@/views/RestaurantDetailView.vue'),

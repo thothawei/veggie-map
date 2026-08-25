@@ -386,7 +386,7 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 - [x] 列表 API `select()` 收欄位 ✅ 2026-08-26
 - [x] External API circuit breaker ✅ 2026-08-26
 - [x] `possible_duplicate` Admin 審核入口 ✅ 2026-08-26
-- [ ] 詳情頁走 slug
+- [x] 詳情頁走 slug ✅ 2026-08-26
 
 ---
 
@@ -567,11 +567,12 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 ### P1 — 規劃明寫的體驗／契約缺口
 
-- [ ] **餐廳詳情走 slug（第二十六節）**
-      規劃路由是 `/restaurants/{slug}`。DB 有 `slug`（含中文名 fallback），Resource 也
-      回傳，但 `GET /restaurants/{id}` 與前端都用數字 id。改成 slug 查詢（保留 id 相容
-      或 301）才符合「人類看得懂的 URL」。中文店名的 slug 目前是 `osm-node-123`，
-      改路由前要想清楚要不要另外做可讀別名。
+- [x] **餐廳詳情走 slug（第二十六節）✅ 2026-08-26**
+      `GET /restaurants/{idOrSlug}` 兩種都收（純數字＝id，其餘＝slug；slug 不可能是
+      純數字所以沒有歧義），前端連結有 slug 就用 slug。舊的數字連結仍然有效——分享
+      出去的網址不會因為改路由而失效。
+      **仍未做**：中文店名的 slug 還是 `osm-node-123` 這種形狀（`Str::slug()` 音譯不了
+      中文）。要有真正可讀的中文別名得接拼音轉換，那是另一件事，不在這次範圍。
 
 - [ ] **可瀏覽的 API 文件掛在 `/docs`（最終完成標準）**
       有 `docs/openapi.yaml`，lint 過。網站上沒有 Swagger UI／Redoc，clone 下來看不到

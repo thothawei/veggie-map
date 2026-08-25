@@ -2689,3 +2689,36 @@ pending 餐廳加的）。這個清單本來就會包含已下架的重複筆，
 後端 465 → **472 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
 前端 243 → **248 個測試全綠**（`AdminView.test.ts` 是這個檔案的第一組元件測試，
 順便補上 todo 裡「AdminView 仍無元件測試」那一項的一部分）。
+
+---
+
+## 2026-08-26 — 詳情頁走 slug（第二十六節閉環）
+
+規劃寫的路由是 `/restaurants/{slug}`，實作一直是數字 id。
+
+改成**兩種都收**而不是換掉：既有的前端連結、使用者分享出去的網址、以及一批
+測試都用數字 id，直接換掉會全部斷。純數字視為 id、其餘視為 slug——`slug` 欄位
+本身不可能是純數字（`uniqueSlug()` 的 fallback 是 `osm-node-123` 這種形狀），
+不會有歧義。
+
+### 快取要清兩份
+
+`findForDetailBySlug()` 的 cache key 用 slug 而不是「先查 id 再轉」——先查 id 就
+白做了快取（進 controller 前已經打過一次 DB），那正是 `findForDetail()` 當初
+不用 route model binding 的理由。
+
+代價是同一家餐廳有兩份快取，所以 `RestaurantCacheInvalidator` 必須兩個 key 都清。
+沒清 slug 那份的話，`/restaurants/{slug}` 會繼續吐 600 秒的舊資料——而那正是前端
+在用的那條路徑，等於快取失效對使用者完全沒生效。**反向驗證**：拿掉清 slug 快取
+那段 → 1 條紅。
+
+### 仍未做
+
+中文店名的 slug 還是 `osm-node-123` 這種形狀（`Str::slug()` 音譯不了中文）。
+要有真正可讀的中文別名得接拼音轉換，那是另一件事，不在這次範圍——但至少
+`/restaurants/shi-fang-zhai` 這種英文可音譯的店名現在是可讀的。
+
+### 驗證
+
+後端 472 → **477 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
+前端 248 → **250 個測試全綠**，vue-tsc／ESLint 乾淨。

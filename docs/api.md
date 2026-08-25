@@ -32,7 +32,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 |---|---|---|---|
 | GET | `/restaurants` | 列表＋搜尋（見下方查詢參數） | 選用（登入可帶收藏狀態） |
 | GET | `/restaurants/recommended` | 推薦餐廳（首頁用，見下方） | 無 |
-| GET | `/restaurants/{id}` | 詳情 | 選用 |
+| GET | `/restaurants/{idOrSlug}` | 詳情 | 選用 |
 | POST | `/restaurants/{id}/favorite` | 加入收藏 | 必須 |
 | DELETE | `/restaurants/{id}/favorite` | 取消收藏 | 必須 |
 | POST | `/restaurants/{id}/reviews` | 新增評論 | 必須 |
