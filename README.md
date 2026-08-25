@@ -322,7 +322,21 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
   資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
 
-目前進度：**Phase 1 完成**（基礎設施驗證、設定骨架、RBAC 四角色、readiness 端點）。
+目前進度：**Phase 2 完成**。已可用的端點：
+
+| Method | Path | 說明 |
+|---|---|---|
+| GET | `/ai-office/health` | readiness：DB／Redis／佇列／workspace 真實連線檢查 |
+| GET/POST | `/ai-office/projects` | 專案列表（可依 status 篩選）／建立 |
+| GET/PUT/DELETE | `/ai-office/projects/{id}` | 專案詳情／更新／刪除 |
+| GET/POST | `/ai-office/projects/{id}/tasks` | 任務列表（依 priority 排序）／建立（可帶 dependencies） |
+| GET/PATCH | `/ai-office/tasks/{id}` | 任務詳情（含 `dependencies_satisfied`）／更新 |
+| POST | `/ai-office/tasks/{id}/dependencies` | 新增相依，**會擋掉循環相依** |
+| DELETE | `/ai-office/tasks/{id}/dependencies/{dep}` | 移除相依 |
+| GET | `/ai-office/agents`、`/ai-office/agents/{id}` | Agent 列表／詳情（含工具與權限表） |
+
+角色權限：`viewer` 唯讀；`developer` 可增修專案與任務但不可刪專案；`manager` 再加上刪除與
+Agent 設定；`admin` 全開；餐廳地圖的一般 `user` 完全進不來。
 
 ## Future Roadmap
 

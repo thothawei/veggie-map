@@ -1,6 +1,10 @@
 <?php
 
+use App\AiOffice\Http\Controllers\AgentController as AiOfficeAgentController;
 use App\AiOffice\Http\Controllers\HealthController as AiOfficeHealthController;
+use App\AiOffice\Http\Controllers\ProjectController as AiOfficeProjectController;
+use App\AiOffice\Http\Controllers\TaskController as AiOfficeTaskController;
+use App\AiOffice\Http\Controllers\TaskDependencyController as AiOfficeTaskDependencyController;
 use App\Http\Controllers\Api\Admin\MenuItemController as AdminMenuItemController;
 use App\Http\Controllers\Api\Admin\RestaurantReportController as AdminRestaurantReportController;
 use App\Http\Controllers\Api\Admin\RestaurantVerificationController as AdminRestaurantVerificationController;
@@ -50,6 +54,25 @@ Route::middleware('throttle:api')->group(function () {
         // 註冊過也看不到，這是預設拒絕不是事後補檢查。
         Route::prefix('ai-office')->middleware('ai-office')->group(function () {
             Route::get('/health', [AiOfficeHealthController::class, 'show']);
+
+            Route::apiResource('projects', AiOfficeProjectController::class);
+
+            Route::get('/projects/{project}/tasks', [AiOfficeTaskController::class, 'index']);
+            Route::post('/projects/{project}/tasks', [AiOfficeTaskController::class, 'store']);
+
+            Route::get('/tasks/{task}', [AiOfficeTaskController::class, 'show']);
+            Route::patch('/tasks/{task}', [AiOfficeTaskController::class, 'update']);
+
+            // 只有這條路徑會產生循環相依（新任務沒有下游），環的偵測守在這裡。
+            Route::post('/tasks/{task}/dependencies', [AiOfficeTaskDependencyController::class, 'store']);
+            Route::delete(
+                '/tasks/{task}/dependencies/{dependency}',
+                [AiOfficeTaskDependencyController::class, 'destroy'],
+            );
+
+            // Agent 唯讀：開放 API 建立 Agent 等於開放任意設定 system prompt 與權限。
+            Route::get('/agents', [AiOfficeAgentController::class, 'index']);
+            Route::get('/agents/{agent}', [AiOfficeAgentController::class, 'show']);
         });
 
         Route::prefix('admin')->group(function () {

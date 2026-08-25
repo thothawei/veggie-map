@@ -108,7 +108,7 @@ User → POST /api/v1/ai-office/projects        （Controller，同步只建 Pro
 
 ## 5. Database Plan
 
-規格 §11 的 18 張表，扣掉已存在的 `users`，其餘 17 張全部新增，一律加 `ai_office_` 前綴避免與
+規格 §11 的 17 張表，扣掉已存在的 `users`，其餘 16 張全部新增，一律加 `ai_office_` 前綴避免與
 餐廳領域撞名（例如 `reviews`、`messages` 這種通用字）。
 
 | 規格表名 | 本專案表名 | 備註 |
@@ -284,9 +284,9 @@ AI Office 需要的增量：
 
 | Phase | 規格對應 | 本專案內容 | 狀態 |
 | --- | --- | --- | --- |
-| 1 | §72 P1 | 基礎設施驗證（Laravel/MySQL/Redis/Docker/Sanctum 皆已存在）、`config/ai_office.php` 設定骨架、`.env.example` 補鍵、RBAC 四角色擴充、真實 health/readiness 端點 + 測試 | ← 現在做 |
-| 2 | §72 P2 | 17 張 migration + Model + Project/Agent/Task CRUD + TaskDependency（含環偵測） | |
-| 3 | §72 P3 | LlmProviderInterface / ClaudeProvider / MockProvider / AgentRuntime（先用 Mock 驗） | |
+| 1 | §72 P1 | 基礎設施驗證（Laravel/MySQL/Redis/Docker/Sanctum 皆已存在）、`config/ai_office.php` 設定骨架、`.env.example` 補鍵、RBAC 四角色擴充、真實 health/readiness 端點 + 測試 | ✅ 完成 |
+| 2 | §72 P2 | 16 張 migration + 16 個 Model + Project/Task CRUD + Agent 唯讀 + TaskDependency（含環偵測）+ 初始 Agent seeder | ✅ 完成 |
+| 3 | §72 P3 | LlmProviderInterface / ClaudeProvider / MockProvider / AgentRuntime（先用 Mock 驗） | ← 現在做 |
 | 4 | §72 P4 | AgentOrchestrator / CeoPlanner（JSON schema 驗證）/ AgentSelector / Queue / Retry | |
 | 5 | §72 P5 | 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist | |
 | 6 | §72 P6 | Approval / RiskLevel / human-in-the-loop | |

@@ -13,7 +13,8 @@
 [implementation-plan.md](implementation-plan.md)，這裡只追進度：
 
 - [x] Phase 1 — 基礎設施驗證 + `config/ai_office.php` + RBAC 四角色 + readiness 端點（7 個測試）
-- [ ] Phase 2 — 17 張 migration + Model + Project/Agent/Task CRUD + TaskDependency（含環偵測）
+- [x] Phase 2 — 16 張 migration + 16 個 Model + Project/Task CRUD + Agent 唯讀 + TaskDependency
+      循環偵測 + 初始 Agent seeder（33 個 AI Office 測試）
 - [ ] Phase 3 — LlmProvider / ClaudeProvider / MockProvider / AgentRuntime
 - [ ] Phase 4 — AgentOrchestrator / CeoPlanner / AgentSelector / Queue / Retry
 - [ ] Phase 5 — 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist

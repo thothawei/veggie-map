@@ -24,6 +24,8 @@ class DatabaseSeeder extends Seeder
             DietTypeSeeder::class,
             FeatureSeeder::class,
             RestaurantSeeder::class,
+            // AI Office 子系統的初始 Agent 陣容（規格第 67 節）。可重複執行。
+            AiOfficeAgentSeeder::class,
         ]);
     }
 }

@@ -191,3 +191,77 @@ GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.
 （`AppServiceProvider::boot()` 的 `RateLimiter::for('api', ...)`）。底層走
 `CACHE_STORE=redis`，是 Redis-based limiter，不需要額外套件。超過限制回 429，
 回應帶 `X-RateLimit-Limit`／`X-RateLimit-Remaining` header。
+
+## AI Office 子系統（`/api/v1/ai-office/*`）
+
+多 Agent 開發平台的端點。整體規劃見 [implementation-plan.md](implementation-plan.md)。
+
+**所有端點都需要 `auth:sanctum` + AI Office 角色**（`admin` / `manager` / `developer` /
+`viewer`）。餐廳地圖的一般消費者角色 `user` 一律 403——這是路由層的 `ai-office` 中介層
+預設拒絕，不是各端點各自檢查。
+
+| Method | Path | 說明 | 可寫入的角色 |
+|---|---|---|---|
+| GET | `/ai-office/health` | readiness：DB／Redis／佇列／workspace 真實連線檢查 | 唯讀 |
+| GET | `/ai-office/projects` | 專案列表（`?status=`、`?per_page=`） | 唯讀 |
+| POST | `/ai-office/projects` | 建立專案 | admin, manager, developer |
+| GET | `/ai-office/projects/{id}` | 專案詳情（含 `task_count`） | 唯讀 |
+| PUT/PATCH | `/ai-office/projects/{id}` | 更新專案 | admin, manager, developer |
+| DELETE | `/ai-office/projects/{id}` | 刪除專案（連帶刪除底下任務） | admin, manager |
+| GET | `/ai-office/projects/{id}/tasks` | 任務列表（`?status=`、`?assigned_agent_id=`），依 priority 由大到小 | 唯讀 |
+| POST | `/ai-office/projects/{id}/tasks` | 建立任務，可帶 `dependencies: [taskId,...]` | admin, manager, developer |
+| GET | `/ai-office/tasks/{id}` | 任務詳情，含 `dependencies_satisfied` 布林值 | 唯讀 |
+| PATCH | `/ai-office/tasks/{id}` | 更新任務（狀態、優先度、指派 Agent） | admin, manager, developer |
+| POST | `/ai-office/tasks/{id}/dependencies` | 新增相依，body `{ "depends_on_task_ids": [1,2] }` | admin, manager, developer |
+| DELETE | `/ai-office/tasks/{id}/dependencies/{dep}` | 移除相依 | admin, manager, developer |
+| GET | `/ai-office/agents` | Agent 列表（`?role=`、`?status=`），不含 system prompt | 唯讀 |
+| GET | `/ai-office/agents/{id}` | Agent 詳情，含 system prompt、工具清單、權限表、目前任務數 | 唯讀 |
+
+### 健康檢查
+
+`GET /ai-office/health` 每一項都是真的去連線，不是讀設定檔回報。任一項失敗回 **503** 且
+`data.status = "degraded"`。回應永遠不含 API key，只回 `llm.api_key_configured` 布林值。
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "checks": {
+      "database": { "ok": true, "latency_ms": 1.2, "driver": "mysql", "database": "veggiemap" },
+      "redis":    { "ok": true, "latency_ms": 0.8, "client": "phpredis" },
+      "queue":    { "ok": true, "latency_ms": 0.5, "connection": "redis", "queue": "ai-office", "pending_jobs": 0 },
+      "workspace":{ "ok": true, "latency_ms": 0.1, "path": "/var/www/html/workspace" }
+    },
+    "llm": { "provider": "mock", "api_key_configured": false },
+    "limits": { "max_agent_steps": 25, "max_tool_calls": 50, "max_retries": 3, "max_token_budget": 200000 },
+    "sandbox_enabled": true
+  }
+}
+```
+
+### 循環相依
+
+`POST /ai-office/tasks/{id}/dependencies` 會在寫入前做 DFS 偵測，擋掉自環、直接互指與
+間接繞回（A→B→C→A）。命中時回 **422**：
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "...",
+    "fields": { "depends_on_task_ids": ["這組相依會造成循環相依，整條任務鏈會永遠等不到前置完成。"] }
+  }
+}
+```
+
+擋在寫入前的理由：成環之後不會有任何錯誤訊息，那條鏈上的每個任務都在等前面的完成、
+永遠等不到，只是安靜地不動——跑起來才發現的成本遠高於建立時就拒絕。
+
+菱形相依（B、C 都依賴 A，D 依賴 B 與 C）是合法 DAG，不會被擋。
+
+### 任務相依是否滿足
+
+`dependencies_satisfied` 只在所有前置任務都是 `completed` 或 `approved` 時為 `true`。
+`failed` / `cancelled` 的前置**不算滿足**——否則前面壞掉的整條鏈會繼續往下跑。
