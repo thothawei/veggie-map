@@ -57,7 +57,10 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: pdo_mysql, mbstring, bcmath, gd, zip
+          # redis 是 ext-redis（phpredis）：REDIS_CLIENT 預設 phpredis，composer 沒裝
+          # predis，所以少了這個擴充 Redis::connection() 會直接丟例外，AI Office 的
+          # readiness 檢查固定回 503。本機 docker 映像有裝，CI 之前沒有。
+          extensions: pdo_mysql, mbstring, bcmath, gd, zip, redis
           coverage: none
 
       - uses: actions/setup-node@v4
