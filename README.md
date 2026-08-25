@@ -322,7 +322,7 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
   資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
 
-目前進度：**Phase 11 完成**（事件流＋SSE、Vue Dashboard、Pixel Office、用量成本與 Agent 記憶、Docker 沙箱）。已可用的端點：
+目前進度：**12 個 Phase 全部完成**（事件流＋SSE、Vue Dashboard、Pixel Office、用量成本與 Agent 記憶、Docker 沙箱、完整 Demo）。已可用的端點：
 
 | Method | Path | 說明 |
 |---|---|---|
@@ -392,6 +392,19 @@ SQL 只允許 config 裡的前綴。git push `main`／`master` 一律拒絕。
 把「建立任意容器」的能力給 app container，實質接近 host root**，權衡與適用範圍寫在
 [docker-compose.sandbox.yml](docker-compose.sandbox.yml) 檔頭。Docker 工具（`docker_build`／
 `docker_run`…）另有開關 `AI_OFFICE_SANDBOX_DOCKER_TOOL`，預設關閉。
+
+**跑一次完整 Demo**（Phase 12，規格 §79 的 Todo API 情境）：
+
+```bash
+docker compose exec app php artisan ai-office:demo
+```
+
+一句需求 → CEO 拆成四個有相依關係的任務 → backend／qa／devops 三種 Agent 依序執行、
+用 `write_file` 真的把檔案寫進 workspace → 最後一步撞到權限層級的核准、停下來等人 →
+核准後自動接著跑完 → 專案 `completed`。全程使用假模型（`DemoScriptProvider`），
+**不會送出任何真的 Claude API 請求**，但會真的寫資料庫與 workspace 檔案——跑完可以直接進
+`/ai-office/projects/{id}` 看同一份資料的面板版本。`--fresh` 重來一次、`--reject` 示範
+核准被拒絕時任務會停在 `rejected` 而不是偷偷往下跑。
 
 **人工核准**（Phase 6）：`PermissionGate` 先看 Agent 權限再疊 `RiskLevel` 門檻。
 `git_push=allow` 在預設 high 門檻下仍要人按；把 threshold 升到 `critical` 才會直接執行。

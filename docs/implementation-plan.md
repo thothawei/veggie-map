@@ -298,12 +298,12 @@ AI Office 需要的增量：
 | 4 | §72 P4 | AgentOrchestrator / CeoPlanner（JSON schema 驗證）/ AgentSelector / Queue / Retry | ✅ 完成 |
 | 5 | §72 P5 | 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist | ✅ 完成 |
 | 6 | §72 P6 | Approval / RiskLevel / human-in-the-loop | ✅ 完成 |
-| 7 | §72 P7 | Activity + SSE + Agent/Task 狀態即時推送 | ← 現在做 |
-| 8 | §72 P8 | Vue Dashboard：CommandCenter / AgentCard / TaskBoard / TaskDetail / ApprovalPanel / Usage | |
-| 9 | §72 P9 | Pixel Office（CSS + SVG） | |
-| 10 | §72 P10 | TokenUsage / Cost / AgentMemory / Agent 效能統計 | |
+| 7 | §72 P7 | Activity + SSE + Agent/Task 狀態即時推送 | ✅ 完成 |
+| 8 | §72 P8 | Vue Dashboard：CommandCenter / AgentCard / TaskBoard / TaskDetail / ApprovalPanel / Usage | ✅ 完成 |
+| 9 | §72 P9 | Pixel Office（CSS + SVG） | ✅ 完成 |
+| 10 | §72 P10 | TokenUsage / Cost / AgentMemory / Agent 效能統計 | ✅ 完成 |
 | 11 | §72 P11 | Docker Sandbox / GitHub Actions CI | ✅ 完成 |
-| 12 | §72 P12 | 完整 Demo（規格 §79 的 Todo API 情境） | |
+| 12 | §72 P12 | 完整 Demo（規格 §79 的 Todo API 情境） | ✅ 完成 |
 
 每個 Phase 走 `Inspect → Plan → Implement → Test → Fix → Verify → Document`，
 完成後照規格 §75 回報 PHASE STATUS，才進下一階段。

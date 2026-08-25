@@ -2319,3 +2319,60 @@ root 所有）、`--pids-limit`（fork bomb 的第二道防線，第一道是 Co
 → 沙箱回結果」（那需要掛 socket 的環境＋一個真的專案 workspace）；`docker-compose.sandbox.yml`
 本身也還沒有人實際起過。目前的證據是單元測試（參數正確）＋ host 實測（參數有效），
 中間那段接線只有型別與測試保證。
+
+---
+
+## 2026-08-25 — AI Office Phase 12：完整 Demo（12 個 Phase 到此全部完成）
+
+`php artisan ai-office:demo` 跑規格第 79 節的 Todo API 情境：一句需求 → CEO 拆成四個有相依
+關係的任務 → backend／qa／devops 依序執行、用 `write_file` 真的把檔案寫進 workspace →
+最後一步撞到核准停下來 → 人核准 → 自動接著跑完 → 專案 `completed`。全程假模型
+（`DemoScriptProvider`），一個字都不會送到真的 Claude API。
+
+這是整個子系統第一次**端到端**跑完，也因此抓到三個只有在完整鏈路下才會現形的問題。
+
+### 一、Phase 10 的記憶把 Demo 腳本比對污染了
+
+腳本原本用 `str_contains(整段 prompt, 任務標題)` 決定回什麼。Phase 10 之後 prompt 尾巴會
+附上 Agent 的記憶——「任務『設計 Todo 資料表』完成：…」——所以第二個任務的 prompt 裡同時
+含有自己的標題**和第一個任務的標題**，比中了前者的腳本、拿到它的收尾句，於是安靜地什麼
+都沒做就「完成」了。症狀只是 workspace 少了一個檔案，四個任務全都顯示 completed。
+改成只認 prompt 第一行的 `任務：<標題>`。
+
+這個坑值得記：**兩個各自正確的功能（記憶、腳本比對）湊在一起才錯**，而且錯得很安靜。
+
+### 二、容器解析順序讓指令版的 Demo 規劃直接失敗
+
+`handle(DemoRunner $runner)` 的 method injection 會在 `handle()` 執行**之前**就把
+DemoRunner → AgentOrchestrator → CeoPlanner → LlmProviderInterface 一路解析完。所以在
+`handle()` 裡才切換 provider 太晚了：Planner 手上握的仍是預設的 MockProvider（佇列空的），
+規劃丟例外、專案變成 failed。改成先 `bootstrapEnvironment()` 再 `app(DemoRunner::class)`。
+測試版本沒中，因為它在 setUp 就切好了——**同一段邏輯在測試裡對、在指令裡錯**。
+
+### 三、一開始寫了一條永遠會綠的測試
+
+「任務照相依順序跑」原本斷言 `B.started_at >= A.completed_at`。四個任務全都沒跑時兩邊都是
+null，`null >= null` 為 true，測試照樣綠——正是「反向驗證」要抓的那種假保護。
+補上四個時間戳都不可為 null 的前置斷言之後，這條測試才真的守得住東西。
+
+### 核准那一步為什麼用「權限層級」而不是降低全域門檻
+
+第一版把 `approvals.threshold` 降成 medium，結果四個任務每一個寫檔都要人按，示範變成
+點四次核准。改成只把 Demo 的維運 Agent 的 `write_file` 權限設成 `approval`（規格第 22 節的
+另一條路徑），門檻維持預設 high：其他任務照常跑，只有最後一步停下來等人。
+
+也沒有用天生就要核准的 `deploy_staging`：那個能力到現在仍然沒有對應的工具，核准之後只會
+得到「工具尚未實作」、任務直接失敗——那示範的是缺口，不是流程。
+
+### 驗證
+
+後端 386 → **398 個測試全綠 ＋ 4 skipped**（12 個新測試：7 個流程、5 個指令層）。
+PHPStan 0 error、Pint PASS。**反向驗證兩項**：把腳本比對改回 `str_contains` → 1 條紅；
+拿掉核准後的 `tryDispatch` → 3 條紅。
+
+PHPStan 過程中還擋下一個我自己寫錯的東西：它說 `$task->agent?->name ?? …` 的 `?.` 多餘，
+但 `assigned_agent_id` 其實是 nullable——照它說的拿掉就會變成對 null 取屬性。改用明確的
+三元判斷，並把理由寫在該行上面，免得下次有人又「照 PHPStan 說的改」。
+
+**仍未做的：** 這個指令還沒有在開發資料庫上真的跑過（會寫 DB 與 workspace 檔案，要先得到
+同意）。目前的證據是測試資料庫上的端到端驗證。

@@ -31,7 +31,8 @@
 - [x] Phase 11 — Docker Sandbox（SandboxManager／ProcessRunner／DockerSandboxEngine，
       指令真的丟進容器跑，硬限制全上）＋ CI 預先 pull 沙箱映像；15 個測試
       （11 個單元＋4 個整合，整合測試沒有 docker 就 skip）
-- [ ] Phase 12 — 完整 Demo
+- [x] Phase 12 — 完整 Demo（`php artisan ai-office:demo`，規格 §79 的 Todo API 情境：
+      規劃→派工→工具真的寫檔→撞核准停下→人核准→跑完；12 個測試）
 
 ## Phase 8.5 — 地址搜尋（Geocoding，優先）✅ 已完成 2026-08-24
 
