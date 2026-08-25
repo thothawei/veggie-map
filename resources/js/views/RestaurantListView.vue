@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import client from '@/api/client';
 import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
@@ -8,13 +8,23 @@ import { ALL_CITIES, useCities } from '@/composables/useCities';
 import type { ApiSuccess, Restaurant, RestaurantSearchParams } from '@/types';
 
 const router = useRouter();
+const route = useRoute();
 
 // 列表頁維持它原本「列出全部」的行為當預設，城市是可選的收窄條件——地圖頁不同，
 // 那裡一定得看著某個地方，所以退回第一個城市。
 const { cities, loading: citiesLoading, activeCity, activeSlug, selectCity } = useCities({ fallback: 'all' });
 
 const restaurants = ref<Restaurant[]>([]);
-const keyword = ref('');
+
+/**
+ * 輸入框裡的草稿；只有按下搜尋才寫進網址。每打一個字就推一筆歷史紀錄的話，
+ * 使用者按上一頁會變成逐字倒退，而不是回到上一次的搜尋結果。
+ */
+const keywordDraft = ref('');
+
+/** 網址才是「現在正在搜什麼」的真相來源——重新整理、分享連結、上一頁因此都對。 */
+const committedKeyword = computed(() => (typeof route.query.keyword === 'string' ? route.query.keyword : ''));
+
 const filters = ref<Partial<RestaurantSearchParams>>({});
 const nextCursor = ref<string | null>(null);
 const loading = ref(false);
@@ -40,7 +50,7 @@ async function search(reset = true) {
     try {
         const response = await client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
             params: {
-                keyword: keyword.value || undefined,
+                keyword: committedKeyword.value || undefined,
                 bbox: bbox.value,
                 sort: 'newest',
                 per_page: 20,
@@ -69,11 +79,50 @@ async function search(reset = true) {
     }
 }
 
+function submitSearch() {
+    const next = keywordDraft.value.trim();
+
+    if (next === committedKeyword.value) {
+        // 網址沒變就不會觸發 watch，但使用者按了搜尋就該有動作（例如想重新拉一次結果）。
+        search(true);
+
+        return;
+    }
+
+    router.push({ query: { ...route.query, keyword: next || undefined } });
+}
+
+function clearKeyword() {
+    const query = { ...route.query };
+    delete query.keyword;
+
+    router.push({ query });
+}
+
 function goToDetail(restaurant: Restaurant) {
     router.push({ name: 'restaurant-detail', params: { id: restaurant.id } });
 }
 
 const scopeLabel = computed(() => activeCity.value?.label ?? '全部城市');
+
+const emptyMessage = computed(() => {
+    const where = activeCity.value ? activeCity.value.label : '';
+    const what = committedKeyword.value ? `符合「${committedKeyword.value}」的餐廳` : '符合條件的餐廳';
+
+    return `${where}沒有${what}。`;
+});
+
+// 空結果要給得出下一步，不是只說「沒有」。只列真正適用的建議——沒下關鍵字卻叫人
+// 「改個關鍵字」只會讓人困惑。
+const emptySuggestions = computed(() => {
+    const suggestions: string[] = [];
+
+    if (committedKeyword.value) suggestions.push('換個關鍵字');
+    if (hasActiveFilters.value) suggestions.push('清掉篩選條件');
+    if (activeCity.value) suggestions.push('切換到其他城市');
+
+    return suggestions;
+});
 const hasActiveFilters = computed(
     () => Object.values(filters.value).some((value) => value !== undefined && value !== null),
 );
@@ -86,10 +135,19 @@ watch(filters, () => search(true), { deep: true });
  * key 統一觸發：清單還沒載完是 null（不查），載完後變成 bbox 或 ALL_CITIES，
  * 之後只要使用者換城市才會再變。
  */
-const searchScope = computed(() => (citiesLoading.value ? null : (bbox.value ?? ALL_CITIES)));
+const searchScope = computed(() => {
+    if (citiesLoading.value) return null;
+
+    return JSON.stringify([bbox.value ?? ALL_CITIES, committedKeyword.value]);
+});
 
 watch(searchScope, (scope) => {
     if (scope !== null) search(true);
+}, { immediate: true });
+
+// 上一頁／下一頁或直接改網址時，輸入框要跟著網址走，不然畫面上的字跟結果會對不起來。
+watch(committedKeyword, (value) => {
+    keywordDraft.value = value;
 }, { immediate: true });
 </script>
 
@@ -105,12 +163,13 @@ watch(searchScope, (scope) => {
 
         <div class="toolbar">
             <input
-                v-model="keyword"
+                v-model="keywordDraft"
                 type="search"
                 :placeholder="activeCity ? `在${activeCity.label}搜尋餐廳名稱` : '搜尋餐廳名稱'"
-                @keyup.enter="search(true)"
+                @keyup.enter="submitSearch"
             />
-            <button type="button" @click="search(true)">搜尋</button>
+            <button type="button" @click="submitSearch">搜尋</button>
+            <button v-if="committedKeyword" type="button" class="clear-keyword" @click="clearKeyword">清除</button>
         </div>
         <FilterDrawer v-model:filters="filters" />
 
@@ -130,11 +189,8 @@ watch(searchScope, (scope) => {
 
         <p v-if="loadFailed" class="notice error" role="alert">載入失敗，請再試一次。</p>
         <p v-else-if="!loading && restaurants.length === 0" class="notice">
-            {{ activeCity ? `${activeCity.label}沒有符合條件的餐廳。` : '沒有符合條件的餐廳。' }}
-            <template v-if="hasActiveFilters">試著清掉篩選條件</template>
-            <template v-if="hasActiveFilters && activeCity">，或</template>
-            <template v-if="activeCity">切換到其他城市看看</template>
-            <template v-if="hasActiveFilters || activeCity">。</template>
+            {{ emptyMessage }}
+            <span v-if="emptySuggestions.length">{{ emptySuggestions.join('，或') }}。</span>
         </p>
 
         <button v-if="nextCursor" type="button" class="more" :disabled="loading" @click="search(false)">
@@ -170,6 +226,12 @@ watch(searchScope, (scope) => {
     border: none;
     border-radius: 6px;
     cursor: pointer;
+}
+
+.toolbar .clear-keyword {
+    background: #fff;
+    color: #2f855a;
+    border: 1px solid #cbd5e0;
 }
 
 .scope {
