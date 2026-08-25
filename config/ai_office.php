@@ -262,6 +262,33 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Events / SSE（規格第 35～36 節）
+    |--------------------------------------------------------------------------
+    |
+    | `ai_office_activities` 是唯一事件來源，SSE 用 id 做增量拉取（表上有
+    | `(project_id, id)` 索引）。三個上限都是為了「長連線不要吃光 PHP-FPM worker」
+    | 這個風險（見 docs/implementation-plan.md 第 13 節）：
+    |
+    |   max_duration_seconds     單一連線活多久，時間到主動關閉讓瀏覽器重連
+    |   max_connections_per_user 同一使用者同時能開幾條，超過回 429 不是排隊
+    |   poll_interval_ms         每輪查資料庫的間隔；調小會變成打 DB 的迴圈
+    |
+    | ticket_ttl_seconds：EventSource 不能帶 Authorization 標頭，所以前端先用
+    | Bearer token 換一張一次性、綁使用者＋專案的短期票，才用它開串流。
+    | 不把 Sanctum token 放進網址——網址會進 access log 與瀏覽器歷史。
+    |
+    */
+
+    'events' => [
+        'poll_interval_ms' => (int) env('AI_OFFICE_SSE_POLL_MS', 1000),
+        'max_duration_seconds' => (int) env('AI_OFFICE_SSE_MAX_SECONDS', 60),
+        'max_connections_per_user' => (int) env('AI_OFFICE_SSE_MAX_CONNECTIONS', 3),
+        'batch_size' => (int) env('AI_OFFICE_SSE_BATCH', 100),
+        'ticket_ttl_seconds' => (int) env('AI_OFFICE_SSE_TICKET_TTL', 60),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Approvals（規格第 22～24 節）
     |--------------------------------------------------------------------------
     |

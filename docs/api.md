@@ -220,6 +220,46 @@ GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.
 | GET | `/ai-office/approvals/{id}` | 單筆核准（含 payload、過期時間） | 唯讀 |
 | POST | `/ai-office/approvals/{id}/approve` | 核准；可選 `comment`。HTTP 內不跑工具，丟 `ProcessApprovalJob` | admin, manager |
 | POST | `/ai-office/approvals/{id}/reject` | 拒絕；工具不執行，任務標 `rejected` | admin, manager |
+| GET | `/ai-office/projects/{id}/activities` | 事件流列表（`?after_id=`、`?type=`、`?task_id=`、`?per_page=`） | 唯讀 |
+| POST | `/ai-office/projects/{id}/events/ticket` | 換一張開 SSE 用的一次性票 | 唯讀 |
+| GET | `/ai-office/projects/{id}/events` | SSE 事件串流（`?ticket=`、`?after_id=`） | 憑票，票綁使用者與專案 |
+
+### 事件流與 SSE（規格 §35／§36）
+
+所有 Agent 動作、任務與 Agent 的狀態變動都寫進 `ai_office_activities`，前端有兩條讀法：
+
+**補漏用的列表** `GET /ai-office/projects/{id}/activities`
+
+- 不帶 `after_id`：由新到舊，看最近發生什麼。
+- 帶 `after_id`：只回比它新的事件，且改成由舊到新——這是斷線重連後補齊的順序。
+- `meta.latest_id` 是這個專案目前最大的事件 id，拿它當串流起點就不會重收歷史。
+
+**即時推送** `GET /ai-office/projects/{id}/events`
+
+瀏覽器的 `EventSource` 不能帶 `Authorization` 標頭，所以先用 Bearer token 換票：
+
+```
+POST /ai-office/projects/12/events/ticket
+→ { "success": true, "data": { "ticket": "…", "expires_in": 60, "latest_id": 348 } }
+
+new EventSource('/api/v1/ai-office/projects/12/events?ticket=…&after_id=348')
+```
+
+票只能用一次、預設 60 秒過期、綁定發票時的使用者與專案；不把 Sanctum token 放進網址，
+因為網址會進 access log 與瀏覽器歷史。無效或過期的票回 **401**。
+
+串流會送三種事件：
+
+| event | 內容 | 用途 |
+| --- | --- | --- |
+| `activity` | 一筆事件的完整 JSON，`id:` 是事件 id | 主要資料 |
+| `heartbeat` | `{ "last_id": 348 }` | 沒有新事件時也要有動靜，順便回報游標 |
+| `reconnect` | `{ "last_id": 348 }` | 連線壽命到期，帶著 `last_id` 重連即可 |
+
+上限全部在 `config/ai_office.php` 的 `events`：單一連線預設活 60 秒、同一使用者最多
+3 條（超過回 **429** `TOO_MANY_CONNECTIONS`，不排隊）、每輪最多送 100 筆。這些是為了
+避免長連線佔滿 PHP-FPM worker。瀏覽器自動重連時帶的 `Last-Event-ID` 標頭優先於
+`after_id`，重連不會漏事件。
 
 ### 健康檢查
 

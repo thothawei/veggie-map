@@ -2041,3 +2041,58 @@ CI 現況：`32819998158` 兩個 job 都綠，main 從 `6043905` 紅到 `c87e8e3
   登入，評論怎麼來會是下一個問題。
 - 移除的只是入口，`/login`／`/register`／`/favorites`／`/profile` 路由與畫面都還在，
   直接輸入網址仍可到達。要不要連路由一起收掉是另一個決定。
+
+---
+
+## 2026-08-25 — AI Office Phase 7：Activity 事件流 ＋ SSE 即時推送
+
+### 先修掉 Cursor 上一版留下的型別錯誤
+
+接手時 `npx vue-tsc --noEmit` 兩個錯：`formatCuisines()` 的參數宣告成 `{ label: string }[]`，
+但 `Restaurant.cuisines` 帶 `code`，TypeScript 的「物件字面值多餘屬性檢查」讓
+`format.test.ts` 直接紅。**`npm run build` 的第一步就是 `vue-tsc --noEmit`，所以這是會擋
+CI 前端 job 的錯，不是型別潔癖**——`npx tsc` 跑不出正確結果（不認 `.vue`），要用 `vue-tsc`。
+修法是把 `Cuisine` 抽成 `resources/js/types/index.ts` 的具名介面，兩邊共用。
+
+Cursor 那一版的後端（`CuisineCatalog`／`AddressFormatter`／OSM `addr:*` 拼地址）
+跑過 351 個測試、PHPStan、Pint 全綠，沒有其他問題。
+
+### Phase 7 做了什麼
+
+`ai_office_activities` 從 Phase 3 起就一直有人寫（AgentRuntime／Orchestrator／
+CeoPlanner／ApprovalService），但**沒有任何一條路徑讀得到**。這階段補上讀取端：
+
+- `GET /ai-office/projects/{id}/activities`：分頁列表。不帶 `after_id` 由新到舊，
+  帶了就只回更新的、且改成由舊到新——這是斷線補漏要的順序，兩種順序混用前端接不起來。
+  `meta.latest_id` 讓前端拿到串流起點，不用重收整段歷史。
+- `GET /ai-office/projects/{id}/events`：SSE。以自增 id 當游標（不是 `created_at`：
+  同一秒可以有多筆，用時間當游標會在毫秒邊界漏送或重送），送 `activity`／`heartbeat`／
+  `reconnect` 三種事件，`Last-Event-ID` 標頭優先於 `after_id`。
+- Task／Agent 狀態變動用 **observer** 寫進事件流，不是在每個改狀態的地方補一行 `record()`。
+  狀態會在 Controller、Orchestrator、Runtime、RetryFailedTaskJob 四處被改，逐處補的話
+  日後多一條路徑就會靜靜地少一個事件；observer 看的是「status 欄位髒了沒」。
+
+### 兩個設計決定
+
+**SSE 的認證用一次性票，不是把 token 塞進網址。** `EventSource` 不能帶
+`Authorization` 標頭，而 query string 會進 nginx access log 與瀏覽器歷史——把長期有效的
+Sanctum token 放進去等於外洩。做法是先用 Bearer token 打
+`POST /projects/{id}/events/ticket` 換一張綁使用者＋專案、預設 60 秒、**兌換即作廢**的票。
+票在 cache 裡存的是 `hash('sha256', $ticket)`，不是明文。串流路由因此掛在 `auth:sanctum`
+群組外面，角色檢查改用兌換出來的使用者在 Controller 內再做一次（票發出後角色可能被降級）。
+
+**連線上限是 429 不是排隊。** implementation-plan 第 13 節列的風險是「長連線佔滿
+PHP-FPM worker」，排隊等於同樣佔著 worker。每人預設 3 條，計數放 cache 且帶 TTL
+（連線壽命的兩倍）——worker 被 kill 導致 `release()` 沒跑到時，計數會自己過期，
+不會把使用者永久鎖在門外。
+
+### 驗證
+
+13 個新測試，全套 **338 → 351 個測試全綠**，PHPStan 0 error、Pint PASS、
+前端 140 個測試與 `vue-tsc` 全綠。SSE 測試是真的跑 `streamedContent()` 讓 callback 執行，
+不是只斷言標頭。反向驗證：`max_connections_per_user` 設 0 → 429；同一張票用第二次 → 401；
+拿別的專案的 id 兌換 → 401；連續開兩條（上限 1）→ 都成功，證明名額真的有還回去。
+
+**沒有做的：** 前端還沒有任何東西訂閱這條串流（那是 Phase 8 的 Dashboard），
+所以只在測試環境驗證過，沒有在瀏覽器裡開過真的 `EventSource`。壓測（多少條連線會
+壓垮 PHP-FPM）也還沒做——上限值是保守猜測，不是量測結果。

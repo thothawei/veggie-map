@@ -20,7 +20,7 @@
 - [x] Phase 4 — AgentOrchestrator / CeoPlanner / AgentSelector / Queue / Retry
 - [x] Phase 5 — 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist
 - [x] Phase 6 — Approval / RiskLevel / human-in-the-loop
-- [ ] Phase 7 — Activity + SSE
+- [x] Phase 7 — Activity + SSE（事件流 REST／SSE 串流／一次性票／連線上限／狀態變動 observer，13 個測試）
 - [ ] Phase 8 — Vue Dashboard
 - [ ] Phase 9 — Pixel Office
 - [ ] Phase 10 — TokenUsage / Cost / AgentMemory / Agent 效能

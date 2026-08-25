@@ -1,5 +1,6 @@
 <?php
 
+use App\AiOffice\Http\Controllers\ActivityController as AiOfficeActivityController;
 use App\AiOffice\Http\Controllers\AgentController as AiOfficeAgentController;
 use App\AiOffice\Http\Controllers\ApprovalController as AiOfficeApprovalController;
 use App\AiOffice\Http\Controllers\HealthController as AiOfficeHealthController;
@@ -75,6 +76,11 @@ Route::middleware('throttle:api')->group(function () {
             Route::get('/agents', [AiOfficeAgentController::class, 'index']);
             Route::get('/agents/{agent}', [AiOfficeAgentController::class, 'show']);
 
+            // 事件流（規格第 35／36 節）。SSE 本身在 auth:sanctum 群組外面另外掛，
+            // 因為 EventSource 帶不了 Authorization 標頭，改用這裡發的一次性票。
+            Route::get('/projects/{project}/activities', [AiOfficeActivityController::class, 'index']);
+            Route::post('/projects/{project}/events/ticket', [AiOfficeActivityController::class, 'ticket']);
+
             Route::get('/approvals', [AiOfficeApprovalController::class, 'index']);
             Route::get('/approvals/{approval}', [AiOfficeApprovalController::class, 'show']);
             Route::post('/approvals/{approval}/approve', [AiOfficeApprovalController::class, 'approve']);
@@ -94,4 +100,8 @@ Route::middleware('throttle:api')->group(function () {
             Route::post('/restaurants/{restaurant}/verifications', [AdminRestaurantVerificationController::class, 'store']);
         });
     });
+
+    // SSE 串流：靠 ticket 認證，所以不在 auth:sanctum 群組內；角色檢查在
+    // Controller 裡用兌換出來的使用者再做一次，不是少一道關卡。
+    Route::get('/ai-office/projects/{project}/events', [AiOfficeActivityController::class, 'stream']);
 });

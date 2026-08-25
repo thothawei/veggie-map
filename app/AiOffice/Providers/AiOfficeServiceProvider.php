@@ -10,6 +10,8 @@ use App\AiOffice\Models\Agent;
 use App\AiOffice\Models\Approval;
 use App\AiOffice\Models\Project;
 use App\AiOffice\Models\Task;
+use App\AiOffice\Observers\AgentStatusObserver;
+use App\AiOffice\Observers\TaskStatusObserver;
 use App\AiOffice\Policies\AgentPolicy;
 use App\AiOffice\Policies\ApprovalPolicy;
 use App\AiOffice\Policies\ProjectPolicy;
@@ -78,5 +80,10 @@ class AiOfficeServiceProvider extends ServiceProvider
         Gate::policy(Task::class, TaskPolicy::class);
         Gate::policy(Agent::class, AgentPolicy::class);
         Gate::policy(Approval::class, ApprovalPolicy::class);
+
+        // 狀態變動寫事件流（規格第 35 節）。掛 observer 而不是在每個改狀態的地方
+        // 補一行，理由見 TaskStatusObserver 的說明。
+        Task::observe(TaskStatusObserver::class);
+        Agent::observe(AgentStatusObserver::class);
     }
 }
