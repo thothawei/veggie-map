@@ -2814,3 +2814,36 @@ pending 餐廳加的）。這個清單本來就會包含已下架的重複筆，
 
 後端 479 → **485 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
 **反向驗證**：拿掉 `SafeEmail` 的判斷 → 2 條紅（修正 payload 與斷言之後才有的結果）。
+
+---
+
+## 2026-08-26 — CI 從 Phase 8 起就一直是紅的（本次接手才發現）
+
+推完前面幾批之後才去看 GitHub Actions——**從 2026-08-25 的 Phase 8 到現在，
+每一次 push 都是紅的**，我這次接手時沒有先確認基線就開始加功能，這是流程上的疏失
+（先前的紀錄裡也沒有人提到 CI 紅了）。
+
+### 真因：一條依賴機器時區的測試
+
+```
+AssertionError: expected '08/25 09:42' to be '08/25 17:42'
+resources/js/ai-office/components/dashboard/ActivityFeed.test.ts:34
+```
+
+`formatEventTime()` 用的是 `Date` 的**本機時間** getter——那是正確的產品行為
+（事件流要顯示看的人當地的時間）。錯的是測試：fixture 是 `+08:00` 的
+`2026-08-25T17:42:00`，斷言寫死 `08/25 17:42`，在 Asia/Taipei 綠、在 GitHub Actions
+的 UTC runner 紅。
+
+本機用 `TZ=UTC npx vitest run` 一次就重現，不需要去 CI 上試。
+
+### 修法：釘死測試時區
+
+`vitest.config.ts` 加 `env: { TZ: 'Asia/Taipei' }`。這跟 `open_now` 那組測試用
+`CarbonImmutable::setTestNow()` 釘死「現在幾點」是同一件事：**跟環境有關的東西
+不釘住，測試就是「有時綠有時紅」的假保護**。
+
+選 Asia/Taipei 而不是 UTC，是因為這個產品的主要使用者在台灣，斷言裡的
+`17:42` 讀起來才有意義。
+
+驗證：`TZ=UTC` 與 `TZ=America/New_York` 各跑一次完整前端套件，253 個測試都綠。

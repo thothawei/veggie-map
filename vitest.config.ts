@@ -23,5 +23,15 @@ export default defineConfig({
         // 不用為了兩種測試分兩套環境。
         environment: 'jsdom',
         setupFiles: ['./resources/js/test/setup.ts'],
+        // 測試跑在固定時區。`formatEventTime()` 用的是 Date 的本機時間 getter
+        // （產品行為正確：事件流要顯示看的人當地的時間），但斷言若跟著機器的時區
+        // 走，本機（Asia/Taipei）綠、GitHub Actions（UTC）紅——CI 自 2026-08-25
+        // Phase 8 起就一直紅在這一條。
+        //
+        // 釘死時區跟 open_now 那組測試釘死「現在幾點」是同一件事：跟環境有關的
+        // 東西不釘住，測試就是「有時綠有時紅」的假保護。用 Asia/Taipei 是因為
+        // 這個產品的主要使用者在台灣，斷言裡的時間讀起來也才有意義。
+        // 本機要重現 CI：`TZ=UTC npx vitest run`。
+        env: { TZ: 'Asia/Taipei' },
     },
 });
