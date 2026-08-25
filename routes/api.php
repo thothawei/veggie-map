@@ -1,6 +1,7 @@
 <?php
 
 use App\AiOffice\Http\Controllers\AgentController as AiOfficeAgentController;
+use App\AiOffice\Http\Controllers\ApprovalController as AiOfficeApprovalController;
 use App\AiOffice\Http\Controllers\HealthController as AiOfficeHealthController;
 use App\AiOffice\Http\Controllers\ProjectController as AiOfficeProjectController;
 use App\AiOffice\Http\Controllers\TaskController as AiOfficeTaskController;
@@ -73,6 +74,11 @@ Route::middleware('throttle:api')->group(function () {
             // Agent 唯讀：開放 API 建立 Agent 等於開放任意設定 system prompt 與權限。
             Route::get('/agents', [AiOfficeAgentController::class, 'index']);
             Route::get('/agents/{agent}', [AiOfficeAgentController::class, 'show']);
+
+            Route::get('/approvals', [AiOfficeApprovalController::class, 'index']);
+            Route::get('/approvals/{approval}', [AiOfficeApprovalController::class, 'show']);
+            Route::post('/approvals/{approval}/approve', [AiOfficeApprovalController::class, 'approve']);
+            Route::post('/approvals/{approval}/reject', [AiOfficeApprovalController::class, 'reject']);
         });
 
         Route::prefix('admin')->group(function () {

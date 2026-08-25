@@ -236,6 +236,12 @@ class AgentRuntimeTest extends TestCase
             'status' => 'pending_approval',
             'risk_level' => 'critical',
         ]);
+        $this->assertDatabaseHas('ai_office_approvals', [
+            'task_id' => $task->id,
+            'action' => 'deploy_production',
+            'status' => 'pending',
+            'risk_level' => 'critical',
+        ]);
 
         // 迴圈真的停在這裡：排好的回覆一則都沒被多用掉。
         $this->assertSame(0, $this->llm->pendingCount());

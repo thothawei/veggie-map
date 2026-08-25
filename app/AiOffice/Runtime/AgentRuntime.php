@@ -12,7 +12,9 @@ use App\AiOffice\Models\Task;
 use App\AiOffice\Models\TaskRun;
 use App\AiOffice\Models\ToolExecution;
 use App\AiOffice\Security\PermissionGate;
+use App\AiOffice\Security\RiskLevel;
 use App\AiOffice\Services\ActivityRecorder;
+use App\AiOffice\Services\ApprovalService;
 use App\AiOffice\Services\TokenUsageService;
 use App\AiOffice\Tools\ToolContext;
 use App\AiOffice\Tools\ToolRegistry;
@@ -35,8 +37,10 @@ class AgentRuntime
         private readonly LlmProviderInterface $provider,
         private readonly ToolRegistry $tools,
         private readonly PermissionGate $gate,
+        private readonly RiskLevel $risk,
         private readonly TokenUsageService $tokenUsage,
         private readonly ActivityRecorder $activities,
+        private readonly ApprovalService $approvals,
     ) {}
 
     public function run(Task $task): TaskRun
@@ -103,9 +107,8 @@ class AgentRuntime
 
                 $outcome = $this->handleToolCall($call, $task, $agent, $taskRun);
 
-                // 需要人工核准：工具沒有執行，任務轉成等待審核就停在這裡。
-                // 這是規格第 26 節「create_approval() → pause_task()」的前半段；
-                // Approval 紀錄與恢復執行在 Phase 6。
+                // 需要人工核准：寫一筆 Approval 之後暫停。工具還沒執行。
+                // 規格第 24 節：沒有核准，CRITICAL／高風險操作不得執行。
                 if ($outcome['pause']) {
                     return $this->pauseRun($task, $agent, $taskRun, $guard, $outcome['content']);
                 }
@@ -139,13 +142,14 @@ class AgentRuntime
     private function handleToolCall(LlmToolCall $call, Task $task, Agent $agent, TaskRun $taskRun): array
     {
         $tool = $this->tools->get($call->name);
-        $effect = $this->gate->effectFor($agent, $call->name);
+        $riskLevel = $this->risk->forAbility($call->name, $tool?->riskLevel());
+        $decision = $this->gate->decide($agent, $call->name, $riskLevel);
 
         // 權限先判、工具存在與否後判：不存在的工具如果剛好也沒授權，
         // 回報「沒有權限」比回報「沒有這個工具」更貼近實際狀況，也不會
         // 讓模型從錯誤訊息推敲出有哪些工具存在但它碰不到。
-        if ($effect === PermissionGate::DENY) {
-            $this->recordExecution($call, $task, $agent, $taskRun, $tool?->riskLevel() ?? 'low', 'denied');
+        if ($decision === PermissionGate::DENY) {
+            $this->recordExecution($call, $task, $agent, $taskRun, $riskLevel, 'denied');
 
             return [
                 'content' => "沒有執行 {$call->name} 的權限。",
@@ -154,8 +158,9 @@ class AgentRuntime
             ];
         }
 
-        if ($effect === PermissionGate::APPROVAL) {
-            $this->recordExecution($call, $task, $agent, $taskRun, $tool?->riskLevel() ?? 'high', 'pending_approval');
+        if ($decision === PermissionGate::APPROVAL) {
+            $execution = $this->recordExecution($call, $task, $agent, $taskRun, $riskLevel, 'pending_approval');
+            $this->approvals->request($task, $agent, $execution, $call);
 
             return [
                 'content' => "{$call->name} 需要人工核准，任務已暫停等待審核。",

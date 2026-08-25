@@ -287,8 +287,11 @@ class AgentOrchestrator
 
         $hasOpen = $statuses->contains(fn (string $status) => in_array($status, $open, true));
         $hasPermanentFail = $project->tasks()
-            ->where('status', 'failed')
-            ->whereColumn('retry_count', '>=', 'max_retries')
+            ->where(function ($query) {
+                $query->where(function ($failed) {
+                    $failed->where('status', 'failed')->whereColumn('retry_count', '>=', 'max_retries');
+                })->orWhere('status', 'rejected');
+            })
             ->exists();
 
         if (! $hasOpen && $hasPermanentFail) {

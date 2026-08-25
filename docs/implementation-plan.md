@@ -293,8 +293,8 @@ AI Office 需要的增量：
 | 3 | §72 P3 | LlmProviderInterface / ClaudeProvider / MockProvider / AgentRuntime + AgentLoopGuard + PermissionGate + TokenUsageService（全程用 Mock 驗，未呼叫真 API） | ✅ 完成 |
 | 4 | §72 P4 | AgentOrchestrator / CeoPlanner（JSON schema 驗證）/ AgentSelector / Queue / Retry | ✅ 完成 |
 | 5 | §72 P5 | 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist | ✅ 完成 |
-| 6 | §72 P6 | Approval / RiskLevel / human-in-the-loop | ← 現在做 |
-| 7 | §72 P7 | Activity + SSE + Agent/Task 狀態即時推送 | |
+| 6 | §72 P6 | Approval / RiskLevel / human-in-the-loop | ✅ 完成 |
+| 7 | §72 P7 | Activity + SSE + Agent/Task 狀態即時推送 | ← 現在做 |
 | 8 | §72 P8 | Vue Dashboard：CommandCenter / AgentCard / TaskBoard / TaskDetail / ApprovalPanel / Usage | |
 | 9 | §72 P9 | Pixel Office（CSS + SVG） | |
 | 10 | §72 P10 | TokenUsage / Cost / AgentMemory / Agent 效能統計 | |

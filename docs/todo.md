@@ -19,7 +19,7 @@
       AgentRuntime + AgentLoopGuard + PermissionGate + TokenUsageService（18 個測試）
 - [x] Phase 4 — AgentOrchestrator / CeoPlanner / AgentSelector / Queue / Retry
 - [x] Phase 5 — 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist
-- [ ] Phase 6 — Approval / RiskLevel / human-in-the-loop
+- [x] Phase 6 — Approval / RiskLevel / human-in-the-loop
 - [ ] Phase 7 — Activity + SSE
 - [ ] Phase 8 — Vue Dashboard
 - [ ] Phase 9 — Pixel Office

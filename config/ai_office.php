@@ -260,4 +260,25 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Approvals（規格第 22～24 節）
+    |--------------------------------------------------------------------------
+    |
+    | 判定順序：Agent 權限 deny → 立刻拒絕；其餘再看風險門檻。
+    | threshold 及以上（含）即使權限是 allow 也要人工核准。`off` 只保留
+    | critical 必核准（規格第 24 節改門檻也改不掉）。invalid 值回退成 high。
+    |
+    */
+
+    'approvals' => [
+        'threshold' => env('AI_OFFICE_APPROVAL_THRESHOLD', 'high'),
+        'ttl_hours' => (int) env('AI_OFFICE_APPROVAL_TTL_HOURS', 24),
+        // 還沒有對應 Tool 實作的能力（deploy_*）仍要能排出風險，不能當 low。
+        'ability_risk' => [
+            'deploy_staging' => 'high',
+            'deploy_production' => 'critical',
+        ],
+    ],
+
 ];

@@ -25,16 +25,19 @@ class ToolExecution extends Model
         ];
     }
 
+    /** @return BelongsTo<TaskRun, $this> */
     public function taskRun(): BelongsTo
     {
         return $this->belongsTo(TaskRun::class);
     }
 
+    /** @return BelongsTo<Task, $this> */
     public function task(): BelongsTo
     {
         return $this->belongsTo(Task::class);
     }
 
+    /** @return BelongsTo<Agent, $this> */
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class);

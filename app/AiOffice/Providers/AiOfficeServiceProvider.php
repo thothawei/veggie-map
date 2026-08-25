@@ -7,9 +7,11 @@ use App\AiOffice\Llm\ClaudeProvider;
 use App\AiOffice\Llm\LlmProviderInterface;
 use App\AiOffice\Llm\MockProvider;
 use App\AiOffice\Models\Agent;
+use App\AiOffice\Models\Approval;
 use App\AiOffice\Models\Project;
 use App\AiOffice\Models\Task;
 use App\AiOffice\Policies\AgentPolicy;
+use App\AiOffice\Policies\ApprovalPolicy;
 use App\AiOffice\Policies\ProjectPolicy;
 use App\AiOffice\Policies\TaskPolicy;
 use App\AiOffice\Tools\DockerEngine;
@@ -75,5 +77,6 @@ class AiOfficeServiceProvider extends ServiceProvider
         Gate::policy(Project::class, ProjectPolicy::class);
         Gate::policy(Task::class, TaskPolicy::class);
         Gate::policy(Agent::class, AgentPolicy::class);
+        Gate::policy(Approval::class, ApprovalPolicy::class);
     }
 }

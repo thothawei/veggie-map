@@ -322,7 +322,7 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
   資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
 
-目前進度：**Phase 5 完成**（五個 Tool 已掛上 Runtime；路徑／指令／SQL 都有硬邊界；沙箱未就緒時 Terminal／Docker 拒絕在 host 執行）。已可用的端點：
+目前進度：**Phase 6 完成**（人工核准閉環：風險門檻、寫 Approval、核准後才執行工具）。已可用的端點：
 
 | Method | Path | 說明 |
 |---|---|---|
@@ -334,6 +334,8 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 | POST | `/ai-office/tasks/{id}/dependencies` | 新增相依，**會擋掉循環相依** |
 | DELETE | `/ai-office/tasks/{id}/dependencies/{dep}` | 移除相依 |
 | GET | `/ai-office/agents`、`/ai-office/agents/{id}` | Agent 列表／詳情（含工具與權限表） |
+| GET | `/ai-office/approvals`、`/ai-office/approvals/{id}` | 核准列表（預設 pending）／單筆 |
+| POST | `/ai-office/approvals/{id}/approve`、`.../reject` | 核准／拒絕（僅 admin、manager；HTTP 內不跑工具） |
 
 角色權限：`viewer` 唯讀；`developer` 可增修專案與任務但不可刪專案；`manager` 再加上刪除與
 Agent 設定；`admin` 全開；餐廳地圖的一般 `user` 完全進不來。
@@ -344,7 +346,10 @@ Agent 設定；`admin` 全開；餐廳地圖的一般 `user` 完全進不來。
 
 三道硬上限來自 `config/ai_office.php`，撞到就中止並記 `AgentError`：步數、工具呼叫次數、
 token 預算。工具權限**預設拒絕**——沒有在 `ai_office_agent_permissions` 明確授權的能力一律
-擋下；標成 `approval` 的（例如 `deploy_production`）不執行，任務轉成等待審核。
+擋下。權限 `approval`、或風險達到 `AI_OFFICE_APPROVAL_THRESHOLD`（預設 `high`）時寫
+`ai_office_approvals`、任務轉等待審核，**工具本體還沒跑**。`critical`（例如
+`deploy_production`）一定要核准。核准由 `ProcessApprovalJob` 執行工具後再派下一輪；拒絕則
+任務 `rejected`、工具 `denied`。
 
 LLM provider 可替換（`claude` / `mock`），預設 `mock`；設定成不存在的 provider 會直接 throw
 而不是靜默退回，避免「看起來正常、其實一個字都沒送出去」。
@@ -362,6 +367,10 @@ supervisor 吃這條佇列。
 與跨專案）；Terminal 走 `CommandAllowlist`（allowlist + denylist 硬擋 + 禁止 shell 中介字元）；
 SQL 只允許 config 裡的前綴。`AI_OFFICE_SANDBOX_ENABLED=true`（預設）時 Terminal／Docker
 **拒絕在 host 執行**，不退回本機跑。git push `main`／`master` 一律拒絕。
+
+**人工核准**（Phase 6）：`PermissionGate` 先看 Agent 權限再疊 `RiskLevel` 門檻。
+`git_push=allow` 在預設 high 門檻下仍要人按；把 threshold 升到 `critical` 才會直接執行。
+過期時限 `AI_OFFICE_APPROVAL_TTL_HOURS`（預設 24）。Dashboard 的核准面板是 Phase 8，這輪沒做 Vue。
 
 ## Future Roadmap
 

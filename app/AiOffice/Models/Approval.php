@@ -5,7 +5,14 @@ namespace App\AiOffice\Models;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property array<string, mixed>|null $payload
+ * @property Carbon|null $approved_at
+ * @property Carbon|null $rejected_at
+ * @property Carbon|null $expires_at
+ */
 class Approval extends Model
 {
     /** 規格第 23 節。 */
@@ -31,31 +38,37 @@ class Approval extends Model
         ];
     }
 
+    /** @return BelongsTo<Project, $this> */
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
     }
 
+    /** @return BelongsTo<Task, $this> */
     public function task(): BelongsTo
     {
         return $this->belongsTo(Task::class);
     }
 
+    /** @return BelongsTo<Agent, $this> */
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class);
     }
 
+    /** @return BelongsTo<ToolExecution, $this> */
     public function toolExecution(): BelongsTo
     {
         return $this->belongsTo(ToolExecution::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function rejecter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'rejected_by');

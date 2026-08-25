@@ -1,5 +1,39 @@
 # Progress Log
 
+## 2026-08-25 — AI Office Phase 6：人工核准與風險門檻
+
+**完成：**
+
+- `PermissionGate::decide()`：Agent 權限 deny → 拒絕；權限 approval **或** 風險達門檻 →
+  要核准；其餘 allow。權限表沒寫仍是預設拒絕。
+- `RiskLevel`：門檻讀 `config('ai_office.approvals.threshold')`（預設 `high`，含以上要核准）。
+  `critical` 一定要核准，即使 threshold=`off`。無效 threshold 回退 `high`。沒有 Tool 實例
+  時風險讀 `approvals.ability_risk`（`deploy_production` → critical）；再沒有就當 critical。
+- seeder 裡 devops 的 `git_push=allow` 代表「可以請求」，不是「跳過人工」。預設 high 門檻
+  下 git_push 仍要核准。
+- Runtime 遇到要核准時寫 `ai_office_approvals`，工具狀態 `pending_approval`，任務／Agent
+  轉 `waiting_review`，**不執行工具**。
+- `ApprovalService` + `ProcessApprovalJob`：HTTP 裡只標記 approved／rejected。核准後 Job
+  才跑工具，任務改 `assigned`、Agent 改 `idle`，再 `tryDispatch`。拒絕則任務 `rejected`、
+  工具 `denied`；`refreshProjectStatus` 把 `rejected` 當永久失敗。
+- 過期：`expires_at`（TTL `approvals.ttl_hours`，預設 24h）。列表／核准前 `expireOverdue()`。
+  過期再核准 → 422。
+- API：`GET/POST /ai-office/approvals`。viewer／developer 可看；只有 admin／manager 能核准／拒絕。
+
+**驗收：** 後端 327 測試 959 assertion 全綠；Pint／PHPStan 乾淨。前端這輪沒動（Approval Panel 是 Phase 8）。
+
+**反向：**
+
+- threshold 改成 `critical` 後，`git_push` + allow 會真的執行、不建 Approval。
+- threshold=`off` 時 high 可執行，**critical 仍暫停**。拿掉 `RiskLevel` 裡
+  `if ($level === 'critical') return true` 這條，`test_off_still_forces_critical` 會紅。
+- `ability_risk.deploy_production` 改 config 會跟著變。
+- 拒絕後 `RecordingTool::callCount() === 0`（不是只看 status）。
+
+**下一步：** Phase 7 — Activity + SSE。
+
+---
+
 ## 2026-08-25 — AI Office Phase 5：五個 Tool + 路徑／指令／SQL 硬邊界
 
 **完成：**

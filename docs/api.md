@@ -216,6 +216,10 @@ GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.
 | DELETE | `/ai-office/tasks/{id}/dependencies/{dep}` | 移除相依 | admin, manager, developer |
 | GET | `/ai-office/agents` | Agent 列表（`?role=`、`?status=`），不含 system prompt | 唯讀 |
 | GET | `/ai-office/agents/{id}` | Agent 詳情，含 system prompt、工具清單、權限表、目前任務數 | 唯讀 |
+| GET | `/ai-office/approvals` | 核准列表（預設 `status=pending`；`?status=all` 全看；可 `risk_level`、`project_id`） | 唯讀 |
+| GET | `/ai-office/approvals/{id}` | 單筆核准（含 payload、過期時間） | 唯讀 |
+| POST | `/ai-office/approvals/{id}/approve` | 核准；可選 `comment`。HTTP 內不跑工具，丟 `ProcessApprovalJob` | admin, manager |
+| POST | `/ai-office/approvals/{id}/reject` | 拒絕；工具不執行，任務標 `rejected` | admin, manager |
 
 ### 健康檢查
 
@@ -297,6 +301,16 @@ Agent 執行迴圈裡的工具呼叫先過 `PermissionGate`（預設拒絕），
   `allowed_environments` 預設不含 production。
 
 風險等級、白名單、禁止關鍵字都在 `config/ai_office.php` 的 `tools`，不寫死在工具類別裡。
+
+### 人工核准
+
+判定順序：Agent 權限 deny → 立刻拒絕；權限 approval **或** 風險達到
+`AI_OFFICE_APPROVAL_THRESHOLD`（預設 `high`，含以上）→ 寫 `ai_office_approvals` 並暫停任務。
+`critical` 一定要核准，threshold 設 `off` 也改不掉。權限表的 `allow` 代表「可以提出請求」，
+不是「跳過人工」——devops 的 `git_push=allow` 在預設門檻下仍會進核准佇列。
+
+`POST .../approve` 與 `POST .../reject` 只改狀態；真正執行工具的是 `ProcessApprovalJob`。
+過期（預設 24 小時）後再按核准會 422。developer／viewer 看得到列表，按下去是 403。
 
 ### 任務相依是否滿足
 
