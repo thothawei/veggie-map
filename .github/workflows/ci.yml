@@ -101,6 +101,13 @@ jobs:
       - name: Run migrations
         run: php artisan migrate --force
 
+      # ubuntu runner 本身就有 docker，所以 AI Office 的沙箱整合測試在 CI 會真的
+      # 把容器跑起來（本機 app container 裡沒有 docker CLI，那邊是 skip）。先 pull
+      # 好映像：不 pull 的話第一個測試要在自己的逾時內完成下載，失敗時看起來會像
+      # 「沙箱壞了」而不是「網路慢」。
+      - name: Pre-pull the sandbox image
+        run: docker pull alpine:3.20
+
       - name: PHPUnit
         run: php artisan test
 

@@ -247,8 +247,10 @@ Risk level（規格 §22）：`low` / `medium` / `high` / `critical`。
   讀取 SSH 私鑰、讀其他 project workspace 一律 denylist 硬擋。
 - **DatabaseTool**：只允許 `SELECT`/`EXPLAIN`/`DESCRIBE`，用語法前綴 + 關鍵字雙重檢查；
   production 連線完全禁止。
-- **SandboxManager**：Terminal / Docker 執行走容器，限制 CPU / memory / timeout / network。
-  第一版若沙箱未就緒，`SANDBOX_ENABLED=true` 時 TerminalTool **直接拒絕執行**而不是退回
+- **SandboxManager**（Phase 11 已實作）：Terminal / Docker 執行走容器，限制 CPU / memory /
+  timeout / network，另加 `--cap-drop ALL`、`no-new-privileges`、唯讀 rootfs、非 root 使用者、
+  pids 上限；只掛專案 workspace，不掛 docker.sock。docker 不可用時
+  `SANDBOX_ENABLED=true` 時 TerminalTool **直接拒絕執行**而不是退回
   在 host 上跑——寧可功能缺席，不可假裝安全。
 - **Secret**：`ANTHROPIC_API_KEY` 只從 `.env` 讀，不入 DB、不入 log；
   LLM request/response 寫 log 前先過遮罩。
@@ -279,7 +281,9 @@ QA → Completed 全流程，**不打真的 Claude API**。
 AI Office 需要的增量：
 
 - Horizon 增加 `ai-office` 佇列的 supervisor（改 `config/horizon.php`，不加新容器）。
-- 未來 Phase 11 再加 `agent-sandbox` 容器（規格 §59 也是列為「未來」）。
+- Phase 11 沒有加常駐的 `agent-sandbox` 容器：沙箱是**每次執行開一個 `--rm` 的短命容器**，
+  不是一台一直開著的機器。要跑起來需要 app container 看得到 docker socket，用
+  `docker-compose.sandbox.yml` 明確加購（權衡寫在該檔案檔頭）。
 - 不新增 postgres 容器（見 C1）。
 
 ---
@@ -298,7 +302,7 @@ AI Office 需要的增量：
 | 8 | §72 P8 | Vue Dashboard：CommandCenter / AgentCard / TaskBoard / TaskDetail / ApprovalPanel / Usage | |
 | 9 | §72 P9 | Pixel Office（CSS + SVG） | |
 | 10 | §72 P10 | TokenUsage / Cost / AgentMemory / Agent 效能統計 | |
-| 11 | §72 P11 | Docker Sandbox / GitHub Actions CI | |
+| 11 | §72 P11 | Docker Sandbox / GitHub Actions CI | ✅ 完成 |
 | 12 | §72 P12 | 完整 Demo（規格 §79 的 Todo API 情境） | |
 
 每個 Phase 走 `Inspect → Plan → Implement → Test → Fix → Verify → Document`，

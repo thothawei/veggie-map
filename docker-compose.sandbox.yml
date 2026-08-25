@@ -1,0 +1,34 @@
+# AI Office 沙箱的「明確加購」設定檔（Phase 11）。
+#
+#   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d
+#
+# 它做兩件事：把 docker CLI 需要的 socket 掛進 app／horizon container，讓
+# SandboxManager 能把 Agent 的指令丟進獨立容器跑。
+#
+# ⚠️ 先讀完這段再用：
+#
+# 掛 `/var/run/docker.sock` 等於把「建立任意容器」的能力給了 app container，而那
+# 實質上等同於 host 的 root（可以掛 / 進新容器）。這是為了讓 Agent 的指令能被關進
+# 有資源與網路限制的容器裡——用一個較大的信任邊界，換掉「LLM 產生的指令直接在
+# app container 裡跑」這個更糟的狀態。
+#
+# 兩件事因此很重要：
+#   1. 這個檔案**不是**預設啟用。不掛 socket 時 SandboxManager 回報 unavailable，
+#      TerminalTool 維持拒絕執行（不會退回 host 跑）——那是安全的預設。
+#   2. 不要在多租戶或不受信任的環境用這組設定。這是給單人開發機／專用 CI 用的。
+#
+# 更嚴格的做法（rootless docker、DinD side-car、gVisor／Kata）留到真的要對外服務時再說，
+# 現在寫在這裡是為了記下「我們知道這個邊界在哪」。
+
+services:
+  app:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      AI_OFFICE_SANDBOX_ENABLED: "true"
+
+  horizon:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      AI_OFFICE_SANDBOX_ENABLED: "true"

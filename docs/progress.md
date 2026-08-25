@@ -2258,3 +2258,64 @@ Agent 詳情頁多了「記得的事」，會進下次 prompt 的那幾則用左
 **仍未做的：** 一樣沒有在瀏覽器裡登入看過（使用者自己驗）。另外 `AgentMemory` 目前只有
 自動寫入與唯讀 API，沒有「人工新增／刪除一則記憶」的端點——規格沒有要求，而且開放寫入
 等於開放任意注入 prompt 內容，先不做。
+
+---
+
+## 2026-08-25 — AI Office Phase 11：Docker 沙箱（指令真的進容器跑）
+
+Phase 5 起 `TerminalTool` 的規則是「沙箱沒就緒就拒絕執行，不退回 host 跑」，所以
+`AI_OFFICE_SANDBOX_ENABLED=true`（預設）之下 Terminal 工具其實一直是**完全不能用**的。
+這階段把沙箱真的做出來，但**沒有放寬那條拒絕規則**。
+
+### 三個元件
+
+- `ProcessRunner`／`SymfonyProcessRunner`：執行外部程序的抽象。抽介面不是為了「好抽換」，
+  是為了能斷言**我們到底送了哪些參數給 docker**——沙箱的安全性幾乎全在那串旗標上，
+  而它在容器跑起來之後就看不見了。argv 直接 exec，不經過 shell。
+- `SandboxManager`：組 `docker run` 的參數、偵測 docker 可用性（結果快取在實例上，
+  一次任務會問很多次）、逾時後強制移除容器（`--rm` 只在正常結束時生效）。
+- `DockerSandboxEngine`：Docker 工具的真引擎，**預設仍然關閉**
+  （`AI_OFFICE_SANDBOX_DOCKER_TOOL=false`）——讓 Agent 能建立與啟動容器，比跑一條白名單
+  指令高一級，不該因為升級到 Phase 11 就自動生效。
+
+`SandboxPolicy` 從一個布林值改成三態：`host`（沙箱被明確關掉）／`sandbox`（開著且 docker
+可用）／`refuse`（開著但 docker 不可用）。三態化之後才發現 `DockerTool` 原本用
+`hostExecutionAllowed()` 當守門，沙箱正常運作時反而會被自己擋下來——一併修掉。
+
+### 每一條旗標對應一種具體攻擊
+
+`--network none`（LLM 產生的指令有網路就等於有外送資料的管道）、`--cap-drop ALL`、
+`--security-opt no-new-privileges`（擋 setuid 提權）、`--read-only` + `--tmpfs`（只有
+`/workspace` 與 `/tmp` 可寫）、`--user 1000:1000`（非 root，寫進 workspace 的檔案也不會變成
+root 所有）、`--pids-limit`（fork bomb 的第二道防線，第一道是 CommandAllowlist）、
+`--memory`／`--cpus`，以及**只掛專案 workspace，不掛 docker.sock、不掛 host 根目錄**。
+
+### docker.sock 這個權衡，寫下來而不是偷偷做
+
+要讓 app container 能開容器，就得掛 `/var/run/docker.sock`——**那實質上接近把 host root
+交出去**（可以掛 `/` 進新容器）。所以這件事沒有寫進 `docker-compose.yml`，而是另開一份
+`docker-compose.sandbox.yml`，檔頭把權衡講清楚：用一個較大的信任邊界，換掉「LLM 產生的
+指令直接在 app container 裡跑」這個更糟的狀態；不掛就是 unavailable，維持拒絕執行的安全
+預設；不要在多租戶或不受信任的環境用。更嚴格的做法（rootless docker、DinD、gVisor／Kata）
+留到真的要對外服務時再處理。
+
+### 驗證
+
+後端 375 → **386 個測試全綠 ＋ 4 個 skipped**（11 個單元測試斷言 argv、4 個整合測試真的把
+容器跑起來）。整合測試在本機 app container 裡沒有 docker CLI 所以 skip——skip 是誠實的
+「沒驗到」，比用假 runner 假裝驗過好；GitHub Actions 的 ubuntu runner 有 docker，CI 會真的
+跑到，所以 workflow 多了一步預先 `docker pull alpine:3.20`（不 pull 的話，第一個測試要在
+自己的逾時內完成下載，失敗時看起來會像「沙箱壞了」而不是「網路慢」）。
+
+**在 host 上用真 docker 實測過同一組參數**（因為 PHPUnit 跑在沒有 docker 的容器裡）：
+`echo` 有輸出、`/proc/net/route` 只剩標頭一行（真的沒有網路）、`touch /etc/nope` 回
+`Read-only file system`、寫進 `/workspace` 的檔案真的出現在 host 的目錄裡、`id` 回
+`uid=1000 gid=1000`。
+
+**反向驗證三項**：拿掉 `--network none` → 1 條紅；拿掉 `TerminalTool` 的 refuse 分支 →
+2 條紅（新舊測試各一）。
+
+**仍未做的：** 沒有在真實 Agent 執行流程裡端到端跑過一次「LLM 要求 `execute_command`
+→ 沙箱回結果」（那需要掛 socket 的環境＋一個真的專案 workspace）；`docker-compose.sandbox.yml`
+本身也還沒有人實際起過。目前的證據是單元測試（參數正確）＋ host 實測（參數有效），
+中間那段接線只有型別與測試保證。

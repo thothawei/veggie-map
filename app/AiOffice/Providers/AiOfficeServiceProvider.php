@@ -16,7 +16,10 @@ use App\AiOffice\Policies\AgentPolicy;
 use App\AiOffice\Policies\ApprovalPolicy;
 use App\AiOffice\Policies\ProjectPolicy;
 use App\AiOffice\Policies\TaskPolicy;
+use App\AiOffice\Process\ProcessRunner;
+use App\AiOffice\Process\SymfonyProcessRunner;
 use App\AiOffice\Tools\DockerEngine;
+use App\AiOffice\Tools\DockerSandboxEngine;
 use App\AiOffice\Tools\ToolRegistrar;
 use App\AiOffice\Tools\ToolRegistry;
 use App\AiOffice\Tools\UnavailableDockerEngine;
@@ -64,7 +67,14 @@ class AiOfficeServiceProvider extends ServiceProvider
             return new Client(apiKey: $apiKey);
         });
 
-        $this->app->singleton(DockerEngine::class, UnavailableDockerEngine::class);
+        $this->app->singleton(ProcessRunner::class, SymfonyProcessRunner::class);
+
+        // Docker 工具預設仍然是「不可用」。打開開關才換成真引擎——讓 Agent 能建立與
+        // 啟動容器，是比執行一條白名單指令高一級的權限，不該因為升級到 Phase 11
+        // 就自動生效。（Terminal 的沙箱執行是另一條路，走 SandboxManager。）
+        $this->app->singleton(DockerEngine::class, fn ($app) => config('ai_office.sandbox.docker_tool_enabled', false)
+            ? $app->make(DockerSandboxEngine::class)
+            : $app->make(UnavailableDockerEngine::class));
 
         $this->app->singleton(ToolRegistry::class, function ($app) {
             $registry = new ToolRegistry;

@@ -322,7 +322,7 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
   資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
 
-目前進度：**Phase 10 完成**（事件流＋SSE、Vue Dashboard、Pixel Office、用量成本與 Agent 記憶）。已可用的端點：
+目前進度：**Phase 11 完成**（事件流＋SSE、Vue Dashboard、Pixel Office、用量成本與 Agent 記憶、Docker 沙箱）。已可用的端點：
 
 | Method | Path | 說明 |
 |---|---|---|
@@ -379,8 +379,19 @@ supervisor 吃這條佇列。
 **工具與邊界**（Phase 5）：File／Git／Terminal／Docker／Database 已登記，動作名稱與
 `agent_permissions.ability` 同一套。檔案路徑經 `WorkspaceGuard`（`realpath()`、擋 symlink
 與跨專案）；Terminal 走 `CommandAllowlist`（allowlist + denylist 硬擋 + 禁止 shell 中介字元）；
-SQL 只允許 config 裡的前綴。`AI_OFFICE_SANDBOX_ENABLED=true`（預設）時 Terminal／Docker
-**拒絕在 host 執行**，不退回本機跑。git push `main`／`master` 一律拒絕。
+SQL 只允許 config 裡的前綴。git push `main`／`master` 一律拒絕。
+
+**Docker 沙箱**（Phase 11）：`AI_OFFICE_SANDBOX_ENABLED=true`（預設）時，Terminal 指令會被
+丟進一個獨立容器執行——`--network none`、`--cap-drop ALL`、`--security-opt no-new-privileges`、
+`--read-only` rootfs（只有 `/workspace` 與 tmpfs 可寫）、非 root 使用者、pids／memory／cpu
+上限，而且**只掛這個專案的 workspace，不掛 docker.sock、不掛 host 根目錄**。逾時的容器會被
+強制移除。docker 不可用時**維持拒絕執行，不退回 host 跑**——那條規則從 Phase 5 到現在沒有放寬。
+
+要真的啟用沙箱，app container 需要看得到 docker socket，用另一份 compose 檔明確加購：
+`docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d`。**掛 socket 等於
+把「建立任意容器」的能力給 app container，實質接近 host root**，權衡與適用範圍寫在
+[docker-compose.sandbox.yml](docker-compose.sandbox.yml) 檔頭。Docker 工具（`docker_build`／
+`docker_run`…）另有開關 `AI_OFFICE_SANDBOX_DOCKER_TOOL`，預設關閉。
 
 **人工核准**（Phase 6）：`PermissionGate` 先看 Agent 權限再疊 `RiskLevel` 門檻。
 `git_push=allow` 在預設 high 門檻下仍要人按；把 threshold 升到 `critical` 才會直接執行。

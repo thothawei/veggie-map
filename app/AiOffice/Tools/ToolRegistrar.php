@@ -3,6 +3,7 @@
 namespace App\AiOffice\Tools;
 
 use App\AiOffice\Security\CommandAllowlist;
+use App\AiOffice\Security\SandboxManager;
 use App\AiOffice\Security\SandboxPolicy;
 use App\AiOffice\Security\SqlReadGuard;
 use App\AiOffice\Security\WorkspaceGuard;
@@ -16,6 +17,7 @@ class ToolRegistrar
         private readonly WorkspaceGuard $workspace,
         private readonly CommandAllowlist $allowlist,
         private readonly SandboxPolicy $sandbox,
+        private readonly SandboxManager $manager,
         private readonly SqlReadGuard $sql,
         private readonly DockerEngine $docker,
     ) {}
@@ -33,7 +35,7 @@ class ToolRegistrar
             $registry->register(new GitTool($action, $this->workspace));
         }
 
-        $registry->register(new TerminalTool($this->allowlist, $this->workspace, $this->sandbox));
+        $registry->register(new TerminalTool($this->allowlist, $this->workspace, $this->sandbox, $this->manager));
 
         foreach (['docker_build', 'docker_run', 'docker_logs', 'docker_stop'] as $action) {
             $registry->register(new DockerTool($action, $this->workspace, $this->sandbox, $this->docker));

@@ -78,7 +78,9 @@ class DockerTool extends ActionTool
             default => throw new \InvalidArgumentException("未知的 docker 動作 {$this->actionName}"),
         };
 
-        if (! $this->sandbox->hostExecutionAllowed()) {
+        // Phase 11 之後「沙箱開著」不再等於「不能動 docker」——真的引擎自己會帶上
+        // 全部硬限制。只有沙箱開著而 docker 不可用時才拒絕，那條規則沒有放寬。
+        if ($this->sandbox->mode() === SandboxPolicy::REFUSE) {
             $this->sandbox->refuseHostExecution('Docker');
         }
 

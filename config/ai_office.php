@@ -99,6 +99,32 @@ return [
         'memory_limit_mb' => (int) env('AI_OFFICE_SANDBOX_MEMORY_MB', 512),
         'cpu_limit' => env('AI_OFFICE_SANDBOX_CPU_LIMIT', '1.0'),
         'network' => env('AI_OFFICE_SANDBOX_NETWORK', 'none'),
+
+        /*
+        | Phase 11：真的把指令丟進容器跑。
+        |
+        | `docker_binary` 找不到（例如 app container 裡根本沒裝 docker CLI、
+        | 或沒有 docker socket）時，SandboxManager 會回報 unavailable，
+        | TerminalTool 就維持拒絕執行——**不會**退回在 host 上跑。這是 Phase 5
+        | 就定下的規則（規格第 43 節），Phase 11 沒有放寬它。
+        |
+        | `image` 是執行指令用的基底映像。要跑 `php artisan test` 這類指令的話，
+        | 得換成含 PHP 的映像——預設給最小的 alpine，因為預設的 allowlist 裡
+        | 大多是 ls/cat/echo 這種。映像不會自動 pull，缺了就是執行失敗，
+        | 不會靜默地換一個。
+        |
+        | `user` 用非 root 執行；`pids_limit` 擋 fork bomb（allowlist 之外的
+        | 第二道防線）；`read_only_rootfs` 讓容器只有 /workspace 與 tmpfs 可寫。
+        */
+        'docker_binary' => env('AI_OFFICE_SANDBOX_DOCKER', 'docker'),
+        'image' => env('AI_OFFICE_SANDBOX_IMAGE', 'alpine:3.20'),
+        'user' => env('AI_OFFICE_SANDBOX_USER', '1000:1000'),
+        'pids_limit' => (int) env('AI_OFFICE_SANDBOX_PIDS', 128),
+        'read_only_rootfs' => (bool) env('AI_OFFICE_SANDBOX_READONLY', true),
+        'tmpfs_size_mb' => (int) env('AI_OFFICE_SANDBOX_TMPFS_MB', 64),
+        // Docker 工具（docker_build／docker_run…）要不要真的接 docker。
+        // 預設關閉：接上等於讓 Agent 能建立與啟動容器，那是另一個層級的權限。
+        'docker_tool_enabled' => (bool) env('AI_OFFICE_SANDBOX_DOCKER_TOOL', false),
     ],
 
     /*

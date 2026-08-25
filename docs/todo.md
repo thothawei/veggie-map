@@ -28,7 +28,9 @@
       AgentStatusBadge，純 SVG 方塊＋CSS 動畫，掛在總覽與專案詳情兩頁，22 個測試）
 - [x] Phase 10 — TokenUsage／Cost 報表端點＋Agent 效能統計＋AgentMemory 真的接起來
       （寫入、recall 進 prompt、面板顯示），前端 `/ai-office/usage` 頁面，34 個測試
-- [ ] Phase 11 — Docker Sandbox / GitHub Actions
+- [x] Phase 11 — Docker Sandbox（SandboxManager／ProcessRunner／DockerSandboxEngine，
+      指令真的丟進容器跑，硬限制全上）＋ CI 預先 pull 沙箱映像；15 個測試
+      （11 個單元＋4 個整合，整合測試沒有 docker 就 skip）
 - [ ] Phase 12 — 完整 Demo
 
 ## Phase 8.5 — 地址搜尋（Geocoding，優先）✅ 已完成 2026-08-24
