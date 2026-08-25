@@ -176,6 +176,22 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
 未完成：全台北市 bbox 尚未實跑（小 bbox fetch 花 17.3s／timeout 30s，全市值得先實測）；
 「vegan=only 是否自動蘊含 vegetarian」留待產品決定。細節見 progress.md。
 
+## 補做：預設涵蓋台中市，東京 23 区規劃進去 ✅ 已完成 2026-08-25
+
+- [x] 預設 bbox 從台北改台中，且**先量再定**：原本抓的範圍量到 166 筆，放寬南／西緣後
+      177 筆，確認漏了 11 家才定案 `23.9500,120.4300,24.4500,121.4700`
+- [x] 台中實測：created **177**、13.5 秒，與 `out count;` 預期值一致，零非素食店混入
+- [x] 東京 23 区 `35.5300,139.5600,35.8200,139.9200` 加進 `EXTERNAL_API_SYNC_BBOXES`
+      （分號分隔第二組），`schedule:list` 確認產生兩條獨立排程
+- [x] `ScheduleTest` 原本鎖死台北的斷言改成台中＋東京，並新增分號分隔解析的測試
+
+**待你決定（東京尚未匯入）**：東京 23 区用我們現行的「只收純素食店」規則只有 **46 家**，
+放寬成 `yes` 有 210 家。日本 OSM 慣用 `diet:vegan=yes` 而非 `only`，不是東京素食店少。
+維持一致 vs 依國別放寬，是產品標準問題，沒有擅自選。
+
+其他未決：台北那 106 筆測試匯入資料仍留在 DB；本機沒有 scheduler container，排程
+實際不會自動跑。細節見 progress.md。
+
 ## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成
 
 `docs/progress.md` 逐項記錄；`git log` 每個 commit 都有對應 GitHub Actions CI 綠燈

@@ -59,11 +59,25 @@ class ScheduleTest extends TestCase
         $this->assertTrue($syncCommands->contains(fn ($command) => str_contains($command, '22.60,120.28,22.68,120.35')));
     }
 
-    public function test_default_env_schedules_taipei_bbox(): void
+    public function test_default_env_covers_taichung_and_tokyo(): void
     {
+        // 預設涵蓋範圍是產品決定（2026-08-25：台中市＋東京 23 区），不是隨手填的值，
+        // 所以鎖在測試裡——有人改動 .env.example 的涵蓋城市時要是有意識的決定。
         $this->assertSame(
-            ['24.9613,121.4570,25.2130,121.6663'],
+            [
+                '23.9500,120.4300,24.4500,121.4700',
+                '35.5300,139.5600,35.8200,139.9200',
+            ],
             config('services.sync_bboxes')
         );
+    }
+
+    public function test_semicolon_separated_bboxes_are_parsed_into_separate_schedules(): void
+    {
+        $commands = collect($this->scheduledCommands(
+            config('services.sync_bboxes')
+        ))->filter(fn ($command) => str_contains($command, 'restaurants:sync'));
+
+        $this->assertCount(2, $commands, '兩個城市要各自產生一條排程，不是合併成一次大查詢');
     }
 }

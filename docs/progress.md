@@ -1140,3 +1140,54 @@ User-Agent → overpass-api.de 回 406 → `retry()` 包成 RequestException 丟
 - 純素食店的 diet 關聯依賴 OSM 標籤本身：例如「養生素食」只有 `diet:vegan=only`、沒有
   `diet:vegetarian`，所以在我們的 DB 裡只會掛到 vegan 而不是兩個都掛。要不要自動推導
   「vegan=only 蘊含 vegetarian」是產品決定，沒有擅自加。
+
+## 2026-08-25 — 預設涵蓋範圍改台中市，並把東京 23 区規劃進去
+
+使用者決定：台中市當預設素食地圖，東京也一併規劃。
+
+**台中市 bbox 校正。** 先用 `out count;` 量過再定範圍，不是憑印象填座標。第一版
+`24.0000,120.4400,24.4500,121.4600` 量到 166 筆；懷疑南緣切到霧峰、西緣切到龍井海線，
+放寬成 `23.9500,120.4300,24.4500,121.4700` 後變 **177 筆**——確實漏了 11 家，採放寬版。
+
+**實測結果。** `restaurants:sync --bbox=23.9500,120.4300,24.4500,121.4700`（**沒帶
+`--provider`**，走 `.env` 的 `EXTERNAL_API_RESTAURANT_PROVIDER=osm`，順帶驗證 config 這條
+路徑也通）：created **177**，耗時 13.5 秒，與事前 count 查詢完全一致。DB 從 126 筆變 303 筆，
+`whereDoesntHave('dietTypes')` 為 0。抽查是真的台中素食店（養生素食／愛家素食／天華素食／
+林素食／素食麵／觀音齋），座標落在台中無誤。diet 分布：vegetarian 163、vegan 42。
+
+抽樣時自己踩了一個小陷阱值得記：第一次列印樣本忘了加 `whereNotNull('source_id')`，
+列出來的是 Faker 種子資料（「Lakin, Hartmann and Roob 蔬食」這種公司名），差點誤讀成
+「匯入資料長得很怪」。加上過濾才是真的 OSM 資料。
+
+**東京 23 区：標籤密度跟台灣完全不同，這是產品層級的問題。**
+
+| 範圍 | `only`（純素食店） | `yes\|only`（含「有素食選項」） | only 佔比 |
+| --- | --- | --- | --- |
+| 台中市 | 177 | 220 | 80% |
+| 東京 23 区 | 46 | 210 | 22% |
+
+日本 OSM 社群慣用 `diet:vegan=yes` 標「有純素選項」，很少標 `only`。沿用我們 2026-08-25
+「只收純素食店」的規則套到東京，整個東京 23 区只會有 **46 家**——不是東京素食店少，是
+標籤慣例不同。目前**先維持一致規則（`only`）把東京排進 `EXTERNAL_API_SYNC_BBOXES`，
+但沒有實際匯入**，因為「要不要為日本放寬成 `yes`」是產品決定，不該我自己選。
+
+**本機沒有 scheduler。** `docker-compose.yml` 沒有 `schedule:work` 的 service，執行中的
+container 只有 app／horizon／mysql／nginx／redis。所以 `php artisan schedule:list` 顯示的
+兩條排程**實際上不會自動執行**——東京不會在 01:00 自己匯入。Horizon 是 queue worker，
+不是 scheduler，兩者不能互相代替。這是既有缺口（`docs/deployment.md` 有寫 production 的
+排程建議，但本機開發環境沒有對應設定），不是這次引入的。
+
+`ScheduleTest` 那條 `test_default_env_schedules_taipei_bbox` 因為預設值改變而紅了，改成
+`test_default_env_covers_taichung_and_tokyo` 並新增一條驗證分號分隔真的產生兩條獨立排程
+（不是合併成一次大查詢）。88 個測試、264 個 assertion 全綠，Pint／PHPStan 乾淨。
+
+**未完成 / 等待確認：**
+
+- **東京尚未實際匯入**，等「`only` 還是 `yes`」的決定。若維持 `only` 是 46 家，
+  放寬成 `yes` 是 210 家但會混入「有素食選項的一般餐廳」，與台灣目前的收錄標準不一致。
+  另一種折衷是依國別套不同規則，但那會讓「這個地圖收什麼」變成兩套標準，要想清楚。
+- 台北市那 106 筆是上一輪測試匯入的，仍留在 DB 裡（預設涵蓋範圍已不含台北）。要不要清掉
+  或保留成多城市資料，沒有擅自決定。
+- 匯入資料裡 `city` 欄位有 77/177 是空字串而不是 NULL（OSM 沒有 `addr:city` 標籤時），
+  `address`／`district` 同樣沒有 NULL。語意上 NULL 比空字串正確，但這是既有的 upsert 行為，
+  不在這次範圍內，先記錄。
