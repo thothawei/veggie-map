@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import client from '@/api/client';
 import type { ApiSuccess, DietType, Feature, RestaurantSearchParams } from '@/types';
 
@@ -8,7 +8,37 @@ const filters = defineModel<Partial<RestaurantSearchParams>>('filters', { requir
 const diets = ref<DietType[]>([]);
 const features = ref<Feature[]>([]);
 
+const WIDE_SCREEN = '(min-width: 768px)';
+
+/**
+ * 手機上這排晶片會佔掉三行，把地圖整個擠到摺線以下（375×812 實測 hero 佔了約 570px），
+ * 所以窄螢幕預設收起來，桌機空間夠就直接展開。
+ *
+ * 這裡刻意用「持續監聽」而不是掛載時讀一次：實測過在隱藏的瀏覽器分頁裡掛載時
+ * `window.innerWidth` 是 0、matchMedia 一律回 false，一次性判斷會把桌機也誤判成窄螢幕、
+ * 而且之後永遠不會修正。監聽版本等版面確定後會自己補正。
+ */
+const isWideScreen = ref(false);
+let mediaQuery: MediaQueryList | null = null;
+
+function syncWideScreen(event: MediaQueryListEvent | MediaQueryList) {
+    isWideScreen.value = event.matches;
+}
+
+/** null＝使用者還沒表態，跟著螢幕寬度走；一旦手動開關就以他的選擇為準。 */
+const userOpen = ref<boolean | null>(null);
+
+const open = computed(() => userOpen.value ?? isWideScreen.value);
+
+const activeCount = computed(
+    () => Object.values(filters.value).filter((value) => value !== undefined && value !== null).length,
+);
+
 onMounted(async () => {
+    mediaQuery = window.matchMedia(WIDE_SCREEN);
+    syncWideScreen(mediaQuery);
+    mediaQuery.addEventListener('change', syncWideScreen);
+
     const [dietsRes, featuresRes] = await Promise.all([
         client.get<ApiSuccess<DietType[]>>('/diets'),
         client.get<ApiSuccess<Feature[]>>('/features'),
@@ -17,65 +47,172 @@ onMounted(async () => {
     features.value = featuresRes.data.data;
 });
 
+onBeforeUnmount(() => {
+    mediaQuery?.removeEventListener('change', syncWideScreen);
+});
+
 function toggleDiet(code: string) {
-    filters.value.diet = filters.value.diet === code ? undefined : code;
+    if (filters.value.diet === code) {
+        delete filters.value.diet;
+
+        return;
+    }
+
+    filters.value.diet = code;
 }
 
 function togglePetFriendly() {
-    filters.value.pet_friendly = filters.value.pet_friendly ? undefined : true;
+    if (filters.value.pet_friendly) {
+        delete filters.value.pet_friendly;
+
+        return;
+    }
+
+    filters.value.pet_friendly = true;
 }
 
 function toggleParking() {
-    filters.value.parking = filters.value.parking ? undefined : true;
+    if (filters.value.parking) {
+        delete filters.value.parking;
+
+        return;
+    }
+
+    filters.value.parking = true;
+}
+
+// 一個一個點回去才能取消太麻煩，而且使用者未必記得剛剛點了哪些。
+function clearAll() {
+    filters.value = {};
 }
 </script>
 
 <template>
     <div class="filter-drawer">
-        <div class="group">
-            <span class="label">飲食類型</span>
+        <div class="drawer-bar">
             <button
-                v-for="diet in diets"
-                :key="diet.code"
                 type="button"
-                class="chip"
-                :class="{ active: filters.diet === diet.code }"
-                @click="toggleDiet(diet.code)"
+                class="toggle"
+                :aria-expanded="open"
+                aria-controls="filter-panel"
+                @click="userOpen = !open"
             >
-                {{ diet.label }}
+                篩選
+                <span v-if="activeCount" class="count">{{ activeCount }}</span>
+                <span class="caret" :class="{ up: open }" aria-hidden="true">▾</span>
             </button>
+
+            <button v-if="activeCount" type="button" class="clear" @click="clearAll">清除</button>
         </div>
 
-        <div class="group">
-            <span class="label">特色</span>
-            <button
-                type="button"
-                class="chip"
-                :class="{ active: filters.pet_friendly }"
-                @click="togglePetFriendly"
-                v-if="features.some((f) => f.code === 'pet_friendly')"
-            >
-                寵物友善
-            </button>
-            <button
-                type="button"
-                class="chip"
-                :class="{ active: filters.parking }"
-                @click="toggleParking"
-                v-if="features.some((f) => f.code === 'parking')"
-            >
-                停車
-            </button>
+        <div v-show="open" id="filter-panel" class="panel">
+            <div class="group">
+                <span class="label">飲食類型</span>
+                <button
+                    v-for="diet in diets"
+                    :key="diet.code"
+                    type="button"
+                    class="chip"
+                    :class="{ active: filters.diet === diet.code }"
+                    :aria-pressed="filters.diet === diet.code"
+                    @click="toggleDiet(diet.code)"
+                >
+                    {{ diet.label }}
+                </button>
+            </div>
+
+            <div class="group">
+                <span class="label">特色</span>
+                <button
+                    type="button"
+                    class="chip"
+                    :class="{ active: filters.pet_friendly }"
+                    :aria-pressed="Boolean(filters.pet_friendly)"
+                    @click="togglePetFriendly"
+                    v-if="features.some((f) => f.code === 'pet_friendly')"
+                >
+                    寵物友善
+                </button>
+                <button
+                    type="button"
+                    class="chip"
+                    :class="{ active: filters.parking }"
+                    :aria-pressed="Boolean(filters.parking)"
+                    @click="toggleParking"
+                    v-if="features.some((f) => f.code === 'parking')"
+                >
+                    停車
+                </button>
+            </div>
         </div>
     </div>
 </template>
 
 <style scoped>
 .filter-drawer {
+    padding: 0.75rem 0 0;
+}
+
+.drawer-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid #cbd5e0;
+    background: #fff;
+    color: #1f2933;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background: #2f855a;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.caret {
+    font-size: 0.7rem;
+    color: #718096;
+    transition: transform 0.15s ease;
+}
+
+.caret.up {
+    transform: rotate(180deg);
+}
+
+.clear {
+    padding: 0.35rem 0.75rem;
+    border: none;
+    background: none;
+    color: #2f855a;
+    cursor: pointer;
+    font-size: 0.85rem;
+    text-decoration: underline;
+}
+
+.panel {
     display: flex;
     flex-wrap: wrap;
-    gap: 1rem;
-    padding: 0.75rem 0;
+    justify-content: center;
+    gap: 0.75rem 1rem;
+    padding-top: 0.75rem;
 }
 
 .group {
@@ -83,6 +220,7 @@ function toggleParking() {
     align-items: center;
     gap: 0.4rem;
     flex-wrap: wrap;
+    justify-content: center;
 }
 
 .label {
@@ -100,9 +238,31 @@ function toggleParking() {
     font-size: 0.85rem;
 }
 
+.chip:hover {
+    border-color: #2f855a;
+    color: #2f855a;
+}
+
 .chip.active {
     background: #2f855a;
     border-color: #2f855a;
     color: #fff;
+}
+
+.chip.active:hover {
+    color: #fff;
+}
+
+.toggle:focus-visible,
+.clear:focus-visible,
+.chip:focus-visible {
+    outline: 2px solid #2f855a;
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .caret {
+        transition: none;
+    }
 }
 </style>

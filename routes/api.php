@@ -23,6 +23,7 @@ Route::middleware('throttle:api')->group(function () {
 
     Route::get('/diets', [LookupController::class, 'dietTypes']);
     Route::get('/features', [LookupController::class, 'features']);
+    Route::get('/cities', [LookupController::class, 'cities']);
 
     Route::get('/geocode', [GeocodeController::class, 'search']);
 

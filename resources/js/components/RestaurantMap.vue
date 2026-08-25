@@ -2,6 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet.markercluster';
+import { haversineKm } from '@/lib/geo';
 import type { Restaurant } from '@/types';
 
 const props = defineProps<{
@@ -47,9 +48,31 @@ function renderMarkers() {
     }
 }
 
+/**
+ * 超過這個距離就不要做飛行動畫。Leaflet 的 flyTo 跨長距離（實測台北→台南約 200km）
+ * 會把 tile layer 的 transform 留在壞掉的狀態：磁磚被排到容器外好幾千 px，畫面一片空白，
+ * 而 marker 走另一條 pane 路徑所以位置照樣正確——看起來像「地圖破圖但標記還在」。
+ * 改用 setView 直接跳就沒事，而且跨城市本來就不該花好幾秒飛過去。
+ */
+const MAX_ANIMATED_FLIGHT_KM = 50;
+
 defineExpose({
     flyTo(lat: number, lng: number, zoom = 15) {
-        map?.flyTo([lat, lng], zoom);
+        if (!map) return;
+
+        const from = map.getCenter();
+
+        if (haversineKm(from.lat, from.lng, lat, lng) > MAX_ANIMATED_FLIGHT_KM) {
+            map.setView([lat, lng], zoom);
+
+            return;
+        }
+
+        map.flyTo([lat, lng], zoom);
+    },
+    /** 城市切換用：一律直接跳，不做動畫。 */
+    jumpTo(lat: number, lng: number, zoom: number) {
+        map?.setView([lat, lng], zoom);
     },
     locateUser() {
         if (!navigator.geolocation) return;

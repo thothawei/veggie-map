@@ -219,8 +219,28 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
 
 **現況**：612 筆＝種子 20 ＋ OSM 592（台北 106／台中 177／高雄 107／台南 45／東京 195）。
 
-未決：前端沒有依城市／國別切換的概念，五地資料混在同一組查詢結果裡；本機沒有 scheduler
-container；台南 45 家若嫌少可改 `yes`（187 家）但會與其他台灣城市標準不一致。
+未決：本機沒有 scheduler container；台南 45 家若嫌少可改 `yes`（187 家）但會與其他台灣
+城市標準不一致。細節見 progress.md。
+
+## 補做：前端多城市切換 ＋ UI/UX 優化 ✅ 已完成 2026-08-25
+
+- [x] `config/cities.php` ＋ `GET /api/v1/cities`，`CitySwitcher.vue` 依國家分組
+- [x] **不用 `city` 欄位篩選**——查證後發現 59% 是空的、「臺中市／台中市」兩種寫法、
+      東京填的是「渋谷区」，一律走 bbox 座標
+- [x] `CitiesTest` 綁住 `config/cities.php` 與 `sync_regions` 不會漂移（雙向檢查＋
+      center 必須落在自己 bbox 內）
+- [x] 網址 `?city=` 當單一真相來源，上一頁／重新整理／分享連結都正確
+- [x] **修 Leaflet `flyTo` 長距離破圖**：跨 200km 動畫會把磁磚排到容器外 13,000px，
+      marker 卻正常。新增 `jumpTo()`，`flyTo()` 加 50km 距離防護
+- [x] **修計數謊報**：cursor 分頁沒有總數，`per_page=100` 是上限，改成「100+ 家」
+- [x] **修競態**：地圖移動／改篩選／換城市三個來源會互相蓋掉，加請求序號
+- [x] FilterDrawer 改成真抽屜（手機預設收合，地圖上移約 145px）、補「清除」、
+      補空狀態與錯誤狀態、a11y（aria-pressed／aria-expanded／focus-visible）
+- [x] 修既有 bug：`filters.diet = undefined` 留下 key 導致篩選計數算錯，改用 `delete`
+
+未完成：點擊層級互動在內嵌瀏覽器無法可靠驗證（最後用 DOM `.click()` 驗邏輯）；
+FilterDrawer 的 media query 監聽「中途改尺寸自我補正」只有推理沒有實測（該環境不派送
+resize 事件）；`RestaurantListView` 尚無城市概念；前端仍無元件測試／E2E。
 細節見 progress.md。
 
 ## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成

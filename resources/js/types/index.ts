@@ -8,6 +8,17 @@ export interface Feature {
     label: string;
 }
 
+/** GET /api/v1/cities，來源是後端 config/cities.php，不是從餐廳的 city 欄位歸納。 */
+export interface City {
+    slug: string;
+    label: string;
+    country: string;
+    center: [number, number];
+    zoom: number;
+    /** "minLat,minLng,maxLat,maxLng"，與後端每日同步的涵蓋範圍一致。 */
+    bbox: string;
+}
+
 export interface MenuItem {
     id: number;
     name: string;

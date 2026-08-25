@@ -40,6 +40,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 | POST | `/restaurants/{id}/reports` | 回報 | 必須 |
 | GET | `/diets` | 飲食類型清單 | 無 |
 | GET | `/features` | 特色清單 | 無 |
+| GET | `/cities` | 地圖可切換的城市清單（前端城市切換器用） | 無 |
 | GET | `/geocode` | 地址/地標轉經緯度（搜尋框用，見下方） | 無 |
 | GET | `/me` | 目前使用者 | 必須 |
 | GET | `/me/favorites` | 我的收藏 | 必須 |
