@@ -77,4 +77,11 @@ class DietCatalogTest extends TestCase
         $this->assertContains('all', DietCatalog::venueScopeKeys());
         $this->assertSame('venue_scope', DietCatalog::venueScopeParam());
     }
+
+    public function test_yes_sync_mode_includes_the_yes_osm_value(): void
+    {
+        $this->assertTrue(DietCatalog::syncModeIncludes('yes', 'yes'));
+        $this->assertTrue(DietCatalog::syncModeIncludes('yes', 'only'));
+        $this->assertFalse(DietCatalog::syncModeIncludes('only', 'yes'));
+    }
 }

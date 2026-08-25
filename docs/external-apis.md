@@ -40,18 +40,18 @@ Food API 都更貼合 VeggieMap 的核心需求。
 - `GeocodingProviderInterface` 的實作是 `NominatimGeocodingProvider`，同樣包一層介面，未來要換成
   Google Geocoding 或付費商都只需新增一個 Provider class。
 
-## 收錄規則（2026-08-25 決定）
+## 收錄規則
 
 OSM 的 `diet:vegetarian` / `diet:vegan` 標籤有兩個我們在意的值：`only` 是「整間店都是素／
-純素」，`yes` 是「有素食選項」的一般餐廳。**用哪一個當收錄門檻依國別而異**，因為各地
-OSM 社群的標註慣例不同——這不是偏好問題，是同一套規則套下去會讓其中一邊失真：
+純素」，`yes` 是「有素食選項」的一般餐廳。收錄門檻寫在 `EXTERNAL_API_SYNC_BBOXES` 的
+`@規則`，規則名稱是 `config/diet.php` 的 `sync_modes` key，不是程式裡寫死的國家判斷。
 
-| 範圍 | `only` | `yes\|only` | only 佔比 | 採用規則 |
+| 範圍 | `only`（量測） | `yes\|only`（量測） | only 佔比 | 採用規則 |
 | --- | --- | --- | --- | --- |
-| 台北市 | 222 | — | — | `only` |
-| 台中市 | 177 | 239 | 74% | `only` |
-| 高雄市 | 107 | 310* | 約 35% | `only` |
-| 台南市 | 45 | 187* | 約 24% | `only` |
+| 台北市 | 222 | — | — | `yes` |
+| 台中市 | 177 | 239 | 74% | `yes` |
+| 高雄市 | 107 | 310* | 約 35% | `yes` |
+| 台南市 | 45 | 187* | 約 24% | `yes` |
 | 東京 23 区 | 46 | 210 | 22% | `yes` |
 
 \* 高雄／台南的 `yes|only` 數字是用較寬的量測 bbox 取得，與左欄的 `only` 不是同一個範圍，
@@ -60,19 +60,19 @@ OSM 社群的標註慣例不同——這不是偏好問題，是同一套規則�
 跨範圍的比值不要混用。
 
 日本社群慣用 `diet:vegan=yes` 表達「有純素選項」，很少標 `only`，套 `only` 會讓整個
-東京 23 区只剩 46 家，薄到不可用，所以日本用 `yes`。台灣四市一律用 `only`——**要注意
-「台灣都標 only」是過度概括**：台中的 only 佔比確實高（74%），但高雄約 35%、台南約 24%，
-跟東京相去不遠。台灣選 `only` 是為了收錄標準一致（都是真正的素食店），不是因為台灣的
-標註密度到處都高。
+東京 23 区只剩 46 家，薄到不可用。台灣四市的 only 佔比並不一律偏高（台中 74%，但高雄約
+35%、台南約 24%，跟東京相去不遠）。**2026-08-25 Phase B 產品決定**：台灣也收友善店，
+四市改 `@yes`。進地圖的預設篩選仍是 `venue_scope=exclusive`（純素食店），要看混合店
+得自己選「素食友善」或「全部」——不會一打開變成「全是火鍋」。
 
 規則跟著同步範圍走，寫在 `EXTERNAL_API_SYNC_BBOXES` 的每一組後面：
-`"minLat,minLng,maxLat,maxLng@only;minLat,minLng,maxLat,maxLng@yes"`，省略 `@規則` 時
-預設 `only`。規則名稱必須是 `config/diet.php` 的 `sync_modes` key，其他值直接丟
-`InvalidArgumentException`，不靜默退回預設。
+`"minLat,minLng,maxLat,maxLng@yes"`，省略 `@規則` 時預設 `only`（對齊
+`diet.default_sync_mode`）。規則名稱必須是 `config/diet.php` 的 `sync_modes` key，其他值
+直接丟 `InvalidArgumentException`，不靜默退回預設。
 
-**`yes` 的實際後果要看清楚**：東京匯入的 195 家裡包含 CoCo壱番屋、AFURI、
-ドトールコーヒーショップ 這類連鎖店——它們因為「有純素選項」而入列，不是素食餐廳。
-這是選 `yes` 必然帶來的結果，不是 bug。
+**`yes` 的實際後果要看清楚**：會收進 CoCo壱番屋、AFURI、星巴克、鼎泰豐這類「菜單有
+無肉選項」的店——它們不是素食餐廳。這是選 `yes` 必然帶來的結果，不是 bug。畫面用
+`venue_kind=friendly` 標「素食友善」，跟純素食店分開。
 
 **標籤怎麼對到 `diet_types.code`**（2026-08-25 Phase A）：對應表在 `config/diet.php`，
 不是 `OsmRestaurantProvider` 裡的常數。`diet:*=only` → exclusive codes（`vegan`／

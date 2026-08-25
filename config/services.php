@@ -60,12 +60,12 @@ return [
     // 規則名稱必須是 diet.sync_modes 的 key；未知名稱會在 OsmRestaurantProvider 建構時丟例外，
     // 不會默默當成 only。留空則完全不排程。
     //
-    // 收錄規則依國別而異，因為 OSM 的標籤慣例不同（2026-08-25 實測）：
-    //   only — 只收整間店都是素／純素的（diet:*=only）。台灣適用：台中市 177/220 家是 only。
-    //   yes  — 連「有素食選項」的一般餐廳一起收（diet:*=yes|only）。日本適用：東京 23 区
-    //          只有 46/210 家標 only，日本社群慣用 yes，套 only 會讓地圖薄到不可用。
-    // 節點怎麼對到 diet_types.code（only→exclusive、yes→friendly）在 config/diet.php，
-    // 不在這個檔。見 docs/external-apis.md「收錄規則」與 docs/todo.md。
+    // 收錄規則名稱是 diet.sync_modes 的 key，跟著 bbox 走，不在這裡寫死國家。
+    //   only — 只收 diet:*=only。
+    //   yes  — diet:*=yes 與 only 都收（純素食店是友善集合的子集）。
+    // 節點怎麼對到 diet_types.code（only→exclusive、yes→friendly）在 config/diet.php。
+    // 哪個範圍用哪種模式寫在 EXTERNAL_API_SYNC_BBOXES（見 .env.example）。
+    // 見 docs/external-apis.md「收錄規則」與 docs/todo.md。
     'sync_regions' => array_values(array_filter(array_map(
         static function (string $entry): ?array {
             $entry = trim($entry);

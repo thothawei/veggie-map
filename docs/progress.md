@@ -1,5 +1,20 @@
 # Progress Log
 
+## 2026-08-25 — P0 Phase B：台灣也收友善店
+
+**完成：**
+
+- `.env`／`.env.example` 台灣四市 bbox 從 `@only` 改成 `@yes`（規則名仍是
+  `config/diet.php` 的 `sync_modes` key）。
+- 排程測試改成「每個 region 的 diet 都在白名單」＋「東京模式含 osm value yes」，
+  不再寫死四個 only、一個 yes。
+- 前端預設 `venue_scope` 維持 exclusive，首頁不會因為台灣改收友善店就變成全是火鍋。
+- 實跑：台南 45→186（141 新友善）、台北 222→414、台中 177→246、高雄更新後 297。
+  四市 `whereDoesntHave('dietTypes')` 仍為 0；十方齋仍 exclusive。Overpass `out count`
+  對台南 bbox 回 504（查詢 timeout 25s），改以實際 `out body` 同步筆數對過量測（186≈187）。
+
+---
+
 ## 2026-08-25 — P0 Phase A：葷素混合店分得清
 
 **完成：**

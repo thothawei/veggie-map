@@ -438,17 +438,17 @@ Phase A 完成的驗收：東京抽樣（CoCo／AFURI 之類）顯示「素食�
 目標：台灣四市改收 `diet:*=yes|only`。**Phase A 沒合上不要開始**——否則多出來的店
 會全部標成素食餐廳。
 
-- [ ] `.env`／`.env.example` 的台灣 bbox 從 `@only` 改成 `@yes`（規則名仍是 config
+- [x] `.env`／`.env.example` 的台灣 bbox 從 `@only` 改成 `@yes`（規則名仍是 config
       白名單裡的那個「含 yes+only」模式，不要新發明第三種寫死在 PHP 的字串）
-- [ ] `ScheduleTest` 裡「四個 only、一個 yes」那條會紅，改成斷言「每個 region 的
+- [x] `ScheduleTest` 裡「四個 only、一個 yes」那條會紅，改成斷言「每個 region 的
       diet 都在 config 白名單」＋「東京用含 yes 的模式」；不要再寫死四／一的數量
-- [ ] 先實跑**一個**台灣城市（建議台南，45→約 187，最好抽樣），timeout／筆數對過
+- [x] 先實跑**一個**台灣城市（建議台南，45→約 187，最好抽樣），timeout／筆數對過
       Overpass `out count;` 再全開其餘三市
-- [ ] 全開後抽樣：友善店有 `*_friendly`、純素食店仍是 exclusive；
+- [x] 全開後抽樣：友善店有 `*_friendly`、純素食店仍是 exclusive；
       `whereDoesntHave('dietTypes')` 仍為 0
-- [ ] 預設 `venue_scope` 維持 exclusive（config），首頁數字不會突然變成「全是火鍋」；
+- [x] 預設 `venue_scope` 維持 exclusive（config），首頁數字不會突然變成「全是火鍋」；
       使用者要看混合店得自己點「含素食友善」或「全部」
-- [ ] 更新 `docs/external-apis.md` 收錄表（台灣改 yes 的理由改成產品決定，
+- [x] 更新 `docs/external-apis.md` 收錄表（台灣改 yes 的理由改成產品決定，
       不要再寫「台灣為了標準一致用 only」）
 
 Phase B 完成的驗收：台南／台中／台北／高雄 bbox 內都有 friendly 店；預設篩選下

@@ -175,6 +175,11 @@ class DietCatalog
         return $resolved;
     }
 
+    public static function syncModeIncludes(string $mode, string $osmValue): bool
+    {
+        return in_array($osmValue, self::syncModeOsmValues($mode), true);
+    }
+
     /**
      * 某過 Overpass tag 在這個 sync mode 下該比對哪些值。
      *

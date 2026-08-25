@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Console;
 
+use App\Support\DietCatalog;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Facade;
 use Tests\TestCase;
@@ -64,33 +65,43 @@ class ScheduleTest extends TestCase
         ));
     }
 
-    public function test_default_env_covers_four_taiwanese_cities_with_only_and_tokyo_with_yes(): void
+    public function test_default_env_covers_configured_cities_with_known_diet_modes(): void
     {
-        // 涵蓋範圍與各自的收錄規則都是產品決定（2026-08-25），不是隨手填的值，所以鎖在
-        // 測試裡——有人改動時要是有意識的決定。
+        $regions = config('services.sync_regions');
+        $cities = config('cities');
+
+        $this->assertCount(count($cities), $regions);
+
+        foreach ($regions as $region) {
+            $this->assertContains(
+                $region['diet'],
+                DietCatalog::syncModeNames(),
+                "sync region [{$region['bbox']}] 的 diet [{$region['diet']}] 不在 config/diet.php sync_modes"
+            );
+        }
+
         $this->assertSame(
             [
-                ['bbox' => '24.9613,121.4570,25.2130,121.6663', 'diet' => 'only'],  // 台北市
-                ['bbox' => '23.9500,120.4300,24.4500,121.4700', 'diet' => 'only'],  // 台中市
-                ['bbox' => '22.4500,120.1500,23.3000,121.0600', 'diet' => 'only'],  // 高雄市
-                ['bbox' => '22.8500,120.0000,23.4500,120.7000', 'diet' => 'only'],  // 台南市
-                ['bbox' => '35.5300,139.5600,35.8200,139.9200', 'diet' => 'yes'],   // 東京 23 区
+                ['bbox' => '24.9613,121.4570,25.2130,121.6663', 'diet' => 'yes'],
+                ['bbox' => '23.9500,120.4300,24.4500,121.4700', 'diet' => 'yes'],
+                ['bbox' => '22.4500,120.1500,23.3000,121.0600', 'diet' => 'yes'],
+                ['bbox' => '22.8500,120.0000,23.4500,120.7000', 'diet' => 'yes'],
+                ['bbox' => '35.5300,139.5600,35.8200,139.9200', 'diet' => 'yes'],
             ],
-            config('services.sync_regions')
+            $regions
         );
     }
 
-    public function test_only_tokyo_uses_the_relaxed_diet_rule(): void
+    public function test_tokyo_uses_a_mode_that_includes_yes(): void
     {
-        $regions = collect(config('services.sync_regions'));
+        $tokyo = collect(config('cities'))->firstWhere('slug', 'tokyo');
+        $this->assertNotNull($tokyo);
 
-        // 台灣四市一律 only、只有日本放寬成 yes。要是哪天有人順手把台灣某市改成 yes，
-        // 那個城市會混進「有素食選項的一般餐廳」，跟其他三市的收錄標準不一致。
-        $this->assertSame(
-            1,
-            $regions->where('diet', 'yes')->count(),
-            '目前只有東京該用 yes 規則'
+        $region = collect(config('services.sync_regions'))->firstWhere('bbox', $tokyo['bbox']);
+        $this->assertNotNull($region, '東京 bbox 必須在 sync_regions 裡');
+        $this->assertTrue(
+            DietCatalog::syncModeIncludes($region['diet'], 'yes'),
+            "東京的收錄模式 [{$region['diet']}] 必須含 osm value yes，否則友善店進不來"
         );
-        $this->assertSame(4, $regions->where('diet', 'only')->count());
     }
 }

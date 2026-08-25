@@ -15,8 +15,7 @@ Schedule::command('restaurants:recalculate-ratings')->daily();
 Schedule::command('restaurants:calculate-scores')->daily();
 
 // 涵蓋範圍與收錄規則由 config('services.sync_regions') 決定（對應 EXTERNAL_API_SYNC_BBOXES，
-// 見 .env.example）。2026-08-25 決定：台中市用 only、東京 23 区用 yes——收錄規則依國別而異，
-// 因為 OSM 標籤慣例不同，理由見 config/services.php。留空則完全不排程。
+// 見 .env.example）。規則名稱必須是 config/diet.php sync_modes 的 key。留空則完全不排程。
 // 錯開時間跑在 rating／score 重算之後，讓新匯入的餐廳當天就有分數。
 foreach (config('services.sync_regions') as $region) {
     Schedule::command('restaurants:sync', [
