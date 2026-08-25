@@ -84,6 +84,7 @@ export interface RestaurantSearchParams {
     latitude?: number;
     longitude?: number;
     radius?: number;
+    bbox?: string;
     city?: string;
     district?: string;
     diet?: string;
@@ -91,6 +92,12 @@ export interface RestaurantSearchParams {
     rating_min?: number;
     pet_friendly?: boolean;
     parking?: boolean;
+    delivery?: boolean;
+    takeout?: boolean;
+    reservation?: boolean;
+    wifi?: boolean;
+    outdoor_seating?: boolean;
+    family_friendly?: boolean;
     sort?: 'distance' | 'rating' | 'popular' | 'newest';
     per_page?: number;
     cursor?: string;

@@ -33,7 +33,13 @@ const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) =
 
     if (url === '/features') {
         return Promise.resolve({
-            data: { data: [{ code: 'pet_friendly', label: '寵物友善' }, { code: 'parking', label: '停車' }] },
+            data: {
+                data: [
+                    { code: 'pet_friendly', label: '寵物友善' },
+                    { code: 'parking', label: '停車' },
+                    { code: 'takeout', label: '外帶' },
+                ],
+            },
         });
     }
 
@@ -399,5 +405,21 @@ describe('RestaurantListView 篩選進網址', () => {
 
         expect(router.currentRoute.value.query.parking).toBeUndefined();
         expect(lastRestaurantCall().parking).toBeUndefined();
+    });
+
+    it('外帶篩選跟停車一樣走獨立 query 參數', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taichung&takeout=1');
+
+        expect(lastRestaurantCall().takeout).toBe(1);
+        expect(wrapper.findAll('.chip.active').map((c) => c.text())).toContain('外帶');
+    });
+
+    it('空地址不佔一行空白', async () => {
+        listPayload = { data: [{ ...fakeRestaurant(1), address: '' }], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountList('/restaurants?city=taichung');
+
+        expect(wrapper.find('.address').exists()).toBe(false);
+        expect(wrapper.find('strong').text()).toBe('餐廳 1');
     });
 });

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\Feature;
 use Database\Seeders\DietTypeSeeder;
 use Database\Seeders\FeatureSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,9 +26,11 @@ class LookupTest extends TestCase
     {
         $this->seed(FeatureSeeder::class);
 
-        $this->getJson('/api/v1/features')
-            ->assertOk()
-            ->assertJsonCount(8, 'data')
-            ->assertJsonFragment(['code' => 'pet_friendly']);
+        $codes = array_column($this->getJson('/api/v1/features')->assertOk()->json('data'), 'code');
+
+        $this->assertCount(8, $codes);
+        $this->assertEqualsCanonicalizing(Feature::CODES, $codes);
+        $this->assertContains('takeout', $codes);
+        $this->assertContains('pet_friendly', $codes);
     }
 }

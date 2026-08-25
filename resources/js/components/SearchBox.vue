@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import client from '@/api/client';
+import { extractApiErrorMessage } from '@/lib/apiError';
 import type { ApiSuccess, GeocodedPlace } from '@/types';
 
 const emit = defineEmits<{
@@ -11,21 +12,28 @@ const query = ref('');
 const results = ref<GeocodedPlace[]>([]);
 const loading = ref(false);
 const showResults = ref(false);
+const error = ref<string | null>(null);
 
 async function search() {
     if (query.value.trim().length < 2) {
         results.value = [];
         showResults.value = false;
+        error.value = null;
         return;
     }
 
     loading.value = true;
+    error.value = null;
     try {
         const response = await client.get<ApiSuccess<GeocodedPlace[]>>('/geocode', {
             params: { q: query.value.trim() },
         });
         results.value = response.data.data;
         showResults.value = true;
+    } catch (e: unknown) {
+        results.value = [];
+        showResults.value = false;
+        error.value = extractApiErrorMessage(e, '搜尋地點失敗，請再試一次');
     } finally {
         loading.value = false;
     }
@@ -61,6 +69,7 @@ function select(place: GeocodedPlace) {
             </li>
         </ul>
         <p v-else-if="showResults && !loading" class="empty">找不到符合的地點</p>
+        <p v-if="error" class="empty" role="alert">{{ error }}</p>
     </div>
 </template>
 

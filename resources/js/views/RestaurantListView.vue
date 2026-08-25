@@ -182,7 +182,7 @@ watch(committedKeyword, (value) => {
                 <button type="button" @click="goToDetail(restaurant)">
                     <strong>{{ restaurant.name }}</strong>
                     <span>⭐ {{ restaurant.rating.toFixed(1) }} ({{ restaurant.rating_count }})</span>
-                    <span class="address">{{ restaurant.address }}</span>
+                    <span v-if="restaurant.address?.trim()" class="address">{{ restaurant.address }}</span>
                 </button>
             </li>
         </ul>

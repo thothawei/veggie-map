@@ -49,6 +49,12 @@ paths:
           in: query
           description: 公里，預設 5
           schema: { type: number, format: float, minimum: 0.1, maximum: 50 }
+        - name: bbox
+          in: query
+          description: >
+            "minLat,minLng,maxLat,maxLng"。城市範圍是矩形，用 bbox 比中心點＋半徑精準，
+            也不受 radius 上限 50km 限制。格式錯誤回 422，不會靜默忽略。
+          schema: { type: string }
         - name: city
           in: query
           schema: { type: string, maxLength: 100 }
@@ -67,8 +73,27 @@ paths:
           schema: { type: number, minimum: 0, maximum: 5 }
         - name: pet_friendly
           in: query
+          description: 布林篩選，對應 features.code。傳 1／0 或 true／false。
           schema: { type: boolean }
         - name: parking
+          in: query
+          schema: { type: boolean }
+        - name: delivery
+          in: query
+          schema: { type: boolean }
+        - name: takeout
+          in: query
+          schema: { type: boolean }
+        - name: reservation
+          in: query
+          schema: { type: boolean }
+        - name: wifi
+          in: query
+          schema: { type: boolean }
+        - name: outdoor_seating
+          in: query
+          schema: { type: boolean }
+        - name: family_friendly
           in: query
           schema: { type: boolean }
         - name: sort
@@ -126,6 +151,34 @@ paths:
           in: query
           description: 預設 6
           schema: { type: integer, minimum: 1, maximum: 20 }
+        - name: diet
+          in: query
+          description: 與列表篩選相同，首頁推薦會跟著目前篩選收窄候選集
+          schema: { type: string }
+        - name: takeout
+          in: query
+          schema: { type: boolean }
+        - name: wifi
+          in: query
+          schema: { type: boolean }
+        - name: pet_friendly
+          in: query
+          schema: { type: boolean }
+        - name: parking
+          in: query
+          schema: { type: boolean }
+        - name: delivery
+          in: query
+          schema: { type: boolean }
+        - name: reservation
+          in: query
+          schema: { type: boolean }
+        - name: outdoor_seating
+          in: query
+          schema: { type: boolean }
+        - name: family_friendly
+          in: query
+          schema: { type: boolean }
       responses:
         "200":
           description: OK

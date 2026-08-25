@@ -6,6 +6,7 @@ use App\Models\Restaurant;
 use App\Models\Review;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class ReviewTest extends TestCase
@@ -53,6 +54,23 @@ class ReviewTest extends TestCase
 
         $this->assertDatabaseHas('reviews', ['id' => $review->id, 'status' => 'hidden']);
 
+        $restaurant->refresh();
+        $this->assertSame(0, $restaurant->rating_count);
+    }
+
+    public function test_admin_hiding_a_review_updates_rating_without_waiting_for_the_queue(): void
+    {
+        Queue::fake();
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $restaurant = Restaurant::factory()->create(['rating' => 5, 'rating_count' => 1]);
+        $review = Review::factory()->create(['restaurant_id' => $restaurant->id, 'rating' => 5, 'status' => 'active']);
+
+        $this->withHeaders($this->headers($admin))
+            ->postJson("/api/v1/admin/reviews/{$review->id}/hide")
+            ->assertOk();
+
+        Queue::assertNothingPushed();
         $restaurant->refresh();
         $this->assertSame(0, $restaurant->rating_count);
     }

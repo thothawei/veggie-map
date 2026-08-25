@@ -51,6 +51,7 @@ describe('useFilterQuery 讀取網址', () => {
 
     it('布林篩選只認 1', async () => {
         expect((await mountHarness('/restaurants?parking=1')).filters).toEqual({ parking: true });
+        expect((await mountHarness('/restaurants?takeout=1')).filters).toEqual({ takeout: true });
 
         // 0／true／空字串都不算開啟——網址上「沒有這個參數」才是關閉，不用 0 佔位。
         expect((await mountHarness('/restaurants?parking=0')).filters).toEqual({});
@@ -92,8 +93,8 @@ describe('useFilterQuery 寫回網址', () => {
         expect(h.router.currentRoute.value.query.diet).toBe('vegan');
     });
 
-    it('清空條件會把三個參數都拿掉', async () => {
-        const h = await mountHarness('/restaurants?diet=vegan&pet_friendly=1&parking=1');
+    it('清空條件會把篩選參數都拿掉', async () => {
+        const h = await mountHarness('/restaurants?diet=vegan&pet_friendly=1&parking=1&takeout=1');
 
         h.filters = {};
         await flushPromises();
@@ -102,6 +103,7 @@ describe('useFilterQuery 寫回網址', () => {
         expect(query.diet).toBeUndefined();
         expect(query.pet_friendly).toBeUndefined();
         expect(query.parking).toBeUndefined();
+        expect(query.takeout).toBeUndefined();
     });
 
     it('不會動到其他人的參數', async () => {
@@ -137,9 +139,10 @@ describe('apiFilterParams', () => {
     it('布林送 1 而不是 true——送 true 後端會回 422', () => {
         // axios 會把 true 序列化成字串 "true"，Laravel 的 boolean 規則不吃這個值。
         // 2026-08-25 實測：`parking=true` 回「The parking field must be true or false.」。
-        expect(apiFilterParams({ parking: true, pet_friendly: true })).toEqual({
+        expect(apiFilterParams({ parking: true, pet_friendly: true, takeout: true })).toEqual({
             parking: 1,
             pet_friendly: 1,
+            takeout: 1,
         });
     });
 

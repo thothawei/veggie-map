@@ -18,13 +18,14 @@ const mapStub = {
 };
 
 const clusterStub = { clearLayers: vi.fn(), addLayer: vi.fn() };
+const { bindPopup } = vi.hoisted(() => ({ bindPopup: vi.fn().mockReturnThis() }));
 
 vi.mock('leaflet', () => ({
     default: {
         map: vi.fn(() => mapStub),
         tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
         markerClusterGroup: vi.fn(() => clusterStub),
-        marker: vi.fn(() => ({ bindPopup: vi.fn().mockReturnThis(), on: vi.fn() })),
+        marker: vi.fn(() => ({ bindPopup, on: vi.fn() })),
     },
 }));
 vi.mock('leaflet.markercluster', () => ({}));
@@ -100,5 +101,37 @@ describe('RestaurantMap 視角切換', () => {
         (wrapper.vm as unknown as { jumpTo: (a: number, b: number, c: number) => void }).jumpTo(35.6762, 139.6503, 12);
 
         expect(mapStub.setView).toHaveBeenCalledWith([35.6762, 139.6503], 12);
+    });
+});
+
+describe('RestaurantMap popup', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('店名與地址裡的 HTML 會被跳脫', () => {
+        mount(RestaurantMap, {
+            props: {
+                restaurants: [{
+                    id: 1,
+                    name: 'Cafe <img src=x onerror=alert(1)>',
+                    address: '路 <script>',
+                    latitude: 25.03,
+                    longitude: 121.56,
+                    rating: 4,
+                    rating_count: 1,
+                } as Restaurant],
+                center: [25.033, 121.5654],
+                zoom: 13,
+            },
+        });
+
+        expect(bindPopup).toHaveBeenCalled();
+        const html = String(bindPopup.mock.calls[0][0]);
+        expect(html).not.toContain('<img');
+        expect(html).not.toContain('<script>');
+        expect(html).toContain('&lt;img');
+        expect(html).toContain('&lt;script&gt;');
     });
 });

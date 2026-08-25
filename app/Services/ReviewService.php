@@ -43,9 +43,10 @@ class ReviewService
             ]);
         }, 3);
 
-        // Horizon 已裝上、docker-compose 有跑 horizon worker（見 docs/progress.md），
-        // 真的丟進 QUEUE_CONNECTION=redis 佇列由 worker 非同步處理，不再是同步阻塞請求。
-        RecalculateRestaurantRatingJob::dispatch($restaurant->id);
+        // 使用者送出評論後前端會立刻重抓詳情。丟進佇列的話，請求結束時 rating 還是舊的，
+        // 畫面會先顯示 0.0(0) 再自己跳——Horizon 裝上之前用 dispatchSync 就是為了這件事。
+        // 批次指令仍走 dispatch()，這條 HTTP 路徑必須在回應前算完。
+        (new RecalculateRestaurantRatingJob($restaurant->id))->handle();
 
         return $review;
     }

@@ -18,7 +18,13 @@ vi.mock('@/api/client', () => ({
             }
 
             return Promise.resolve({
-                data: { data: [{ code: 'pet_friendly', label: '寵物友善' }, { code: 'parking', label: '停車' }] },
+                data: {
+                    data: [
+                        { code: 'pet_friendly', label: '寵物友善' },
+                        { code: 'parking', label: '停車' },
+                        { code: 'takeout', label: '外帶' },
+                    ],
+                },
             });
         }),
     },
@@ -133,5 +139,16 @@ describe('FilterDrawer', () => {
 
         expect(wrapper.props('filters')).toEqual({ diet: 'vegetarian' });
         expect(wrapper.findAll('.chip.active')).toHaveLength(1);
+    });
+
+    it('特色晶片依 /features 動態渲染，不是寫死寵物友善與停車', async () => {
+        setViewportMatches(true);
+        const wrapper = await mountDrawer();
+
+        expect(wrapper.findAll('.chip').map((c) => c.text())).toContain('外帶');
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '外帶')!.trigger('click');
+
+        expect(wrapper.props('filters')).toEqual({ takeout: true });
     });
 });

@@ -198,6 +198,7 @@ class OsmRestaurantProviderTest extends TestCase
             '外帶' => [['takeaway' => 'yes'], ['takeout']],
             '只做外帶' => [['takeaway' => 'only'], ['takeout']],
             '外送' => [['delivery' => 'yes'], ['delivery']],
+            '只做外送' => [['delivery' => 'only'], ['delivery']],
             '戶外座位' => [['outdoor_seating' => 'yes'], ['outdoor_seating']],
             '露臺也算戶外座位' => [['outdoor_seating' => 'patio'], ['outdoor_seating']],
             'wifi' => [['internet_access' => 'wlan'], ['wifi']],

@@ -41,7 +41,8 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
      */
     private const FEATURE_TAG_MAP = [
         'takeaway' => ['feature' => 'takeout', 'values' => ['yes', 'only']],
-        'delivery' => ['feature' => 'delivery', 'values' => ['yes']],
+        // 跟 takeaway 一樣，delivery=only 代表「只做外送」——漏掉 only 會把外送專營店漏掉。
+        'delivery' => ['feature' => 'delivery', 'values' => ['yes', 'only']],
         // patio／veranda／terrace 這類值本身就代表「有戶外座位」，只是講明是哪一種。
         'outdoor_seating' => ['feature' => 'outdoor_seating', 'values' => [
             'yes', 'patio', 'veranda', 'terrace', 'garden', 'rooftop', 'sidewalk', 'street', 'pedestrian_zone',

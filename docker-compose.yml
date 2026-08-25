@@ -27,6 +27,21 @@ services:
     networks:
       - veggiemap
 
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: veggiemap-scheduler
+    command: php artisan schedule:work
+    restart: unless-stopped
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - veggiemap
+
   nginx:
     image: nginx:stable-alpine
     container_name: veggiemap-nginx

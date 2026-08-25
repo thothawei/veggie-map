@@ -28,9 +28,17 @@ class AppServiceProvider extends ServiceProvider
         // EXTERNAL_API_RESTAURANT_PROVIDER=mock｜osm（見 config/services.php、
         // docs/external-apis.md）。預設 mock，避免開發／測試環境不小心打到真的 Overpass。
         $this->app->bind(RestaurantProviderInterface::class, function () {
-            return config('services.restaurant_provider') === 'osm'
-                ? new OsmRestaurantProvider
-                : new MockRestaurantProvider;
+            // 未知值必須 throw，不能靜默退回 mock：填 `overpass` 之類的值看起來
+            // 成功、一筆真資料都沒進來。restaurants:sync 那條路徑已經這樣擋了。
+            $name = config('services.restaurant_provider');
+
+            return match ($name) {
+                'osm' => new OsmRestaurantProvider,
+                'mock' => new MockRestaurantProvider,
+                default => throw new \InvalidArgumentException(
+                    "Unknown restaurant provider [{$name}], expected mock or osm."
+                ),
+            };
         });
 
         // 地址搜尋只有 Nominatim 一種 provider（docs/external-apis.md 已核准），沒有像

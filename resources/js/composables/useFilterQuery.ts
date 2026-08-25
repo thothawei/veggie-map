@@ -1,18 +1,23 @@
 import { computed, type WritableComputedRef } from 'vue';
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
+import { FEATURE_CODES, type FeatureCode } from '@/lib/features';
 import type { RestaurantSearchParams } from '@/types';
 
 /**
  * 篩選條件在網址上用的參數名。逐個參數而不是壓成一個字串，理由是網址本身要看得懂：
- * `?diet=vegan&parking=1` 一眼就知道在篩什麼，`?f=dGVzdA` 只有程式看得懂，
+ * `?diet=vegan&takeout=1` 一眼就知道在篩什麼，`?f=dGVzdA` 只有程式看得懂，
  * 使用者回報問題時也貼不出有意義的資訊。
  */
-const FILTER_KEYS = ['diet', 'pet_friendly', 'parking'] as const;
+const FILTER_KEYS = ['diet', ...FEATURE_CODES] as const;
 
 /** 布林篩選在網址上一律寫成 1；沒有這個參數就代表沒開，不用 0 佔位。 */
 const ON = '1';
 
-export type UrlFilters = Pick<RestaurantSearchParams, 'diet' | 'pet_friendly' | 'parking'>;
+export type UrlFilters = Pick<RestaurantSearchParams, 'diet'> & Partial<Record<FeatureCode, boolean>>;
+
+function isFeatureCode(key: string): key is FeatureCode {
+    return (FEATURE_CODES as readonly string[]).includes(key);
+}
 
 function parse(query: Record<string, unknown>): Partial<UrlFilters> {
     const filters: Partial<UrlFilters> = {};
@@ -21,12 +26,10 @@ function parse(query: Record<string, unknown>): Partial<UrlFilters> {
         filters.diet = query.diet;
     }
 
-    if (query.pet_friendly === ON) {
-        filters.pet_friendly = true;
-    }
-
-    if (query.parking === ON) {
-        filters.parking = true;
+    for (const code of FEATURE_CODES) {
+        if (query[code] === ON) {
+            filters[code] = true;
+        }
     }
 
     return filters;
@@ -51,8 +54,10 @@ export function useFilterQuery(): WritableComputedRef<Partial<UrlFilters>> {
             }
 
             if (next.diet) query.diet = next.diet;
-            if (next.pet_friendly) query.pet_friendly = ON;
-            if (next.parking) query.parking = ON;
+
+            for (const code of FEATURE_CODES) {
+                if (next[code]) query[code] = ON;
+            }
 
             router.push({ query });
         },
@@ -76,8 +81,12 @@ export function apiFilterParams(filters: Partial<UrlFilters>): Record<string, st
     const params: Record<string, string | number> = {};
 
     if (filters.diet) params.diet = filters.diet;
-    if (filters.pet_friendly) params.pet_friendly = 1;
-    if (filters.parking) params.parking = 1;
+
+    for (const key of Object.keys(filters)) {
+        if (isFeatureCode(key) && filters[key]) {
+            params[key] = 1;
+        }
+    }
 
     return params;
 }

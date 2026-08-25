@@ -47,6 +47,7 @@ class RestaurantController extends Controller
             (float) $validated['longitude'],
             (float) ($validated['radius'] ?? 5),
             (int) config('recommendation.candidate_pool_size'),
+            collect($validated)->except(['latitude', 'longitude', 'radius', 'limit'])->all(),
         );
 
         $ranked = $this->recommendations->rank($candidates)->take($limit);

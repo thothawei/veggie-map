@@ -49,7 +49,7 @@ class ReviewController extends Controller
 
         $review->update(['status' => 'hidden']);
 
-        RecalculateRestaurantRatingJob::dispatch($review->restaurant_id);
+        (new RecalculateRestaurantRatingJob($review->restaurant_id))->handle();
 
         return response()->json([
             'success' => true,

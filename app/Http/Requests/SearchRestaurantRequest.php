@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Feature;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -15,7 +16,7 @@ class SearchRestaurantRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $rules = [
             'keyword' => ['nullable', 'string', 'max:255'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
@@ -28,12 +29,28 @@ class SearchRestaurantRequest extends FormRequest
             'diet' => ['nullable', 'string', 'exists:diet_types,code'],
             'price_level' => ['nullable', 'integer', 'between:1,4'],
             'rating_min' => ['nullable', 'numeric', 'between:0,5'],
-            'pet_friendly' => ['nullable', 'boolean'],
-            'parking' => ['nullable', 'boolean'],
             'sort' => ['nullable', Rule::in(['distance', 'rating', 'popular', 'newest'])],
             'per_page' => ['nullable', 'integer', 'between:1,100'],
             'cursor' => ['nullable', 'string'],
         ];
+
+        // 每個 features.code 都是獨立的布林篩選（`?takeout=1&wifi=1`），與既有
+        // pet_friendly／parking 同一套約定。寫死兩個的話，OSM 匯入最多的 takeout／wifi
+        // 根本沒有查詢入口。
+        return $rules + Feature::booleanFilterRules();
+    }
+
+    /**
+     * axios 會把布林序列化成 `"true"`，Laravel 的 boolean 規則不吃。前端已在邊界轉成
+     * `1`，這裡再收一次 `"true"`／`"false"`，避免其他 API 使用端踩同一個坑。
+     */
+    protected function prepareForValidation(): void
+    {
+        $normalized = Feature::normalizeBooleanInputs($this->all());
+
+        if ($normalized !== []) {
+            $this->merge($normalized);
+        }
     }
 
     /**

@@ -42,6 +42,10 @@ class RestaurantSyncService
             $this->syncDietTypes($restaurant, $data->dietCodes, $dietTypeIds);
             $this->syncFeatures($restaurant, $data->featureCodes, $featureIds);
 
+            // pivot 寫入不會觸發 Restaurant saved event。同一筆餐廳重跑同步時若欄位
+            // 沒變，observer 也不會清快取——detail cache 會繼續吐沒有新特色的舊資料。
+            RestaurantCacheInvalidator::invalidate($restaurant->id);
+
             if ($this->flagPossibleDuplicates($restaurant)) {
                 $stats['duplicates_flagged']++;
             }

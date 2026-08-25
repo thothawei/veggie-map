@@ -23,17 +23,23 @@ function fakeRestaurant(id: number) {
 }
 
 let restaurantsPayload: { data: unknown[]; meta?: Record<string, unknown> } = { data: [] };
+const recommendedCalls: Record<string, unknown>[] = [];
 
-const get = vi.fn((url: string) => {
+const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) => {
     if (url === '/cities') return Promise.resolve({ data: { data: cities } });
     if (url === '/restaurants') return Promise.resolve({ data: restaurantsPayload });
-    if (url === '/restaurants/recommended') return Promise.resolve({ data: { data: [] } });
+    if (url === '/restaurants/recommended') {
+        recommendedCalls.push(config?.params ?? {});
+        return Promise.resolve({ data: { data: [] } });
+    }
     if (url === '/diets') return Promise.resolve({ data: { data: [] } });
 
     return Promise.resolve({ data: { data: [] } });
 });
 
-vi.mock('@/api/client', () => ({ default: { get: (...args: unknown[]) => get(...(args as [string])) } }));
+vi.mock('@/api/client', () => ({
+    default: { get: (...args: unknown[]) => get(...(args as [string, { params?: Record<string, unknown> }])) },
+}));
 
 const mapStub = {
     setView: vi.fn().mockReturnThis(),
@@ -86,6 +92,7 @@ function activeCityLabel(wrapper: { findAll: (s: string) => { text: () => string
 describe('HomeView 多城市切換', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        recommendedCalls.length = 0;
         localStorage.clear();
         setViewportMatches(true);
         restaurantsPayload = { data: [] };
@@ -160,6 +167,7 @@ describe('HomeView 多城市切換', () => {
 describe('HomeView 結果計數', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        recommendedCalls.length = 0;
         localStorage.clear();
         setViewportMatches(true);
         mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
@@ -190,5 +198,22 @@ describe('HomeView 結果計數', () => {
 
         expect(wrapper.find('.empty-state').exists()).toBe(true);
         expect(wrapper.find('.empty-state').text()).toContain('切換到其他城市');
+    });
+});
+
+describe('HomeView 篩選也套到推薦', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        restaurantsPayload = { data: [] };
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('推薦 API 帶上目前的特色篩選，不是另外撈一組沒篩過的', async () => {
+        await mountHome('/?city=taichung&takeout=1');
+
+        expect(recommendedCalls[recommendedCalls.length - 1]?.takeout).toBe(1);
     });
 });

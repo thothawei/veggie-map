@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import client from '@/api/client';
+import { FEATURE_CODES, type FeatureCode } from '@/lib/features';
 import type { ApiSuccess, DietType, Feature, RestaurantSearchParams } from '@/types';
 
 const filters = defineModel<Partial<RestaurantSearchParams>>('filters', { required: true });
@@ -74,27 +75,27 @@ function toggleDiet(code: string) {
     });
 }
 
-function togglePetFriendly() {
-    replaceFilters((next) => {
-        if (next.pet_friendly) {
-            delete next.pet_friendly;
-
-            return;
-        }
-
-        next.pet_friendly = true;
-    });
+function isFeatureCode(code: string): code is FeatureCode {
+    return (FEATURE_CODES as readonly string[]).includes(code);
 }
 
-function toggleParking() {
+function isFeatureOn(code: string): boolean {
+    return isFeatureCode(code) && Boolean(filters.value[code]);
+}
+
+function toggleFeature(code: string) {
+    if (!isFeatureCode(code)) {
+        return;
+    }
+
     replaceFilters((next) => {
-        if (next.parking) {
-            delete next.parking;
+        if (next[code]) {
+            delete next[code];
 
             return;
         }
 
-        next.parking = true;
+        next[code] = true;
     });
 }
 
@@ -141,24 +142,15 @@ function clearAll() {
             <div class="group">
                 <span class="label">特色</span>
                 <button
+                    v-for="feature in features"
+                    :key="feature.code"
                     type="button"
                     class="chip"
-                    :class="{ active: filters.pet_friendly }"
-                    :aria-pressed="Boolean(filters.pet_friendly)"
-                    @click="togglePetFriendly"
-                    v-if="features.some((f) => f.code === 'pet_friendly')"
+                    :class="{ active: isFeatureOn(feature.code) }"
+                    :aria-pressed="isFeatureOn(feature.code)"
+                    @click="toggleFeature(feature.code)"
                 >
-                    寵物友善
-                </button>
-                <button
-                    type="button"
-                    class="chip"
-                    :class="{ active: filters.parking }"
-                    :aria-pressed="Boolean(filters.parking)"
-                    @click="toggleParking"
-                    v-if="features.some((f) => f.code === 'parking')"
-                >
-                    停車
+                    {{ feature.label }}
                 </button>
             </div>
         </div>

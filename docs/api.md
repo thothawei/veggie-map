@@ -56,13 +56,13 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 ## `GET /restaurants` 查詢參數
 
 `keyword`, `latitude`, `longitude`, `radius`（公里，上限 50）, `bbox`, `city`, `district`, `diet`, `price_level`,
-`rating_min`, `pet_friendly`, `parking`（布林，請傳 `1`／`0`；Laravel 的 boolean 規則不接受 `true`／`false` 字串）, `open_now`, `sort`（distance/rating/popular/newest，
+`rating_min`, 以及 `features.code` 對應的布林篩選（`pet_friendly`／`parking`／`delivery`／`takeout`／`reservation`／`wifi`／`outdoor_seating`／`family_friendly`；請傳 `1`／`0`，也接受 `true`／`false` 字串）, `open_now`, `sort`（distance/rating/popular/newest，
 預設 `distance`；帶 `latitude`+`longitude` 才可用 `distance`）, `page`, `per_page`（預設 20，上限 100）。
 
 範例：
 
 ```
-GET /api/v1/restaurants?latitude=24.1477&longitude=120.6736&radius=5&diet=vegan&pet_friendly=1
+GET /api/v1/restaurants?latitude=24.1477&longitude=120.6736&radius=5&diet=vegan&takeout=1
 GET /api/v1/restaurants?bbox=23.9500,120.4300,24.4500,121.4700&sort=newest
 ```
 
@@ -129,10 +129,13 @@ score = distance_score * 0.25 + rating_score * 0.20 + vegetarian_confidence * 0.
 同一套設計），未來要換 `AIRecommendationService` 只改 `AppServiceProvider` 的綁定，
 `RestaurantController` 不用動。
 
-參數：`latitude`／`longitude`（必填）、`radius`（公里，預設 5）、`limit`（預設 6，上限 20）。
+參數：`latitude`／`longitude`（必填）、`radius`（公里，預設 5）、`limit`（預設 6，上限 20），
+以及與列表相同的 `diet` 與特色布林篩選（`takeout`／`wifi`／`pet_friendly` 等）。首頁推薦會跟著
+目前篩選收窄候選集，不是另外撈一組沒篩過的。
 
 ```
 GET /api/v1/restaurants/recommended?latitude=25.033&longitude=121.5645&radius=5&limit=6
+GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&takeout=1
 ```
 
 回應的每筆 Restaurant 多一個 `recommendation_score`（0~1），只有這支端點才會出現。

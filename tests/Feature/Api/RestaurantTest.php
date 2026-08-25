@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\DietType;
+use App\Models\Feature;
 use App\Models\Restaurant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -89,6 +90,51 @@ class RestaurantTest extends TestCase
         $this->assertSame($veganRestaurant->id, $response->json('data.0.id'));
     }
 
+    public function test_takeout_filter_returns_restaurants_with_that_feature(): void
+    {
+        $takeout = Feature::factory()->create(['code' => 'takeout']);
+        Feature::factory()->create(['code' => 'wifi']);
+
+        $withTakeout = Restaurant::factory()->create();
+        $withTakeout->features()->attach($takeout);
+
+        Restaurant::factory()->create();
+
+        $response = $this->getJson('/api/v1/restaurants?takeout=1');
+
+        $response->assertOk()->assertJsonCount(1, 'data');
+        $this->assertSame($withTakeout->id, $response->json('data.0.id'));
+    }
+
+    public function test_multiple_feature_filters_are_anded(): void
+    {
+        $takeout = Feature::factory()->create(['code' => 'takeout']);
+        $wifi = Feature::factory()->create(['code' => 'wifi']);
+
+        $both = Restaurant::factory()->create();
+        $both->features()->attach([$takeout->id, $wifi->id]);
+
+        $onlyTakeout = Restaurant::factory()->create();
+        $onlyTakeout->features()->attach($takeout);
+
+        $response = $this->getJson('/api/v1/restaurants?takeout=1&wifi=1');
+
+        $response->assertOk()->assertJsonCount(1, 'data');
+        $this->assertSame($both->id, $response->json('data.0.id'));
+    }
+
+    public function test_boolean_true_string_is_accepted_for_feature_filters(): void
+    {
+        // axios 預設會把布林序列化成 "true"，Laravel boolean 規則原本不吃。
+        $takeout = Feature::factory()->create(['code' => 'takeout']);
+        $restaurant = Restaurant::factory()->create();
+        $restaurant->features()->attach($takeout);
+
+        $this->getJson('/api/v1/restaurants?takeout=true')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
     public function test_show_returns_restaurant_with_relations(): void
     {
         $restaurant = Restaurant::factory()->create();
@@ -137,5 +183,28 @@ class RestaurantTest extends TestCase
             $response->json('data.1.recommendation_score'),
             $response->json('data.0.recommendation_score'),
         );
+    }
+
+    public function test_recommended_respects_feature_filters(): void
+    {
+        $takeout = Feature::factory()->create(['code' => 'takeout']);
+
+        $withTakeout = Restaurant::factory()->create([
+            'latitude' => 25.0332,
+            'longitude' => 121.5645,
+            'location' => DB::raw('ST_SRID(POINT(121.5645, 25.0332), 4326)'),
+        ]);
+        $withTakeout->features()->attach($takeout);
+
+        Restaurant::factory()->create([
+            'latitude' => 25.0332,
+            'longitude' => 121.5645,
+            'location' => DB::raw('ST_SRID(POINT(121.5645, 25.0332), 4326)'),
+        ]);
+
+        $response = $this->getJson('/api/v1/restaurants/recommended?latitude=25.0332&longitude=121.5645&radius=5&takeout=1');
+
+        $response->assertOk()->assertJsonCount(1, 'data');
+        $this->assertSame($withTakeout->id, $response->json('data.0.id'));
     }
 }

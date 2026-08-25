@@ -7,6 +7,7 @@ use App\Models\Restaurant;
 use App\Models\Review;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class RecalculateRestaurantRatingJobTest extends TestCase
@@ -48,6 +49,25 @@ class RecalculateRestaurantRatingJobTest extends TestCase
             ->postJson("/api/v1/restaurants/{$restaurant->id}/reviews", ['rating' => 4])
             ->assertStatus(201);
 
+        $restaurant->refresh();
+        $this->assertSame(1, $restaurant->rating_count);
+        $this->assertEquals(4.0, (float) $restaurant->rating);
+    }
+
+    public function test_submitting_a_review_updates_rating_without_waiting_for_the_queue(): void
+    {
+        // 前端送出評論後立刻重抓詳情。若只 dispatch() 進 Redis，QUEUE_CONNECTION=redis
+        // 時這支測試在 Queue::fake() 下會看到 rating 仍是 0——也就是使用者會先看到 0.0。
+        Queue::fake();
+
+        $restaurant = Restaurant::factory()->create(['rating' => 0, 'rating_count' => 0]);
+        $user = User::factory()->create();
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$user->createToken('t')->plainTextToken])
+            ->postJson("/api/v1/restaurants/{$restaurant->id}/reviews", ['rating' => 4])
+            ->assertStatus(201);
+
+        Queue::assertNothingPushed();
         $restaurant->refresh();
         $this->assertSame(1, $restaurant->rating_count);
         $this->assertEquals(4.0, (float) $restaurant->rating);

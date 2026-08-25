@@ -63,7 +63,13 @@ async function loadByBounds() {
             // feature_match/popularity/freshness 加權排序（見總體規劃第三十節），不是單純
             // 依評分排序，所以是獨立一支 API，不是從上面那批結果在前端隨便切幾筆。
             client.get<ApiSuccess<Restaurant[]>>('/restaurants/recommended', {
-                params: { latitude: midLat, longitude: midLng, radius, limit: 6 },
+                params: {
+                    latitude: midLat,
+                    longitude: midLng,
+                    radius,
+                    limit: 6,
+                    ...apiFilterParams(filters.value),
+                },
             }),
         ]);
 
@@ -191,7 +197,7 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                 >
                     <strong>{{ restaurant.name }}</strong>
                     <span>⭐ {{ restaurant.rating.toFixed(1) }} ({{ restaurant.rating_count }})</span>
-                    <span class="address">{{ restaurant.address }}</span>
+                    <span v-if="restaurant.address?.trim()" class="address">{{ restaurant.address }}</span>
                 </button>
             </div>
         </section>

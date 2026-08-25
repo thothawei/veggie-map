@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { isAxiosError } from 'axios';
 import client from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { useFavoritesStore } from '@/stores/favorites';
 import { extractApiErrorMessage } from '@/lib/apiError';
-import type { ApiSuccess, Restaurant } from '@/types';
+import { safeHttpUrl } from '@/lib/redirect';
+import type { ApiSuccess, DietType, Feature, Restaurant } from '@/types';
 
 const props = defineProps<{ id: string }>();
 
@@ -15,6 +16,8 @@ const favorites = useFavoritesStore();
 const restaurant = ref<Restaurant | null>(null);
 const loading = ref(true);
 const notFound = ref(false);
+const dietLabels = ref<Record<string, string>>({});
+const featureLabels = ref<Record<string, string>>({});
 
 const reviewRating = ref(5);
 const reviewComment = ref('');
@@ -22,6 +25,11 @@ const submittingReview = ref(false);
 const reviewError = ref<string | null>(null);
 
 const isFavorite = computed(() => (restaurant.value ? favorites.isFavorite(restaurant.value.id) : false));
+const websiteUrl = computed(() => safeHttpUrl(restaurant.value?.website));
+
+function labelFor(code: string, labels: Record<string, string>): string {
+    return labels[code] ?? code;
+}
 
 async function load() {
     loading.value = true;
@@ -32,12 +40,22 @@ async function load() {
     } catch (error: unknown) {
         if (isAxiosError(error) && error.response?.status === 404) {
             notFound.value = true;
+            restaurant.value = null;
         } else {
             throw error;
         }
     } finally {
         loading.value = false;
     }
+}
+
+async function loadLookups() {
+    const [dietsRes, featuresRes] = await Promise.all([
+        client.get<ApiSuccess<DietType[]>>('/diets'),
+        client.get<ApiSuccess<Feature[]>>('/features'),
+    ]);
+    dietLabels.value = Object.fromEntries(dietsRes.data.data.map((item) => [item.code, item.label]));
+    featureLabels.value = Object.fromEntries(featuresRes.data.data.map((item) => [item.code, item.label]));
 }
 
 async function toggleFavorite() {
@@ -68,11 +86,13 @@ async function submitReview() {
 }
 
 onMounted(() => {
-    load();
+    loadLookups();
     if (auth.isAuthenticated && !favorites.loaded) {
         favorites.fetchAll();
     }
 });
+
+watch(() => props.id, load, { immediate: true });
 </script>
 
 <template>
@@ -91,18 +111,18 @@ onMounted(() => {
             <p v-if="restaurant.confidence_score !== null && restaurant.confidence_score !== undefined">
                 素食可信度：{{ restaurant.confidence_score }} / 100
             </p>
-            <p>{{ restaurant.address }}</p>
+            <p v-if="restaurant.address?.trim()">{{ restaurant.address }}</p>
             <p v-if="restaurant.phone">電話：{{ restaurant.phone }}</p>
-            <p v-if="restaurant.website">
-                <a :href="restaurant.website" target="_blank" rel="noopener">官方網站</a>
+            <p v-if="websiteUrl">
+                <a :href="websiteUrl" target="_blank" rel="noopener noreferrer">官方網站</a>
             </p>
             <p v-if="restaurant.description">{{ restaurant.description }}</p>
 
             <div v-if="restaurant.diet_types?.length" class="tags">
-                <span v-for="code in restaurant.diet_types" :key="code" class="tag">{{ code }}</span>
+                <span v-for="code in restaurant.diet_types" :key="code" class="tag">{{ labelFor(code, dietLabels) }}</span>
             </div>
             <div v-if="restaurant.features?.length" class="tags">
-                <span v-for="code in restaurant.features" :key="code" class="tag feature">{{ code }}</span>
+                <span v-for="code in restaurant.features" :key="code" class="tag feature">{{ labelFor(code, featureLabels) }}</span>
             </div>
 
             <section v-if="restaurant.menu_items?.length">
@@ -111,7 +131,7 @@ onMounted(() => {
                     <li v-for="item in restaurant.menu_items" :key="item.id">
                         {{ item.name }}
                         <span v-if="item.price !== null">NT$ {{ item.price }}</span>
-                        <span class="diet-type">({{ item.diet_type }})</span>
+                        <span class="diet-type">({{ labelFor(item.diet_type, dietLabels) }})</span>
                     </li>
                 </ul>
             </section>

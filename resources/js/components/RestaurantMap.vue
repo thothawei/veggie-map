@@ -3,6 +3,7 @@ import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import { haversineKm } from '@/lib/geo';
+import { escapeHtml } from '@/lib/html';
 import type { Restaurant } from '@/types';
 
 const props = defineProps<{
@@ -40,8 +41,11 @@ function renderMarkers() {
 
     for (const restaurant of props.restaurants) {
         const marker = L.marker([restaurant.latitude, restaurant.longitude]);
+        const address = restaurant.address?.trim();
         marker.bindPopup(
-            `<strong>${restaurant.name}</strong><br>${restaurant.address}<br>⭐ ${restaurant.rating.toFixed(1)} (${restaurant.rating_count})`,
+            `<strong>${escapeHtml(restaurant.name)}</strong>` +
+                (address ? `<br>${escapeHtml(address)}` : '') +
+                `<br>⭐ ${restaurant.rating.toFixed(1)} (${restaurant.rating_count})`,
         );
         marker.on('click', () => emit('select', restaurant));
         clusterGroup.addLayer(marker);

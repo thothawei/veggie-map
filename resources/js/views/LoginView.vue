@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { extractApiErrorMessage } from '@/lib/apiError';
+import { safeInternalPath } from '@/lib/redirect';
 
 const route = useRoute();
 const router = useRouter();
@@ -18,7 +19,7 @@ async function submit() {
     error.value = null;
     try {
         await auth.login(email.value, password.value);
-        router.push((route.query.redirect as string) ?? '/');
+        router.push(safeInternalPath(route.query.redirect));
     } catch (e: unknown) {
         error.value = extractApiErrorMessage(e, '登入失敗');
     } finally {

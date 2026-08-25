@@ -231,4 +231,53 @@ class RestaurantSyncServiceTest extends TestCase
 
         $this->assertCount(0, Restaurant::where('source_id', 'node-f4')->firstOrFail()->features);
     }
+
+    public function test_sync_invalidates_detail_cache_when_only_features_change(): void
+    {
+        // pivot 寫入不會觸發 Restaurant saved。同一筆餐廳重跑同步時若欄位沒變，
+        // observer 也不會清快取——不在 sync 裡顯式 invalidate 的話，詳情會繼續吐舊的空特色。
+        Feature::factory()->create(['code' => 'takeout']);
+
+        $first = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-cache',
+                name: '後來才有外帶',
+                latitude: 25.03,
+                longitude: 121.55,
+            ),
+        ]);
+        $this->service($first)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-cache')->firstOrFail();
+
+        $this->getJson("/api/v1/restaurants/{$restaurant->id}")
+            ->assertOk()
+            ->assertJsonPath('data.features', []);
+
+        $second = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-cache',
+                name: '後來才有外帶',
+                latitude: 25.03,
+                longitude: 121.55,
+                featureCodes: ['takeout'],
+            ),
+        ]);
+        $this->service($second)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $this->getJson("/api/v1/restaurants/{$restaurant->id}")
+            ->assertOk()
+            ->assertJsonPath('data.features', ['takeout']);
+    }
+
+    public function test_unknown_provider_binding_throws_instead_of_silently_using_mock(): void
+    {
+        config(['services.restaurant_provider' => 'overpass']);
+        $this->app->forgetInstance(RestaurantProviderInterface::class);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('overpass');
+
+        app(RestaurantProviderInterface::class);
+    }
 }

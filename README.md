@@ -169,13 +169,14 @@ Docker 章節）。Production build：`npm run build`（含 `vue-tsc` 型別檢�
 
 ## Docker
 
-`docker-compose.yml` 定義五個服務：`app`（PHP 8.2-fpm）、`horizon`（跟 `app` 同一個
-image，改跑 `php artisan horizon` 消化 Redis 佇列）、`nginx`、`mysql`、`redis`。本機若
+`docker-compose.yml` 定義六個服務：`app`（PHP 8.2-fpm）、`horizon`（跟 `app` 同一個
+image，改跑 `php artisan horizon` 消化 Redis 佇列）、`scheduler`（`php artisan schedule:work`，
+跑每日同步與評分重算）、`nginx`、`mysql`、`redis`。本機若
 3306/80 已被其他專案佔用，host 對外映射改成 `3307`/`8080`（容器內部 port 不變）。
 
 ```bash
 docker compose up -d      # 啟動
-docker compose ps         # 確認五個服務都是 Running
+docker compose ps         # 確認六個服務都是 Running
 docker compose logs -f app
 docker compose logs -f horizon   # 確認 queue worker 真的在跑、有沒有 failed job
 ```
