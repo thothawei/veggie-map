@@ -19,7 +19,10 @@ class LookupTest extends TestCase
         $this->getJson('/api/v1/diets')
             ->assertOk()
             ->assertJsonCount(7, 'data')
-            ->assertJsonFragment(['code' => 'vegan']);
+            ->assertJsonFragment(['code' => 'vegan', 'kind' => 'exclusive'])
+            ->assertJsonFragment(['code' => 'vegetarian_friendly', 'kind' => 'friendly'])
+            ->assertJsonPath('meta.venue_scope.param', 'venue_scope')
+            ->assertJsonPath('meta.venue_scope.default', 'exclusive');
     }
 
     public function test_features_returns_seeded_list(): void

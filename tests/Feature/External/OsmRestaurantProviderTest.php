@@ -5,6 +5,7 @@ namespace Tests\Feature\External;
 use App\Models\ExternalApiLog;
 use App\Services\External\BoundingBox;
 use App\Services\External\OsmRestaurantProvider;
+use App\Support\DietCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -79,7 +80,7 @@ class OsmRestaurantProviderTest extends TestCase
         (new OsmRestaurantProvider)->fetch($this->bbox());
 
         $this->assertSame(
-            2,
+            count(DietCatalog::osmTags()),
             substr_count($this->sentQuery(), '(25,121.51,25.07,121.58)'),
         );
     }
@@ -88,7 +89,7 @@ class OsmRestaurantProviderTest extends TestCase
     {
         Http::fake(['*' => Http::response(['elements' => []])]);
 
-        (new OsmRestaurantProvider(OsmRestaurantProvider::DIET_YES))->fetch($this->bbox());
+        (new OsmRestaurantProvider('yes'))->fetch($this->bbox());
 
         $query = $this->sentQuery();
 
@@ -149,7 +150,30 @@ class OsmRestaurantProviderTest extends TestCase
         $this->assertSame('秀羽素食', $results[0]->name);
         $this->assertSame('111', $results[0]->sourceId);
         $this->assertSame('信義路 7', $results[0]->address);
-        $this->assertEqualsCanonicalizing(['vegetarian', 'vegan'], $results[0]->dietCodes);
+        $this->assertEqualsCanonicalizing(['vegetarian', 'vegan_friendly'], $results[0]->dietCodes);
+    }
+
+    public function test_yes_diet_tags_map_to_friendly_codes(): void
+    {
+        Http::fake([
+            '*' => Http::response(['elements' => [[
+                'id' => 444,
+                'lat' => 35.66,
+                'lon' => 139.70,
+                'tags' => [
+                    'name' => 'CoCo',
+                    'diet:vegetarian' => 'yes',
+                    'diet:vegan' => 'yes',
+                ],
+            ]]]),
+        ]);
+
+        $results = (new OsmRestaurantProvider('yes'))->fetch($this->bbox());
+
+        $this->assertEqualsCanonicalizing(
+            ['vegetarian_friendly', 'vegan_friendly'],
+            $results[0]->dietCodes,
+        );
     }
 
     public function test_address_falls_back_to_addr_full_when_street_is_missing(): void

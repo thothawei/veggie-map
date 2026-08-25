@@ -222,6 +222,7 @@ describe('HomeView 篩選也套到推薦', () => {
         await mountHome('/?city=taichung&takeout=1');
 
         expect(recommendedCalls[recommendedCalls.length - 1]?.takeout).toBe(1);
+        expect(recommendedCalls[recommendedCalls.length - 1]?.venue_scope).toBe('exclusive');
     });
 });
 

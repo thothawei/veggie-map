@@ -134,4 +134,28 @@ describe('RestaurantMap popup', () => {
         expect(html).toContain('&lt;img');
         expect(html).toContain('&lt;script&gt;');
     });
+
+    it('popup 顯示 API 帶回的 venue_badge，文案不是寫死在元件裡', () => {
+        mount(RestaurantMap, {
+            props: {
+                restaurants: [{
+                    id: 1,
+                    name: 'AFURI',
+                    address: '渋谷',
+                    latitude: 35.66,
+                    longitude: 139.70,
+                    rating: 4,
+                    rating_count: 1,
+                    venue_badge: '素食友善',
+                    venue_summary: '菜單有素食（無肉）選項',
+                } as Restaurant],
+                center: [35.6762, 139.6503],
+                zoom: 12,
+            },
+        });
+
+        const html = String(bindPopup.mock.calls[0][0]);
+        expect(html).toContain('素食友善');
+        expect(html).toContain('菜單有素食（無肉）選項');
+    });
 });

@@ -65,6 +65,12 @@ paths:
           in: query
           description: 對應 diet_types.code，見 GET /diets
           schema: { type: string }
+        - name: venue_scope
+          in: query
+          description: >
+            店家範圍。合法值見 GET /diets 的 meta.venue_scope（目前 exclusive／friendly／all）。
+            省略＝不過濾。前端預設送 exclusive。
+          schema: { type: string }
         - name: price_level
           in: query
           schema: { type: integer, minimum: 1, maximum: 4 }
@@ -160,6 +166,10 @@ paths:
         - name: diet
           in: query
           description: 與列表篩選相同，首頁推薦會跟著目前篩選收窄候選集
+          schema: { type: string }
+        - name: venue_scope
+          in: query
+          description: 與列表相同，見 GET /diets 的 meta.venue_scope
           schema: { type: string }
         - name: takeout
           in: query
@@ -350,7 +360,23 @@ paths:
                     properties:
                       data:
                         type: array
-                        items: { $ref: "#/components/schemas/CodeLabel" }
+                        items: { $ref: "#/components/schemas/DietType" }
+                      meta:
+                        type: object
+                        properties:
+                          venue_scope:
+                            type: object
+                            properties:
+                              param: { type: string }
+                              default: { type: string }
+                              group_label: { type: string }
+                              values:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    value: { type: string }
+                                    label: { type: string }
 
   /features:
     get:
@@ -737,6 +763,14 @@ components:
         code: { type: string }
         label: { type: string }
 
+    DietType:
+      allOf:
+        - $ref: "#/components/schemas/CodeLabel"
+        - type: object
+          properties:
+            kind: { type: string, nullable: true, description: exclusive 或 friendly，來自 config/diet.php }
+            group_label: { type: string, nullable: true }
+
     GeocodedPlace:
       type: object
       properties:
@@ -794,7 +828,19 @@ components:
         diet_types:
           type: array
           items: { type: string }
-          description: diet_types.code 陣列，只有 eager load 過才會出現（詳情頁才有）
+          description: diet_types.code 陣列，eager load 過才會出現（列表與詳情都會）
+        venue_kind:
+          type: string
+          nullable: true
+          description: exclusive 或 friendly。有任何 exclusive code 就是 exclusive
+        venue_badge:
+          type: string
+          nullable: true
+          description: 短標籤，文案來自 config/diet.php copy
+        venue_summary:
+          type: string
+          nullable: true
+          description: 一句說明，文案來自 config/diet.php copy
         features:
           type: array
           items: { type: string }

@@ -4,7 +4,9 @@ namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\ValidatesBoundingBox;
 use App\Models\Feature;
+use App\Support\DietCatalog;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class RecommendedRestaurantRequest extends FormRequest
 {
@@ -24,6 +26,7 @@ class RecommendedRestaurantRequest extends FormRequest
             'bbox' => ['nullable', 'string'],
             'limit' => ['nullable', 'integer', 'between:1,20'],
             'diet' => ['nullable', 'string', 'exists:diet_types,code'],
+            DietCatalog::venueScopeParam() => ['nullable', 'string', Rule::in(DietCatalog::venueScopeKeys())],
         ] + Feature::booleanFilterRules();
     }
 

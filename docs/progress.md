@@ -1,5 +1,27 @@
 # Progress Log
 
+## 2026-08-25 — P0 Phase A：葷素混合店分得清
+
+**完成：**
+
+- `config/diet.php` 當單一真相：diet types（含 osm_tag／osm_values／kind／group_label）、
+  sync_modes、venue_scope、copy、confidence、osm amenities／features。Seeder、
+  `GET /diets`、Overpass 組 query、映射都讀這份。
+- OSM：`only` → exclusive codes，`yes` → friendly codes。東京 `@yes` 收進來的友善店
+  不再被標成 `vegan`／`vegetarian`。
+- Diet 同步策略：OSM 管得到的 code 改成「這次算出的集合」（錯標會被換掉）；沒有
+  osm_tag 的手動關聯留下。特色仍 `syncWithoutDetaching`。
+- `GET /restaurants` 與 recommended 加 `venue_scope`（省略＝不過濾；前端預設送 exclusive）。
+  FilterDrawer 範圍晶片與 diet 分組都依 `/diets` meta／kind，不寫死清單。
+- 卡片／popup／詳情用 API 的 `venue_badge`／`venue_summary`。友善店 `external_source`
+  分數走 config（5），exclusive 仍 10；重跑 sync 會更新既有分數。
+- 台灣四市 `@only` 沒動，留給 Phase B。
+
+**設計點：** 兩種關聯不能共用 `syncWithoutDetaching`——否則東京友善店上錯掛的
+`vegetarian` 永遠拔不掉。OSM-managed 用 replace，手動非 OSM code 才保留。
+
+---
+
 ## 2026-08-24 — Phase 0: Architecture & External API Research
 
 **完成：**

@@ -45,6 +45,10 @@ function renderMarkers() {
         const address = restaurant.address?.trim();
         marker.bindPopup(
             `<strong>${escapeHtml(restaurant.name)}</strong>` +
+                (restaurant.venue_badge
+                    ? `<br><span class="venue-badge">${escapeHtml(restaurant.venue_badge)}</span>`
+                    : '') +
+                (restaurant.venue_summary ? `<br>${escapeHtml(restaurant.venue_summary)}` : '') +
                 (address ? `<br>${escapeHtml(address)}` : '') +
                 `<br>⭐ ${restaurant.rating.toFixed(1)} (${restaurant.rating_count})`,
         );

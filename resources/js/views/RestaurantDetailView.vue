@@ -122,6 +122,11 @@ watch(() => props.id, load, { immediate: true });
             </p>
             <p v-if="restaurant.description">{{ restaurant.description }}</p>
 
+            <p v-if="restaurant.venue_badge" class="venue-line">
+                <span class="venue-badge" :data-kind="restaurant.venue_kind ?? undefined">{{ restaurant.venue_badge }}</span>
+                <span v-if="restaurant.venue_summary">{{ restaurant.venue_summary }}</span>
+            </p>
+
             <div v-if="restaurant.diet_types?.length" class="tags">
                 <span v-for="code in restaurant.diet_types" :key="code" class="tag">{{ labelFor(code, dietLabels) }}</span>
             </div>
@@ -180,6 +185,28 @@ header {
     gap: 0.5rem;
     flex-wrap: wrap;
     margin: 0.5rem 0;
+}
+
+.venue-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+    color: #4a5568;
+}
+
+.venue-badge {
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    background: #f0fff4;
+    color: #276749;
+    font-size: 0.85rem;
+}
+
+.venue-badge[data-kind='friendly'] {
+    background: #ebf8ff;
+    color: #2b6cb0;
 }
 
 .tag {

@@ -2,6 +2,9 @@
 
 > 用途：Claude Code 下一次接手時的進度追蹤清單。完成一項就打勾＋commit push（見
 > [progress.md](progress.md) 的 commit/push 慣例），不要一次全做。
+>
+> 2026-08-25 重新對照總 Prompt 後：Phase 0～13 主線已完成。
+> **下一批產品工作是 P0 葷素混合店 Phase A→B→C**；其餘未閉環項目在「剩餘：規劃明寫但還沒閉環」。
 
 ## Phase 8.5 — 地址搜尋（Geocoding，優先）✅ 已完成 2026-08-24
 
@@ -313,14 +316,323 @@ ROI 偏低」的判斷）。
 - [x] 順帶把台北補成完整市範圍（原本只跑過市中心小 bbox），總數 592 → 708
 - [x] 後端測試 107 → 132，含反向驗證 3 條紅
 
-**⚠️ 接著最該做的**：特色篩選目前只支援 `pet_friendly` 與 `parking`——正是唯二無法從 OSM
-取得的兩個。有資料的 takeout(111)/wifi(19)/outdoor_seating(18)/delivery(14)/reservation(9)
-全部沒有查詢入口。要改成泛用篩選（`?feature=takeout`）＋ FilterDrawer 依 `/features`
-動態渲染，這會動到 API 契約與 UI，需要先決定。
+## 補做：泛用特色篩選 ＋ 接受 `true`／`false` 字串 ✅ 已完成（`f538d1b`）
 
-## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成
+上一則點名的落差。沒有改成 `?feature=takeout`（那會動到既有 `pet_friendly=1` 契約），
+改成每個 `features.code` 都是獨立布林參數，跟原本兩個篩選同一套約定。
 
-`docs/progress.md` 逐項記錄；`git log` 每個 commit 都有對應 GitHub Actions CI 綠燈
-（`gh run list` 可查）。下次接手前建議先讀 `docs/progress.md` 最新幾則條目，特別是
-「多個 Claude Code session 共用同一個測試資料庫」那則已知環境限制——如果同時開多個
-session 對這個 repo 工作，`php artisan test` 偶爾會出現隨機失敗，不代表程式碼壞了。
+- [x] `Feature::CODES` 當單一真相來源；`SearchRestaurantRequest`／
+      `RecommendedRestaurantRequest` 用 `booleanFilterRules()`，不再寫死兩個
+- [x] `RestaurantRepository::baseQuery()` 對 8 個 code 一律 `whereHas`
+- [x] FilterDrawer 依 `/features` 動態渲染全部晶片
+- [x] `prepareForValidation()` 把 axios 的 `"true"`／`"false"` 轉成 `1`／`0`
+      （上一則列的「API 不接受 `parking=true`」一併修掉）
+- [x] 首頁推薦 API 也吃同一組篩選（修掉「地圖有篩、推薦沒篩」）
+
+## 補做：空地址不渲染、scheduler container、未知 provider 要 throw ✅ 已完成
+
+先前進度條裡列成未決、後來已經補上、但這份 todo 沒打勾的三件：
+
+- [x] 列表／首頁推薦／詳情／地圖 popup：`address?.trim()` 為空就不渲染那一行
+      （OSM 沒有 `addr:street` 時不再多一行空白）
+- [x] `docker-compose.yml` 新增 `scheduler` service（`php artisan schedule:work`），
+      本機排程不再只存在於 `schedule:list`
+- [x] `AppServiceProvider` 對未知 `EXTERNAL_API_RESTAURANT_PROVIDER` 直接 throw，
+      不再靜默退回 mock（填 `overpass` 會看起來成功、一筆真資料都沒進來）
+
+## 現況（2026-08-25 對照總 Prompt 後）
+
+Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Prompt 裡仍有一批
+「寫進規格、後來擱置或只做半套」的項目。下面依「規劃有沒有明寫」整理，不是憑空加功能。
+完成一項就打勾＋更新 [progress.md](progress.md)，不要一次全做。
+
+**下一批產品工作**：葷素混合店 Phase A → B → C（見下方 P0）。設計原則是活用型——
+標籤對應、收錄規則、預設篩選、文案分組全部走 config／API，禁止在 Controller、
+Repository、Vue 元件裡寫死 code 清單或「台灣一定 only」。
+
+---
+
+## P0 — 葷素混合店（Phase A／B／C）
+
+來源：2026-08-25 產品決定。地圖要同時能呈現：
+
+1. **純素食店**：整間都是素／全素（OSM `diet:*=only`）
+2. **素食友善店**：葷素都有，菜單有無肉選項（OSM `diet:*=yes`）
+3. **菜單層**：有資料時標每一道是素／葷；沒資料就誠實不畫假菜單
+
+東京已用 `@yes` 在收友善店，但映射把 `yes` 和 `only` 都寫成 `vegan`／`vegetarian`，
+畫面上友善店看起來像素食餐廳。台灣四市仍 `@only`。`diet_types` 已有
+`vegan_friendly`／`vegetarian_friendly`，`menu_items.diet_type` 已有 `non_vegetarian`，
+都還沒接到真實資料流。
+
+### 活用型約束（三個 Phase 都要遵守）
+
+實作時若發現自己在寫 `if ($code === 'vegan')` 或 `if (city === 'taichung')` 這種
+產品規則，停下來改成讀 config。具體：
+
+- **禁止**在 `OsmRestaurantProvider` 寫死 `diet:vegan → vegan`。對應表放 config
+  （比照 `FEATURE_TAG_MAP`，但那份也該一併搬出 class const）。
+- **禁止**在 FilterDrawer／前端寫死「全素／素食友善」兩組 chip。分組與標籤由
+  `GET /diets` 帶回 metadata，元件只做分組渲染。
+- **禁止**用國家或城市名硬切收錄規則。繼續走 `EXTERNAL_API_SYNC_BBOXES` 的
+  `bbox@規則`；規則名稱本身也要來自 config 白名單，不是 provider 裡的兩個 const。
+- **禁止**在推薦／可信度裡寫死「友善店少 20 分」。權重放 `config/vegetarian.php` 或
+  新的 `config/diet.php`。
+- **禁止**菜單列舉 `vegan|vegetarian|non_vegetarian` 散落在 FormRequest／Vue。
+  合法值與顯示標籤同一份 config，seeder／驗證／前端都讀它。
+- 前端若需要在打 API 前就知道名單（網址 parse），只允許一份與後端同源的匯出
+  （例如 seeder／config 產生的 ts，或啟動時打 `/diets`；不要再手寫一份
+  `FEATURE_CODES` 式的平行清單）。現有 `FEATURE_CODES` 這次能順便改更好，不是本項必做。
+
+建議新增 **`config/diet.php`** 當單一真相來源，至少包含：
+
+```text
+types[]            code / label / kind(exclusive|friendly) / osm_tag / osm_values[]
+sync_modes[]       名稱（only、yes、…）→ Overpass 值的 regex 或白名單
+implies[]          可選：vegan only 要不要同時掛 vegetarian（預設關，用設定打開）
+venue_scope        查詢參數名、合法值（exclusive / friendly / all）、預設值
+menu_item_diets[]  vegan / vegetarian / non_vegetarian / unknown 的 code+label
+confidence         exclusive vs friendly 對 external_source／「店家標示素食」的權重
+copy               卡片／詳情用的短文案 key（純素食店 vs 菜單有素食），前端讀 API 不要寫中文在元件裡
+```
+
+`DietTypeSeeder` 改讀這份 config upsert，不再在 seeder 裡維護第二份清單。
+`GET /diets` 除了 `code`／`label` 要帶回 `kind`（與可選的 `group_label`），
+FilterDrawer 才能動態分組。`kind` 可以是 DB 欄位或 Resource 當下查 config——
+不要在 Vue 寫 `['vegan','vegetarian'].includes(code)`。
+
+預設篩選（進首頁沒帶 query 時）也放 config，建議預設 `venue_scope=exclusive`，
+避免 Phase B 一開台灣友善店，素食使用者以為點進去整間都能吃。改預設只改 config。
+
+---
+
+### Phase A — 分得清（映射＋篩選＋顯示）
+
+目標：東京已匯入的友善店標籤改對；台灣店數暫時不變。完成前**不要**改
+`EXTERNAL_API_SYNC_BBOXES` 的 `@only`。
+
+- [x] `config/diet.php`（或同等結構）＋ seeder／`DietTypeResource` 吃同一份
+- [x] OSM 映射：`only` → exclusive codes，`yes` → friendly codes；Overpass 的
+      tag 清單與值白名單讀 config，`OsmRestaurantProvider` 只負責組 query／parse
+- [x] 重跑東京 sync（映射修正是 upsert diet 關聯；用 `syncWithoutDetaching` 的話
+      **舊的錯誤 `vegetarian` 掛在友善店上不會自己掉**——要想清楚：OSM 管得到的
+      diet 關聯該不該改成「同步這次算出來的集合」，手動加的才 `withoutDetaching`。
+      這是設計點，寫進 progress 再做，不要兩種關聯用同一套卻留下錯標）
+- [x] 搜尋 API 新增 `venue_scope`（名稱以 config 為準）：`exclusive`／`friendly`／`all`
+      驗證規則從 config 來，Repository 依 `kind` 過濾，不寫死 code 陣列
+- [x] FilterDrawer：範圍（純素食店／素食友善／全部）＋既有細項 diet chip，
+      全部依 `/diets` 的 `kind`／label 渲染；選取寫進網址
+- [x] 卡片／popup／詳情：exclusive 與 friendly 用不同標籤與短文案（文案來自 API／config）
+- [x] 可信度：友善店不要套「店家明確標示素食」那檔分數；權重在 config
+- [x] 測試：映射單元（yes→friendly、only→exclusive）、HTTP 篩選、前端分組；
+      反向驗證：config 裡拿掉某個 osm_values，對應測試要紅
+- [x] 文件：`docs/external-apis.md` 收錄規則、`docs/api.md`／OpenAPI 補 `venue_scope`
+
+Phase A 完成的驗收：東京抽樣（CoCo／AFURI 之類）顯示「素食友善」而不是「素食」；
+台中十方齋仍是 exclusive；`?venue_scope=exclusive` 從東京結果裡拿掉友善店。
+
+---
+
+### Phase B — 台灣也收友善店
+
+目標：台灣四市改收 `diet:*=yes|only`。**Phase A 沒合上不要開始**——否則多出來的店
+會全部標成素食餐廳。
+
+- [ ] `.env`／`.env.example` 的台灣 bbox 從 `@only` 改成 `@yes`（規則名仍是 config
+      白名單裡的那個「含 yes+only」模式，不要新發明第三種寫死在 PHP 的字串）
+- [ ] `ScheduleTest` 裡「四個 only、一個 yes」那條會紅，改成斷言「每個 region 的
+      diet 都在 config 白名單」＋「東京用含 yes 的模式」；不要再寫死四／一的數量
+- [ ] 先實跑**一個**台灣城市（建議台南，45→約 187，最好抽樣），timeout／筆數對過
+      Overpass `out count;` 再全開其餘三市
+- [ ] 全開後抽樣：友善店有 `*_friendly`、純素食店仍是 exclusive；
+      `whereDoesntHave('dietTypes')` 仍為 0
+- [ ] 預設 `venue_scope` 維持 exclusive（config），首頁數字不會突然變成「全是火鍋」；
+      使用者要看混合店得自己點「含素食友善」或「全部」
+- [ ] 更新 `docs/external-apis.md` 收錄表（台灣改 yes 的理由改成產品決定，
+      不要再寫「台灣為了標準一致用 only」）
+
+Phase B 完成的驗收：台南／台中／台北／高雄 bbox 內都有 friendly 店；預設篩選下
+首頁仍以純素食店為主；分享 `?venue_scope=all` 看得到混合店。
+
+---
+
+### Phase C — 菜單層葷／素
+
+目標：有菜單資料就分組顯示；沒有就說明「標示有素食選項，菜單尚未建檔」。
+**不要**為了填菜單去接 Open Food Facts 或隨機食物圖。
+
+- [ ] 菜單 `diet_type` 合法值與 label 來自 `config/diet.php` 的 `menu_item_diets`；
+      FormRequest／Resource／前端共用，不在三處各寫一份 enum
+- [ ] 詳情頁：有 `menu_items` 才渲染分組（素食／全素／葷食／未標示）；空陣列走
+      誠實空狀態，文案依該店 `kind` 而變（friendly vs exclusive）
+- [ ] 種子／factory 的菜單 diet 從同一份 config 抽，不要 factory 裡寫死四個字串
+      卻跟 config 漂移
+- [ ] 寫入 API（使用者或之後的店家）：`POST /restaurants/{id}/menu-items`
+      （或先只做 Admin），驗證 diet_type ∈ config；Policy 先最小（登入或 admin）
+- [ ] OSM 仍然沒有逐道菜單——sync **不編造** menu_items。可選：OSM `cuisine` 等
+      標籤若要當提示，也必須走 config 對應表，沒對上就忽略
+- [ ] 回報 `menu_changed`／`not_vegetarian` 核准後的動作放 config 對照表
+      （例如 exclusive 店核准 not_vegetarian → 降為 friendly 或下架；friendly 店
+      → 拿掉 exclusive codes）。不要在 Admin controller 寫死 switch。
+- [ ] 測試：無菜單友善店不渲染假菜色；有菜單才分組；非法 diet_type 422
+
+Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯入的友善店詳情沒有假菜單、
+有「尚未建檔」說明；新增一筆菜單（若做了寫入 API）會出現在對應分組。
+
+---
+
+實作順序必須 A → B → C。A 的映射與 `venue_scope` 是 B／C 的前提。
+每階段做完跑測試、更新 progress.md，再進下一階段。
+
+---
+
+## 剩餘：規劃明寫但還沒閉環
+
+對照來源：`VeggieMap — Claude Code 專案開發總 Prompt.md`。括號裡是原文章節。
+
+### P1 — 產品核心還沒有完整資料流
+
+這些是總 Prompt 當成特色／搜尋核心寫的，管線或表已經在，但使用者／Admin 走不到。
+
+- [ ] **素食可信度的寫入路徑（第十一節）**
+      計算 Job、`config/vegetarian.php`、OSM 匯入寫 `external_source` 都有了。
+      其餘五種 `verification_type`（`restaurant_claim`／`menu_verified`／`user_report`／
+      `photo_verified`／`admin_verified`）**沒有任何 HTTP 端點或 Admin 動作會呼叫**
+      `VerificationService::record()`。使用者回報核准也不會轉成 `user_report` 驗證。
+      結果：真實匯入餐廳的 confidence score 幾乎只有外部來源那一截，第十一節列的加分項
+      多數永遠是 0。最小可用做法：Admin 手動標記 `admin_verified`、回報核准時寫
+      `user_report`（需先定義每種 report type 對不對應驗證）。店家認領／照片驗證屬
+      Roadmap，不要為了湊類型硬做上傳。
+
+- [ ] **`possible_duplicate` 供 Admin 審核（第二十二節）**
+      同步時「同名＋距離 <100m」會把兩筆都標 `is_possible_duplicate=1`，**不自動刪**。
+      Admin API／`AdminView` 都沒有列出或合併／駁回重複的入口，標記等於沒人看。
+      需要：`GET /admin/duplicates`（或既有 admin 加一個分頁）＋明確的「保留／忽略」
+      動作（不要做成自動合併）。
+
+- [ ] **`open_now`／營業時間（第八、二十八節）**
+      搜尋參數與首頁 UI 都寫了「營業中」。schema 沒有 `opening_hours`，Phase 3 決議擱置、
+      `docs/api.md` 參數列表卻還留著——文件超前於實作。要做的話：OSM 有 `opening_hours`
+      標籤可同步、存成欄位或獨立表，再做 `open_now` 篩選；不做就把參數從 api.md／
+      OpenAPI 拿掉，不要留一個永遠 422 或被忽略的參數。
+
+- [ ] **回報核准後要不要動餐廳（第十二、十八節）**
+      `ProcessUserReportJob` 規劃有、後來改成同步寫入（知情決定，不必再做一個空 Job）。
+      真正缺的是規則：`type=closed` 核准後要不要把 `restaurant.status` 改 `inactive`、
+      `not_vegetarian` 要不要撤 diet／降 confidence。Phase 7 刻意不猜。需要產品先定
+      對照表，再接到 Admin approve。
+
+### P1 — 規劃明寫的體驗／契約缺口
+
+- [ ] **餐廳詳情走 slug（第二十六節）**
+      規劃路由是 `/restaurants/{slug}`。DB 有 `slug`（含中文名 fallback），Resource 也
+      回傳，但 `GET /restaurants/{id}` 與前端都用數字 id。改成 slug 查詢（保留 id 相容
+      或 301）才符合「人類看得懂的 URL」。中文店名的 slug 目前是 `osm-node-123`，
+      改路由前要想清楚要不要另外做可讀別名。
+
+- [ ] **可瀏覽的 API 文件掛在 `/docs`（最終完成標準）**
+      有 `docs/openapi.yaml`，lint 過。網站上沒有 Swagger UI／Redoc，clone 下來看不到
+      「http://localhost:8080/docs」。最小做法：用 `darkaonline/l5-swagger` 或靜態
+      Redoc 頁吃同一份 yaml，production 可選擇只在 local 開。
+
+- [ ] **Circuit breaker（第二十節、`docs/external-apis.md`）**
+      timeout／retry／log／fallback 都有。連續 N 次失敗後停止該次 `restaurants:sync`
+      （建議 5 次）沒做。現在排程一次打 5 個城市 bbox，Overpass 掛掉會連打 5 次才結束，
+      這時候斷路器才有意義。
+
+- [ ] **搜尋 UI 沒接上的 API 參數（第八、二十八節）**
+      後端有 `price_level`、`rating_min`、`district`，前端 FilterDrawer 只有 diet＋
+      features。首頁規劃的晶片是「全素／蛋奶素／**素食友善**／寵物友善／停車／營業中」。
+      「素食友善」改由上面 **P0 Phase A** 的 `venue_scope`＋`/diets` 分組處理，不要
+      在這裡另做一顆寫死的 chip。價位／評分是加分項；`open_now` 仍見營業時間那項。
+      `district` 因 OSM 資料品質差，維持 API-only 即可。
+
+- [ ] **`/profile` 極簡（第二十六節）**
+      頁面在，只能看 name／email／role，不能改資料或密碼。規劃寫了「使用者」頁，沒寫
+      編輯範圍。最小：改 display name＋改密碼（FormRequest＋現有密碼確認）。
+
+- [ ] **使用者改／刪自己的評論（第二十五節）**
+      Policy 原文是「不能改別人的 Review」，暗示自己的可以。`ReviewPolicy` 目前只有
+      `create`／`moderate`，沒有 PATCH／DELETE 端點。重新送一則會覆蓋（hidden 舊的），
+      所以「改」有曲線；「刪」完全沒有。若做，才需要 `update`／`delete` Policy。
+
+### P1 — 安全／可觀測性（規劃「至少」）
+
+- [ ] **`CVE-2026-48019`（第四十二節、`docs/deployment.md` 標「部署前必須」）**
+      Laravel 11.x 預設 email 驗證規則的 CRLF injection。修法是升到 12.60+／13.10+，
+      或在 FormRequest 額外擋。`composer audit` 還會報。沒部署前可以繼續放，但不要
+      假裝 Security 章節已經處理完。
+
+- [ ] **Observability 三缺（第三十五節）**
+      `docs/observability.md` 已誠實記錄未做：
+      - 一般 API 的 response time（只有外部呼叫有 `response_time_ms`）
+      - Cache hit／miss 分 key 追蹤（Redis `INFO stats` 是全域，應用層沒記）
+      - DB 慢查詢（沒有 `DB::listen`、也沒開 MySQL slow query log）
+      Telescope 只在 local。若要履歷上的「Logging / Monitoring」站得住，至少做一個
+      輕量 request timing middleware，或上 Laravel Pulse；不要為了表格好看接一堆 APM。
+
+- [ ] **列表 API 仍是整列撈出（第三十二節）**
+      規劃寫大型列表不要 `SELECT *`。`RestaurantRepository::search()` 沒有
+      `select()` 收欄位，列表不需要 `description`／`source_id` 等。資料量還小所以
+      感覺不出來；要動的話連 Resource／cache key 一起收斂，避免 detail／list 共用
+      同一個 model 形狀卻漏欄位。
+
+### P2 — 文件與程式碼不一致（改文件也算待辦）
+
+這些不是缺功能，是文件還停在舊決定，面試官對照會以為沒做或做了其實沒有。
+
+- [ ] **`docs/deployment.md` 開頭缺口表過時**
+      仍寫「沒有 Horizon／沒有 `users:promote`／沒有排程」。三項都已做完。應改成反映
+      現況，並把還真的沒做的（CVE、Nominatim 商業政策、本文件的 P1）留下來。
+
+- [ ] **`docs/observability.md` Queue 段落過時**
+      仍寫 Job 用 `dispatchSync()`、`failed_jobs` 實務上不會有資料。Horizon 之後已改
+      `dispatch()`，這段會誤導。
+
+- [ ] **`docs/api.md` 寫了不存在的 Policy**
+      寫 `RestaurantPolicy`、`FavoritePolicy`、`ReportPolicy`。實際只有
+      `ReviewPolicy`、`RestaurantReportPolicy`。收藏刻意不做 Policy（只判斷已登入），
+      餐廳沒有寫入端點所以沒有 RestaurantPolicy。把文件改成現況，或真的補檔——不要
+      文件列四個、repo 只有兩個。
+
+- [ ] **`docs/api.md` 仍列 `open_now`**
+      跟上面 P1 同一件事：要嘛實作，要嘛從參數列表與 OpenAPI 刪掉。
+
+### P2 — 測試缺口（已判定過 ROI，仍列出來備查）
+
+- [ ] `SearchBox`／`AdminView`／`RestaurantDetailView` 仍無元件測試
+- [ ] 沒有 Playwright／真瀏覽器 E2E（Phase 10 判斷這個規模 ROI 偏低，維持）
+- [ ] OpenAPI 沒有 contract test（Dredd／Schemathesis）；寫規格時只手動抽測過部分端點
+
+### P3 — 要產品決定才能動（不要擅自選）
+
+- [ ] **`wheelchair` 是否加入 `features`**
+      東京＋台中 OSM 共 52 筆，是目前最豐富卻沒用的標籤。`features` 表沒有對應項。
+- [ ] ~~**`vegan=only` 是否自動掛 `vegetarian`**~~
+      改由 P0 `config/diet.php` 的 `implies[]` 處理，預設關、用設定打開，不當寫死規則。
+- [ ] ~~**台南要不要從 `only` 放寬成 `yes`**~~
+      已由產品決定：Phase B 台灣四市（含台南）都改收友善店；預設篩選仍 exclusive。
+- [ ] **匯入的 `city`／`district`／`address` 空字串 vs NULL**
+      語意上 NULL 較正確，改了要連搜尋與前端空值判斷一起看。
+- [ ] **要不要加 `LICENSE` 檔**
+      OpenAPI 曾寫 MIT 被拿掉，因為 repo 根本沒有授權條款。
+- [ ] **Horizon／Telescope production gate 白名單**
+      目前空陣列＝production 沒人能看儀表板。真要部署再填 admin email。
+- [ ] **Sanctum token 永不過期**
+      MVP 可接受；正式營運要 expiry／refresh。
+- [ ] **`FoodDataProviderInterface`／OpenFoodFacts（第十九節）**
+      只是 Adapter 範例。目前沒有菜單營養資料需求，**不要為了架構圖對稱去接**。
+      菜單本身：種子餐廳有假 `menu_items`，OSM 匯入餐廳幾乎沒菜單（OSM 沒這資料）。
+      若要有菜單，來源是使用者／店家，不是再接一個食品 API。
+
+### 明確不在這份待辦（總 Prompt 第四十三／四十五節）
+
+AI 推薦、自然語言搜尋、Payment、Subscription、Notification、PWA、App、
+店家後台、照片 OCR、User Reputation、Analytics——規劃寫「完成 MVP 後再考慮」。
+上面 P1 閉環之前不要做這些。
+
+---
+
+下次接手前建議先讀 [progress.md](progress.md) 最新幾則，以及「多個 Claude Code
+session 共用同一個測試資料庫」那則環境限制——同時開多個 session 跑 `php artisan test`
+偶爾會隨機失敗，不代表程式碼壞了。

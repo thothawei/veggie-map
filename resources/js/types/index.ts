@@ -1,6 +1,20 @@
 export interface DietType {
     code: string;
     label: string;
+    kind?: string | null;
+    group_label?: string | null;
+}
+
+export interface VenueScopeOption {
+    value: string;
+    label: string;
+}
+
+export interface VenueScopeMeta {
+    param: string;
+    default: string;
+    group_label: string;
+    values: VenueScopeOption[];
 }
 
 export interface Feature {
@@ -47,6 +61,9 @@ export interface Restaurant {
     distance_meters?: number;
     recommendation_score?: number;
     diet_types?: string[];
+    venue_kind?: string | null;
+    venue_badge?: string | null;
+    venue_summary?: string | null;
     features?: string[];
     menu_items?: MenuItem[];
     confidence_score?: number | null;
@@ -88,6 +105,7 @@ export interface RestaurantSearchParams {
     city?: string;
     district?: string;
     diet?: string;
+    venue_scope?: string;
     price_level?: number;
     rating_min?: number;
     pet_friendly?: boolean;

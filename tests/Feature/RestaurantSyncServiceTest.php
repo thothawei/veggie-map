@@ -75,6 +75,153 @@ class RestaurantSyncServiceTest extends TestCase
         ]);
     }
 
+    public function test_sync_replaces_osm_managed_diet_types_instead_of_accumulating(): void
+    {
+        DietType::factory()->create(['code' => 'vegetarian']);
+        DietType::factory()->create(['code' => 'vegetarian_friendly']);
+
+        $first = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-diet',
+                name: '後來被改成友善店',
+                latitude: 35.66,
+                longitude: 139.70,
+                dietCodes: ['vegetarian'],
+            ),
+        ]);
+        $this->service($first)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $second = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-diet',
+                name: '後來被改成友善店',
+                latitude: 35.66,
+                longitude: 139.70,
+                dietCodes: ['vegetarian_friendly'],
+            ),
+        ]);
+        $this->service($second)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-diet')->firstOrFail();
+
+        $this->assertEqualsCanonicalizing(
+            ['vegetarian_friendly'],
+            $restaurant->dietTypes->pluck('code')->all(),
+        );
+    }
+
+    public function test_sync_keeps_manually_added_diet_types_that_osm_does_not_manage(): void
+    {
+        DietType::factory()->create(['code' => 'vegan']);
+        DietType::factory()->create(['code' => 'vegetarian']);
+        $ovoLacto = DietType::factory()->create(['code' => 'ovo_lacto']);
+
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-manual-diet',
+                name: '手動加過蛋奶素',
+                latitude: 25.03,
+                longitude: 121.55,
+                dietCodes: ['vegan'],
+            ),
+        ]);
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-manual-diet')->firstOrFail();
+        $restaurant->dietTypes()->syncWithoutDetaching($ovoLacto);
+
+        $next = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-manual-diet',
+                name: '手動加過蛋奶素',
+                latitude: 25.03,
+                longitude: 121.55,
+                dietCodes: ['vegetarian'],
+            ),
+        ]);
+        $this->service($next)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $this->assertEqualsCanonicalizing(
+            ['vegetarian', 'ovo_lacto'],
+            $restaurant->fresh()->dietTypes->pluck('code')->all(),
+        );
+    }
+
+    public function test_friendly_venues_get_a_lower_external_source_score(): void
+    {
+        DietType::factory()->create(['code' => 'vegetarian']);
+        DietType::factory()->create(['code' => 'vegetarian_friendly']);
+
+        $exclusive = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-friendly-score',
+                name: '先被標成素食店',
+                latitude: 35.66,
+                longitude: 139.70,
+                dietCodes: ['vegetarian'],
+            ),
+        ]);
+        $this->service($exclusive)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-friendly-score')->firstOrFail();
+        $this->assertSame(
+            (int) config('diet.confidence.external_source.exclusive'),
+            $restaurant->verifications()->where('verification_type', 'external_source')->value('score'),
+        );
+
+        $friendly = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-friendly-score',
+                name: '先被標成素食店',
+                latitude: 35.66,
+                longitude: 139.70,
+                dietCodes: ['vegetarian_friendly'],
+            ),
+        ]);
+        $this->service($friendly)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $this->assertSame(1, RestaurantVerification::where('verification_type', 'external_source')->count());
+        $this->assertSame(
+            (int) config('diet.confidence.external_source.friendly'),
+            $restaurant->fresh()->verifications()->where('verification_type', 'external_source')->value('score'),
+        );
+        $this->assertSame(
+            (int) config('diet.confidence.external_source.friendly'),
+            $restaurant->fresh()->confidenceScore->score,
+        );
+    }
+
+    public function test_duplicate_external_source_rows_are_collapsed_so_old_high_scores_cannot_win(): void
+    {
+        DietType::factory()->create(['code' => 'vegetarian_friendly']);
+
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-dup-score',
+                name: '舊的十分還在',
+                latitude: 35.66,
+                longitude: 139.70,
+                dietCodes: ['vegetarian_friendly'],
+            ),
+        ]);
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-dup-score')->firstOrFail();
+        $restaurant->verifications()->create([
+            'verification_type' => 'external_source',
+            'score' => 10,
+            'verified_at' => now(),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $this->assertSame(1, $restaurant->fresh()->verifications()->where('verification_type', 'external_source')->count());
+        $this->assertSame(
+            (int) config('diet.confidence.external_source.friendly'),
+            $restaurant->fresh()->confidenceScore->score,
+        );
+    }
+
     public function test_sync_is_idempotent_for_the_same_source_id(): void
     {
         $item = new RestaurantData(sourceId: 'node-2', name: '重複測試店', latitude: 25.0, longitude: 121.5);

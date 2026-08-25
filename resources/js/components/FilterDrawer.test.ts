@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { setViewportMatches } from '@/test/setup';
+import { resetVenueScopeMeta } from '@/lib/dietCatalog';
 import type { RestaurantSearchParams } from '@/types';
 
 vi.mock('@/api/client', () => ({
@@ -30,6 +31,8 @@ vi.mock('@/api/client', () => ({
     },
 }));
 
+import client from '@/api/client';
+
 const FilterDrawer = (await import('./FilterDrawer.vue')).default;
 
 /**
@@ -56,6 +59,7 @@ function panelVisible(wrapper: Awaited<ReturnType<typeof mountDrawer>>): boolean
 describe('FilterDrawer', () => {
     beforeEach(() => {
         setViewportMatches(false);
+        resetVenueScopeMeta();
     });
 
     it('窄螢幕預設收合，避免晶片把地圖擠到摺線以下', async () => {
@@ -83,7 +87,7 @@ describe('FilterDrawer', () => {
         setViewportMatches(true);
         const wrapper = await mountDrawer();
 
-        const veganChip = wrapper.findAll('.chip')[0];
+        const veganChip = wrapper.findAll('.chip').find((c) => c.text() === '全素（Vegan）')!;
 
         await veganChip.trigger('click');
         expect(wrapper.props('filters')).toEqual({ diet: 'vegan' });
@@ -98,7 +102,7 @@ describe('FilterDrawer', () => {
 
         expect(wrapper.find('.count').exists()).toBe(false);
 
-        await wrapper.findAll('.chip')[0].trigger('click');
+        await wrapper.findAll('.chip').find((c) => c.text() === '全素（Vegan）')!.trigger('click');
         expect(wrapper.find('.count').text()).toBe('1');
 
         await wrapper.findAll('.chip').find((c) => c.text() === '停車')!.trigger('click');
@@ -111,7 +115,7 @@ describe('FilterDrawer', () => {
 
         expect(wrapper.find('.clear').exists()).toBe(false);
 
-        await wrapper.findAll('.chip')[0].trigger('click');
+        await wrapper.findAll('.chip').find((c) => c.text() === '全素（Vegan）')!.trigger('click');
         expect(wrapper.find('.clear').exists()).toBe(true);
     });
 
@@ -119,7 +123,7 @@ describe('FilterDrawer', () => {
         setViewportMatches(true);
         const wrapper = await mountDrawer();
 
-        await wrapper.findAll('.chip')[0].trigger('click');
+        await wrapper.findAll('.chip').find((c) => c.text() === '全素（Vegan）')!.trigger('click');
         await wrapper.findAll('.chip').find((c) => c.text() === '寵物友善')!.trigger('click');
         expect(wrapper.find('.count').text()).toBe('2');
 
@@ -134,8 +138,8 @@ describe('FilterDrawer', () => {
         setViewportMatches(true);
         const wrapper = await mountDrawer();
 
-        await wrapper.findAll('.chip')[0].trigger('click');
-        await wrapper.findAll('.chip')[1].trigger('click');
+        await wrapper.findAll('.chip').find((c) => c.text() === '全素（Vegan）')!.trigger('click');
+        await wrapper.findAll('.chip').find((c) => c.text() === '素食（Vegetarian）')!.trigger('click');
 
         expect(wrapper.props('filters')).toEqual({ diet: 'vegetarian' });
         expect(wrapper.findAll('.chip.active')).toHaveLength(1);
@@ -150,5 +154,69 @@ describe('FilterDrawer', () => {
         await wrapper.findAll('.chip').find((c) => c.text() === '外帶')!.trigger('click');
 
         expect(wrapper.props('filters')).toEqual({ takeout: true });
+    });
+});
+
+describe('FilterDrawer venue_scope 依 /diets meta 渲染', () => {
+    beforeEach(() => {
+        setViewportMatches(true);
+        resetVenueScopeMeta();
+        vi.mocked(client.get).mockImplementation((url: string) => {
+            if (url === '/diets') {
+                return Promise.resolve({
+                    data: {
+                        data: [
+                            { code: 'vegan', label: '全素（Vegan）', kind: 'exclusive', group_label: '純素食店' },
+                            { code: 'vegetarian_friendly', label: '全素友善以外', kind: 'friendly', group_label: '素食友善' },
+                        ],
+                        meta: {
+                            venue_scope: {
+                                param: 'venue_scope',
+                                default: 'exclusive',
+                                group_label: '店家類型',
+                                values: [
+                                    { value: 'exclusive', label: '純素食店' },
+                                    { value: 'friendly', label: '素食友善' },
+                                    { value: 'all', label: '全部' },
+                                ],
+                            },
+                        },
+                    },
+                });
+            }
+
+            return Promise.resolve({ data: { data: [] } });
+        });
+    });
+
+    it('範圍晶片來自 API，預設選 exclusive 但不算進徽章', async () => {
+        const wrapper = await mountDrawer();
+
+        expect(wrapper.text()).toContain('店家類型');
+        expect(wrapper.findAll('.chip').map((c) => c.text())).toEqual(
+            expect.arrayContaining(['純素食店', '素食友善', '全部', '全素（Vegan）', '全素友善以外']),
+        );
+        expect(wrapper.findAll('.chip').find((c) => c.text() === '純素食店')!.classes()).toContain('active');
+        expect(wrapper.find('.count').exists()).toBe(false);
+    });
+
+    it('飲食晶片依 group_label 分組，不是寫死兩組名稱', async () => {
+        const wrapper = await mountDrawer();
+
+        expect(wrapper.findAll('.label').map((n) => n.text())).toEqual(
+            expect.arrayContaining(['店家類型', '純素食店', '素食友善']),
+        );
+    });
+
+    it('選友善範圍會寫進 filters，選回預設會把 key 刪掉', async () => {
+        const wrapper = await mountDrawer();
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '素食友善')!.trigger('click');
+        expect(wrapper.props('filters')).toEqual({ venue_scope: 'friendly' });
+        expect(wrapper.find('.count').text()).toBe('1');
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '純素食店')!.trigger('click');
+        expect(Object.keys(wrapper.props('filters'))).toEqual([]);
+        expect(wrapper.find('.count').exists()).toBe(false);
     });
 });

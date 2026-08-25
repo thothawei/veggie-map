@@ -2,12 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import client from '@/api/client';
 import { FEATURE_CODES, type FeatureCode } from '@/lib/features';
-import type { ApiSuccess, DietType, Feature, RestaurantSearchParams } from '@/types';
+import { applyVenueScopeMeta, venueScopeDefault, venueScopeMeta } from '@/lib/dietCatalog';
+import type { ApiSuccess, DietType, Feature, RestaurantSearchParams, VenueScopeMeta } from '@/types';
 
 const filters = defineModel<Partial<RestaurantSearchParams>>('filters', { required: true });
 
 const diets = ref<DietType[]>([]);
 const features = ref<Feature[]>([]);
+const scopeMeta = ref(venueScopeMeta());
 
 const WIDE_SCREEN = '(min-width: 768px)';
 
@@ -31,9 +33,42 @@ const userOpen = ref<boolean | null>(null);
 
 const open = computed(() => userOpen.value ?? isWideScreen.value);
 
-const activeCount = computed(
-    () => Object.values(filters.value).filter((value) => value !== undefined && value !== null).length,
-);
+const currentScope = computed(() => filters.value.venue_scope ?? scopeMeta.value.default);
+
+const dietGroups = computed(() => {
+    const hasLabels = diets.value.some((diet) => diet.group_label);
+    if (!hasLabels) {
+        return [{ label: '飲食類型', items: diets.value }];
+    }
+
+    const groups = new Map<string, DietType[]>();
+    for (const diet of diets.value) {
+        const label = diet.group_label || diet.kind || '';
+        const items = groups.get(label) ?? [];
+        items.push(diet);
+        groups.set(label, items);
+    }
+
+    return [...groups.entries()].map(([label, items]) => ({ label, items }));
+});
+
+const activeCount = computed(() => {
+    let count = 0;
+
+    for (const [key, value] of Object.entries(filters.value)) {
+        if (value === undefined || value === null) {
+            continue;
+        }
+
+        if (key === 'venue_scope' && value === scopeMeta.value.default) {
+            continue;
+        }
+
+        count += 1;
+    }
+
+    return count;
+});
 
 onMounted(async () => {
     mediaQuery = window.matchMedia(WIDE_SCREEN);
@@ -46,6 +81,10 @@ onMounted(async () => {
     ]);
     diets.value = dietsRes.data.data;
     features.value = featuresRes.data.data;
+
+    const meta = dietsRes.data.meta?.venue_scope as VenueScopeMeta | undefined;
+    applyVenueScopeMeta(meta);
+    scopeMeta.value = venueScopeMeta();
 });
 
 onBeforeUnmount(() => {
@@ -61,6 +100,18 @@ function replaceFilters(mutate: (next: Partial<RestaurantSearchParams>) => void)
     const next = { ...filters.value };
     mutate(next);
     filters.value = next;
+}
+
+function selectScope(value: string) {
+    replaceFilters((next) => {
+        if (value === venueScopeDefault()) {
+            delete next.venue_scope;
+
+            return;
+        }
+
+        next.venue_scope = value;
+    });
 }
 
 function toggleDiet(code: string) {
@@ -124,10 +175,25 @@ function clearAll() {
         </div>
 
         <div v-show="open" id="filter-panel" class="panel">
-            <div class="group">
-                <span class="label">飲食類型</span>
+            <div v-if="scopeMeta.values.length" class="group">
+                <span class="label">{{ scopeMeta.group_label }}</span>
                 <button
-                    v-for="diet in diets"
+                    v-for="option in scopeMeta.values"
+                    :key="option.value"
+                    type="button"
+                    class="chip"
+                    :class="{ active: currentScope === option.value }"
+                    :aria-pressed="currentScope === option.value"
+                    @click="selectScope(option.value)"
+                >
+                    {{ option.label }}
+                </button>
+            </div>
+
+            <div v-for="group in dietGroups" :key="group.label" class="group">
+                <span class="label">{{ group.label }}</span>
+                <button
+                    v-for="diet in group.items"
                     :key="diet.code"
                     type="button"
                     class="chip"

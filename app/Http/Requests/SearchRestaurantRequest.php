@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\ValidatesBoundingBox;
 use App\Models\Feature;
+use App\Support\DietCatalog;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -34,6 +35,7 @@ class SearchRestaurantRequest extends FormRequest
             'sort' => ['nullable', Rule::in(['distance', 'rating', 'popular', 'newest'])],
             'per_page' => ['nullable', 'integer', 'between:1,100'],
             'cursor' => ['nullable', 'string'],
+            DietCatalog::venueScopeParam() => ['nullable', 'string', Rule::in(DietCatalog::venueScopeKeys())],
         ];
 
         // 每個 features.code 都是獨立的布林篩選（`?takeout=1&wifi=1`），與既有

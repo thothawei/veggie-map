@@ -335,6 +335,7 @@ describe('RestaurantListView 篩選進網址', () => {
 
         expect(lastRestaurantCall().diet).toBe('vegan');
         expect(lastRestaurantCall().parking).toBe(1);
+        expect(lastRestaurantCall().venue_scope).toBe('exclusive');
         expect(wrapper.findAll('.chip.active').map((c) => c.text())).toContain('停車');
     });
 

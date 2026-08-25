@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from './useFilterQuery';
 import type { UrlFilters } from './useFilterQuery';
+import { resetVenueScopeMeta } from '@/lib/dietCatalog';
 
 /** 這個 composable 依賴 route/router，所以掛在一個最小元件裡測，不直接呼叫。 */
 const Harness = defineComponent({
@@ -37,6 +38,9 @@ async function mountHarness(url: string) {
 }
 
 describe('useFilterQuery 讀取網址', () => {
+    beforeEach(() => {
+        resetVenueScopeMeta();
+    });
     it('沒有篩選參數時是空物件', async () => {
         const h = await mountHarness('/restaurants');
 
@@ -68,9 +72,18 @@ describe('useFilterQuery 讀取網址', () => {
     it('空的 diet 不算條件', async () => {
         expect((await mountHarness('/restaurants?diet=')).filters).toEqual({});
     });
+
+    it('讀得出 venue_scope', async () => {
+        expect((await mountHarness('/restaurants?venue_scope=friendly')).filters).toEqual({
+            venue_scope: 'friendly',
+        });
+    });
 });
 
 describe('useFilterQuery 寫回網址', () => {
+    beforeEach(() => {
+        resetVenueScopeMeta();
+    });
     it('設定條件會寫進網址', async () => {
         const h = await mountHarness('/restaurants');
 
@@ -118,6 +131,18 @@ describe('useFilterQuery 寫回網址', () => {
         expect(h.router.currentRoute.value.query.diet).toBeUndefined();
         expect(h.router.currentRoute.value.query.parking).toBe('1');
     });
+
+    it('預設 venue_scope 不寫進網址，非預設才寫', async () => {
+        const h = await mountHarness('/restaurants');
+
+        h.filters = { venue_scope: 'exclusive' };
+        await flushPromises();
+        expect(h.router.currentRoute.value.query.venue_scope).toBeUndefined();
+
+        h.filters = { venue_scope: 'friendly' };
+        await flushPromises();
+        expect(h.router.currentRoute.value.query.venue_scope).toBe('friendly');
+    });
 });
 
 describe('filterQueryKey', () => {
@@ -140,14 +165,16 @@ describe('apiFilterParams', () => {
         // axios 會把 true 序列化成字串 "true"，Laravel 的 boolean 規則不吃這個值。
         // 2026-08-25 實測：`parking=true` 回「The parking field must be true or false.」。
         expect(apiFilterParams({ parking: true, pet_friendly: true, takeout: true })).toEqual({
+            venue_scope: 'exclusive',
             parking: 1,
             pet_friendly: 1,
             takeout: 1,
         });
     });
 
-    it('沒開的條件完全不出現在參數裡', () => {
-        expect(apiFilterParams({})).toEqual({});
-        expect(apiFilterParams({ diet: 'vegan' })).toEqual({ diet: 'vegan' });
+    it('沒開的條件完全不出現在參數裡，但 venue_scope 預設會送 exclusive', () => {
+        expect(apiFilterParams({})).toEqual({ venue_scope: 'exclusive' });
+        expect(apiFilterParams({ diet: 'vegan' })).toEqual({ diet: 'vegan', venue_scope: 'exclusive' });
+        expect(apiFilterParams({ venue_scope: 'all' })).toEqual({ venue_scope: 'all' });
     });
 });

@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Models\Feature;
 use App\Models\Restaurant;
+use App\Support\DietCatalog;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -106,6 +107,8 @@ class RestaurantRepository
 
             $this->applySort($query, $sort, $hasCoords);
 
+            $query->with(['dietTypes']);
+
             return $query->cursorPaginate($perPage);
         });
     }
@@ -133,6 +136,8 @@ class RestaurantRepository
         if (! empty($filters['diet'])) {
             $query->whereHas('dietTypes', fn (Builder $q) => $q->where('code', $filters['diet']));
         }
+
+        DietCatalog::applyVenueScope($query, $filters[DietCatalog::venueScopeParam()] ?? null);
 
         if (isset($filters['price_level'])) {
             $query->where('price_level', $filters['price_level']);

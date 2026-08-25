@@ -90,6 +90,44 @@ class RestaurantTest extends TestCase
         $this->assertSame($veganRestaurant->id, $response->json('data.0.id'));
     }
 
+    public function test_venue_scope_filters_by_diet_kind_from_config(): void
+    {
+        $exclusive = DietType::factory()->create(['code' => 'vegan']);
+        $friendly = DietType::factory()->create(['code' => 'vegetarian_friendly']);
+
+        $pure = Restaurant::factory()->create(['name' => '十方齋']);
+        $pure->dietTypes()->attach($exclusive);
+
+        $mixed = Restaurant::factory()->create(['name' => 'CoCo']);
+        $mixed->dietTypes()->attach($friendly);
+
+        $omitted = $this->getJson('/api/v1/restaurants')->assertOk();
+        $this->assertEqualsCanonicalizing(
+            ['十方齋', 'CoCo'],
+            array_column($omitted->json('data'), 'name'),
+        );
+
+        $onlyExclusive = $this->getJson('/api/v1/restaurants?venue_scope=exclusive')->assertOk();
+        $this->assertSame(['十方齋'], array_column($onlyExclusive->json('data'), 'name'));
+        $this->assertSame('exclusive', $onlyExclusive->json('data.0.venue_kind'));
+        $this->assertSame(config('diet.copy.exclusive.badge'), $onlyExclusive->json('data.0.venue_badge'));
+
+        $onlyFriendly = $this->getJson('/api/v1/restaurants?venue_scope=friendly')->assertOk();
+        $this->assertSame(['CoCo'], array_column($onlyFriendly->json('data'), 'name'));
+        $this->assertSame('friendly', $onlyFriendly->json('data.0.venue_kind'));
+        $this->assertSame(config('diet.copy.friendly.badge'), $onlyFriendly->json('data.0.venue_badge'));
+
+        $all = $this->getJson('/api/v1/restaurants?venue_scope=all')->assertOk();
+        $this->assertEqualsCanonicalizing(['十方齋', 'CoCo'], array_column($all->json('data'), 'name'));
+    }
+
+    public function test_unknown_venue_scope_is_rejected(): void
+    {
+        $this->getJson('/api/v1/restaurants?venue_scope=maybe')
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'VALIDATION_ERROR');
+    }
+
     public function test_takeout_filter_returns_restaurants_with_that_feature(): void
     {
         $takeout = Feature::factory()->create(['code' => 'takeout']);
@@ -143,7 +181,7 @@ class RestaurantTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.id', $restaurant->id)
             ->assertJsonPath('data.confidence_score', null)
-            ->assertJsonStructure(['data' => ['diet_types', 'features', 'menu_items']]);
+            ->assertJsonStructure(['data' => ['diet_types', 'venue_kind', 'venue_badge', 'venue_summary', 'features', 'menu_items']]);
     }
 
     public function test_show_returns_404_for_missing_restaurant(): void

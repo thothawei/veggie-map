@@ -67,12 +67,22 @@ OSM 社群的標註慣例不同——這不是偏好問題，是同一套規則�
 
 規則跟著同步範圍走，寫在 `EXTERNAL_API_SYNC_BBOXES` 的每一組後面：
 `"minLat,minLng,maxLat,maxLng@only;minLat,minLng,maxLat,maxLng@yes"`，省略 `@規則` 時
-預設 `only`。`OsmRestaurantProvider` 的建構子只接受 `only`／`yes`，其他值直接丟
+預設 `only`。規則名稱必須是 `config/diet.php` 的 `sync_modes` key，其他值直接丟
 `InvalidArgumentException`，不靜默退回預設。
 
 **`yes` 的實際後果要看清楚**：東京匯入的 195 家裡包含 CoCo壱番屋、AFURI、
 ドトールコーヒーショップ 這類連鎖店——它們因為「有純素選項」而入列，不是素食餐廳。
 這是選 `yes` 必然帶來的結果，不是 bug。
+
+**標籤怎麼對到 `diet_types.code`**（2026-08-25 Phase A）：對應表在 `config/diet.php`，
+不是 `OsmRestaurantProvider` 裡的常數。`diet:*=only` → exclusive codes（`vegan`／
+`vegetarian`），`diet:*=yes` → friendly codes（`vegan_friendly`／`vegetarian_friendly`）。
+收錄規則（Overpass 撈哪些值）跟映射（撈進來之後掛哪個 code）是兩件事——東京用 `@yes`
+把友善店收進來，但不能把它們標成素食餐廳。
+
+重跑同步時，OSM 管得到的 diet 關聯改成「這次算出的集合」（錯標的 `vegetarian` 會被換掉）；
+沒有 `osm_tag` 的手動類型（例如蛋奶素）會留下。特色仍用 `syncWithoutDetaching`。
+友善店的 `external_source` 分數走 `config/diet.php` 的 `confidence`，低於 exclusive。
 
 ## OSM 標籤 → features 對應（2026-08-25 決定）
 
@@ -100,7 +110,8 @@ OSM 社群的標註慣例不同——這不是偏好問題，是同一套規則�
 未使用標籤，但我們的 `features` 表沒有對應項目。要不要新增是產品決定。
 
 同步用 `syncWithoutDetaching`：每天的自動同步只補充 OSM 知道的部分，不會洗掉 Admin 或
-使用者手動加上的特色。
+使用者手動加上的特色。diet 關聯不是這套——OSM 映射得到的 code 會整組替換，見上方
+「標籤怎麼對到 diet_types.code」。
 
 ## Failure Handling 對應（總 prompt 第二十節）
 

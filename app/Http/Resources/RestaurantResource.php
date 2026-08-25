@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Restaurant;
+use App\Support\DietCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -19,6 +20,10 @@ class RestaurantResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $presentation = $this->relationLoaded('dietTypes')
+            ? DietCatalog::venuePresentation($this->dietTypes->pluck('code')->all())
+            : null;
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -38,6 +43,9 @@ class RestaurantResource extends JsonResource
             'rating_count' => $this->rating_count,
             'status' => $this->status,
             'diet_types' => $this->whenLoaded('dietTypes', fn () => $this->dietTypes->pluck('code')),
+            'venue_kind' => $this->when($presentation !== null, $presentation['kind'] ?? null),
+            'venue_badge' => $this->when($presentation !== null, $presentation['badge'] ?? null),
+            'venue_summary' => $this->when($presentation !== null, $presentation['summary'] ?? null),
             'features' => $this->whenLoaded('features', fn () => $this->features->pluck('code')),
             'menu_items' => MenuItemResource::collection($this->whenLoaded('menuItems')),
             'confidence_score' => $this->whenLoaded('confidenceScore', fn () => $this->confidenceScore?->score),

@@ -3,28 +3,21 @@
 namespace Database\Seeders;
 
 use App\Models\DietType;
+use App\Support\DietCatalog;
 use Illuminate\Database\Seeder;
 
 class DietTypeSeeder extends Seeder
 {
     /**
-     * 固定的飲食類型清單（見 docs/database.md），不是隨機測試資料，
-     * 所以用 seeder 逐筆 upsert 而不是 factory。
+     * 清單來源是 config/diet.php，這裡只負責 upsert 進 diet_types。
      */
     public function run(): void
     {
-        $types = [
-            'vegan' => '全素（Vegan）',
-            'vegetarian' => '素食（Vegetarian）',
-            'ovo_lacto' => '蛋奶素（Ovo-Lacto）',
-            'lacto' => '奶素（Lacto）',
-            'ovo' => '蛋素（Ovo）',
-            'vegan_friendly' => '全素友善',
-            'vegetarian_friendly' => '素食友善',
-        ];
-
-        foreach ($types as $code => $label) {
-            DietType::updateOrCreate(['code' => $code], ['label' => $label]);
+        foreach (DietCatalog::types() as $type) {
+            DietType::updateOrCreate(
+                ['code' => $type['code']],
+                ['label' => $type['label']],
+            );
         }
     }
 }

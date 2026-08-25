@@ -20,6 +20,9 @@ const get = vi.fn((url: string) => {
                     rating: 4,
                     rating_count: 1,
                     diet_types: ['vegan'],
+                    venue_kind: 'exclusive',
+                    venue_badge: '素食餐廳',
+                    venue_summary: '整間店都是素食',
                     features: ['takeout'],
                     menu_items: [],
                     website: 'javascript:alert(1)',
@@ -84,6 +87,8 @@ describe('RestaurantDetailView', () => {
 
         expect(wrapper.text()).toContain('全素（Vegan）');
         expect(wrapper.text()).toContain('外帶');
+        expect(wrapper.text()).toContain('素食餐廳');
+        expect(wrapper.text()).toContain('整間店都是素食');
         expect(wrapper.text()).not.toContain('vegan');
         expect(wrapper.text()).not.toContain('takeout');
         expect(wrapper.find('a[href^="javascript"]').exists()).toBe(false);

@@ -15,7 +15,7 @@ class SyncRestaurants extends Command
     protected $signature = 'restaurants:sync
         {--bbox= : "minLat,minLng,maxLat,maxLng"，必填——一次只查一個小範圍，不要撈全台灣}
         {--provider= : 覆蓋 EXTERNAL_API_RESTAURANT_PROVIDER，mock 或 osm，僅供這次執行使用}
-        {--diet=only : 收錄規則，only（只收純素食店）或 yes（連有素食選項的餐廳一起收），依國別而異，見 config/services.php 的 sync_regions}';
+        {--diet=only : 收錄規則名稱，必須是 config/diet.php sync_modes 的 key（目前 only／yes）。見 config/services.php 的 sync_regions}';
 
     protected $description = '從外部資料源（Overpass／本地 fixture）批次匯入餐廳，見 docs/architecture.md';
 

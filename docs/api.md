@@ -55,7 +55,9 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 
 ## `GET /restaurants` 查詢參數
 
-`keyword`, `latitude`, `longitude`, `radius`（公里，上限 50）, `bbox`, `city`, `district`, `diet`, `price_level`,
+`keyword`, `latitude`, `longitude`, `radius`（公里，上限 50）, `bbox`, `city`, `district`, `diet`,
+`venue_scope`（`exclusive`／`friendly`／`all`，名稱與合法值見 `GET /diets` 的 `meta.venue_scope`；
+**省略＝不過濾**，前端預設會送 `exclusive`）, `price_level`,
 `rating_min`, 以及 `features.code` 對應的布林篩選（`pet_friendly`／`parking`／`delivery`／`takeout`／`reservation`／`wifi`／`outdoor_seating`／`family_friendly`；請傳 `1`／`0`，也接受 `true`／`false` 字串）, `open_now`, `sort`（distance/rating/popular/newest，
 預設 `distance`；帶 `latitude`+`longitude` 才可用 `distance`）, `page`, `per_page`（預設 20，上限 100）。
 
@@ -64,7 +66,14 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 ```
 GET /api/v1/restaurants?latitude=24.1477&longitude=120.6736&radius=5&diet=vegan&takeout=1
 GET /api/v1/restaurants?bbox=23.9500,120.4300,24.4500,121.4700&sort=newest
+GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclusive
 ```
+
+列表與詳情在 eager load 過 `dietTypes` 時會帶 `venue_kind`／`venue_badge`／`venue_summary`
+（文案來自 `config/diet.php` 的 `copy`，不是前端寫死）。有任何 exclusive diet 就是
+純素食店；否則有 friendly diet 就是素食友善。
+
+`GET /diets` 每筆有 `kind`／`group_label`，`meta.venue_scope` 是篩選參數名、預設值與選項。
 
 
 ### `bbox`：矩形範圍查詢
@@ -131,7 +140,7 @@ score = distance_score * 0.25 + rating_score * 0.20 + vegetarian_confidence * 0.
 
 參數：`latitude`／`longitude`（必填）、`radius`（公里，預設 5，上限 50）、`bbox`（與列表相同，
 不受 50km 限制）、`limit`（預設 6，上限 20），
-以及與列表相同的 `diet` 與特色布林篩選（`takeout`／`wifi`／`pet_friendly` 等）。首頁推薦會跟著
+以及與列表相同的 `diet`、`venue_scope` 與特色布林篩選（`takeout`／`wifi`／`pet_friendly` 等）。首頁推薦會跟著
 目前篩選收窄候選集，不是另外撈一組沒篩過的。
 
 ```

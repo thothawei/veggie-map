@@ -9,6 +9,7 @@ use App\Models\Restaurant;
 use App\Services\External\BoundingBox;
 use App\Services\External\RestaurantData;
 use App\Services\External\RestaurantProviderInterface;
+use App\Support\DietCatalog;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -42,17 +43,15 @@ class RestaurantSyncService
             $this->syncDietTypes($restaurant, $data->dietCodes, $dietTypeIds);
             $this->syncFeatures($restaurant, $data->featureCodes, $featureIds);
 
+            $restaurant->load('dietTypes');
+            $this->verifications->syncExternalSource($restaurant);
+
             // pivot 寫入不會觸發 Restaurant saved event。同一筆餐廳重跑同步時若欄位
             // 沒變，observer 也不會清快取——detail cache 會繼續吐沒有新特色的舊資料。
             RestaurantCacheInvalidator::invalidate($restaurant->id);
 
             if ($this->flagPossibleDuplicates($restaurant)) {
                 $stats['duplicates_flagged']++;
-            }
-
-            // 已有 external_source 就不要每天再插一筆——否則分數加總會把可信度灌滿。
-            if (! $restaurant->verifications()->where('verification_type', 'external_source')->exists()) {
-                $this->verifications->record($restaurant, 'external_source');
             }
 
             CalculateRestaurantScoreJob::dispatch($restaurant->id);
@@ -120,14 +119,23 @@ class RestaurantSyncService
      */
     private function syncDietTypes(Restaurant $restaurant, array $dietCodes, $dietTypeIds): void
     {
-        $ids = collect($dietCodes)
+        $incomingIds = collect($dietCodes)
             ->map(fn (string $code) => $dietTypeIds->get($code))
             ->filter()
             ->values();
 
-        if ($ids->isNotEmpty()) {
-            $restaurant->dietTypes()->syncWithoutDetaching($ids);
-        }
+        $managedIds = collect(DietCatalog::osmManagedCodes())
+            ->map(fn (string $code) => $dietTypeIds->get($code))
+            ->filter()
+            ->values();
+
+        // OSM 管得到的 diet 這次算出什麼就同步成什麼（否則 yes→friendly 的修正
+        // 永遠拔不掉先前錯掛的 vegetarian）。手動加的、不在 OSM 對應表裡的 code 留下。
+        $manualIds = $restaurant->dietTypes()
+            ->whereNotIn('diet_types.id', $managedIds->all() ?: [0])
+            ->pluck('diet_types.id');
+
+        $restaurant->dietTypes()->sync($manualIds->merge($incomingIds)->unique()->values()->all());
     }
 
     /**

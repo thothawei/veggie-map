@@ -215,6 +215,12 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                     @click="goToDetail(restaurant)"
                 >
                     <strong>{{ restaurant.name }}</strong>
+                    <span
+                        v-if="restaurant.venue_badge"
+                        class="venue-badge"
+                        :data-kind="restaurant.venue_kind ?? undefined"
+                    >{{ restaurant.venue_badge }}</span>
+                    <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
                     <span>⭐ {{ restaurant.rating.toFixed(1) }} ({{ restaurant.rating_count }})</span>
                     <span v-if="restaurant.address?.trim()" class="address">{{ restaurant.address }}</span>
                 </button>
@@ -350,6 +356,25 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 .card .address {
     color: #718096;
     font-size: 0.85rem;
+}
+
+.venue-badge {
+    align-self: flex-start;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background: #f0fff4;
+    color: #276749;
+    font-size: 0.75rem;
+}
+
+.venue-badge[data-kind='friendly'] {
+    background: #ebf8ff;
+    color: #2b6cb0;
+}
+
+.venue-summary {
+    color: #4a5568;
+    font-size: 0.8rem;
 }
 
 @media (max-width: 640px) {

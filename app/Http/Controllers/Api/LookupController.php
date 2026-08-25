@@ -7,6 +7,7 @@ use App\Http\Resources\DietTypeResource;
 use App\Http\Resources\FeatureResource;
 use App\Models\DietType;
 use App\Models\Feature;
+use App\Support\DietCatalog;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -20,6 +21,9 @@ class LookupController extends Controller
         return response()->json([
             'success' => true,
             'data' => DietTypeResource::collection(DietType::orderBy('id')->get())->resolve(),
+            'meta' => [
+                'venue_scope' => DietCatalog::venueScopeMeta(),
+            ],
         ]);
     }
 
