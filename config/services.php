@@ -55,10 +55,29 @@ return [
     // mock｜osm，見 App\Providers\AppServiceProvider 的 RestaurantProviderInterface 綁定。
     'restaurant_provider' => env('EXTERNAL_API_RESTAURANT_PROVIDER', 'mock'),
 
-    // routes/console.php 的排程要用，格式 "minLat,minLng,maxLat,maxLng"（用分號分隔多組
-    // bbox）。2026-08-25 決定預設涵蓋台北市，見 .env.example／docs/todo.md；留空則不排程。
-    'sync_bboxes' => array_values(array_filter(array_map(
-        'trim',
+    // routes/console.php 的排程要用。每組格式 "minLat,minLng,maxLat,maxLng@收錄規則"，
+    // 多組用分號分隔；`@規則` 可省略，預設 only。留空則完全不排程。
+    //
+    // 收錄規則依國別而異，因為 OSM 的標籤慣例不同（2026-08-25 實測）：
+    //   only — 只收整間店都是素／純素的（diet:*=only）。台灣適用：台中市 177/220 家是 only。
+    //   yes  — 連「有素食選項」的一般餐廳一起收（diet:*=yes|only）。日本適用：東京 23 区
+    //          只有 46/210 家標 only，日本社群慣用 yes，套 only 會讓地圖薄到不可用。
+    // 見 docs/external-apis.md「收錄規則」與 docs/todo.md。
+    'sync_regions' => array_values(array_filter(array_map(
+        static function (string $entry): ?array {
+            $entry = trim($entry);
+
+            if ($entry === '') {
+                return null;
+            }
+
+            [$bbox, $diet] = array_pad(explode('@', $entry, 2), 2, null);
+
+            return [
+                'bbox' => trim($bbox),
+                'diet' => $diet === null || trim($diet) === '' ? 'only' : trim($diet),
+            ];
+        },
         explode(';', (string) env('EXTERNAL_API_SYNC_BBOXES', ''))
     ))),
 

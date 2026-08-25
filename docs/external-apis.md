@@ -30,9 +30,7 @@ Food API 都更貼合 VeggieMap 的核心需求。
 
 - `OsmRestaurantProvider`：呼叫 Overpass API，把 OSM node 轉換成 `RestaurantData`。僅在
   `php artisan restaurants:sync` 這個離線指令中使用，不掛在使用者請求路徑上。
-  **只抓純素食店**：Overpass 查詢用 `(...)` union 篩 `diet:vegetarian=only` 或
-  `diet:vegan=only`。OSM 的 `only` 是「整間店都是素／純素」，`yes` 只代表「有素食選項」的
-  一般餐廳，2026-08-25 決定不收後者。這個篩選必須下在查詢端：台北市 bbox 下
+  **收錄規則依國別而異**（見下方「收錄規則」段落）。這個篩選必須下在查詢端：台北市 bbox 下
   `amenity=restaurant|cafe` 共 15,974 個節點，篩完只剩 222 個。
   **必須帶 User-Agent**：overpass-api.de 會用 HTTP 406 擋掉 Guzzle 預設 UA，見下方
   Failure Handling 第 6 點。
@@ -41,6 +39,30 @@ Food API 都更貼合 VeggieMap 的核心需求。
   建立 Mock Provider」的直接對應**——Overpass 是免金鑰的公開服務，穩定性不受合約保障，必須有退路。
 - `GeocodingProviderInterface` 的實作是 `NominatimGeocodingProvider`，同樣包一層介面，未來要換成
   Google Geocoding 或付費商都只需新增一個 Provider class。
+
+## 收錄規則（2026-08-25 決定）
+
+OSM 的 `diet:vegetarian` / `diet:vegan` 標籤有兩個我們在意的值：`only` 是「整間店都是素／
+純素」，`yes` 是「有素食選項」的一般餐廳。**用哪一個當收錄門檻依國別而異**，因為各地
+OSM 社群的標註慣例不同——這不是偏好問題，是同一套規則套下去會讓其中一邊失真：
+
+| 範圍 | `only` | `yes\|only` | only 佔比 | 採用規則 |
+| --- | --- | --- | --- | --- |
+| 台中市 | 177 | 220 | 80% | `only` |
+| 東京 23 区 | 46 | 210 | 22% | `yes` |
+
+台灣的標註習慣會明確標 `only`，用 `only` 收得到絕大多數素食店；日本社群慣用
+`diet:vegan=yes` 表達「有純素選項」，很少標 `only`，套 `only` 會讓整個東京 23 区只剩
+46 家，薄到不可用。
+
+規則跟著同步範圍走，寫在 `EXTERNAL_API_SYNC_BBOXES` 的每一組後面：
+`"minLat,minLng,maxLat,maxLng@only;minLat,minLng,maxLat,maxLng@yes"`，省略 `@規則` 時
+預設 `only`。`OsmRestaurantProvider` 的建構子只接受 `only`／`yes`，其他值直接丟
+`InvalidArgumentException`，不靜默退回預設。
+
+**`yes` 的實際後果要看清楚**：東京匯入的 195 家裡包含 CoCo壱番屋、AFURI、
+ドトールコーヒーショップ 這類連鎖店——它們因為「有純素選項」而入列，不是素食餐廳。
+這是選 `yes` 必然帶來的結果，不是 bug。
 
 ## Failure Handling 對應（總 prompt 第二十節）
 

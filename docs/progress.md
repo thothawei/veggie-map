@@ -1191,3 +1191,54 @@ container 只有 app／horizon／mysql／nginx／redis。所以 `php artisan sch
 - 匯入資料裡 `city` 欄位有 77/177 是空字串而不是 NULL（OSM 沒有 `addr:city` 標籤時），
   `address`／`district` 同樣沒有 NULL。語意上 NULL 比空字串正確，但這是既有的 upsert 行為，
   不在這次範圍內，先記錄。
+
+## 2026-08-25 — 收錄規則依國別而異：台中 only、東京 yes
+
+承上一則的待決項。使用者決定：依國別套不同規則，日本用 `yes`。
+
+**資料模型從「一串 bbox」升級成「範圍＋規則」。** 規則必須跟著範圍走，否則東京會被套上
+台灣的門檻。`EXTERNAL_API_SYNC_BBOXES` 每組格式改成 `bbox@規則`，省略時預設 `only`
+（向後相容）；`config('services.sync_bboxes')` 改名為 `sync_regions`，回傳
+`[['bbox' => ..., 'diet' => ...], ...]`。`routes/console.php` 把 `--diet` 一起排進指令。
+
+- `OsmRestaurantProvider` 建構子收 `only`／`yes`，未知值丟 `InvalidArgumentException`。
+  `yes` 模式的查詢是 `~"^(yes|only)$"` 而**不是** `="yes"`——純素食店本來就該落在「有素食
+  選項」這個較寬的集合裡，只比對 `yes` 反而會把純素食店漏掉。
+- `restaurants:sync` 新增 `--diet=` 選項。順帶修掉 `resolveProvider()` 的靜默退回：原本
+  `--provider` 沒帶時是 `app(RestaurantProviderInterface::class)`，而該綁定是
+  `=== 'osm' ? Osm : Mock`，把 `EXTERNAL_API_RESTAURANT_PROVIDER` 打成 `overpass` 之類的值
+  會安靜跑 mock。現在指令層對未知值直接 throw。（`AppServiceProvider` 的綁定本身仍是靜默
+  退回，沒有一併改動——那影響全 app 的解析行為，不在這次範圍。）
+
+**踩到的坑：`$signature` 裡的選項描述不能換行。** 原本為了排版把 `--diet` 的說明折成兩行，
+Laravel 的 signature parser 直接吃不到這個選項，執行時報
+`The "--diet" option does not exist.`——不是選項沒定義，是定義被解析器丟掉了。改回單行即可。
+
+**東京實測。** `--bbox=35.53,139.56,35.82,139.92 --diet=yes`：created **195**、17.3 秒。
+事前 count 查詢是 210，差 15 筆——**沒有當成誤差放過**，改查「有 `name` 標籤的節點數」
+得到 **195**，與匯入數完全吻合，差的 15 筆是 OSM 上沒有名字的節點，被 `parseElements`
+正確跳過（`skipped` 統計是 0，因為它們在進到 `RestaurantSyncService` 之前就被濾掉了）。
+DB 從 303 筆變 498 筆，東京 bbox 內 195 筆，`whereDoesntHave('dietTypes')` 為 0。
+diet 分布：vegetarian 123、vegan 121。
+
+**`yes` 的後果要誠實記下來**：東京匯入的 195 家裡有 CoCo壱番屋、AFURI、
+ドトールコーヒーショップ 這類連鎖店，它們是「有純素選項的一般餐廳」而不是素食餐廳。
+這是選 `yes` 的必然結果，使用者知情下的決定，不是資料錯誤。台中那 177 家維持 `only`，
+不受影響。
+
+反向驗證：把 `routes/console.php` 的 `'--diet' => $region['diet']` 拔掉，
+「每個範圍各自帶自己的規則」那條真的紅了才還原。89 個測試、268 個 assertion 全綠。
+
+**環境雜訊（非程式碼問題）：** 本機跑 `phpstan analyse` 一度以
+`reached configured PHP memory limit: 128M` 崩潰。查 `.github/workflows/ci.yml` 第 74 行，
+CI 本來就帶 `--memory-limit=512M`，所以是本機預設值不足，不是新程式碼引入的問題；
+本機補上同樣參數後 `[OK] No errors`。
+
+**未完成 / 等待確認：**
+
+- 台北那 106 筆（上上輪測試匯入、`only` 規則）仍留在 DB，預設涵蓋範圍已不含台北。
+  現在 DB 是台北 106＋台中 177＋東京 195＋種子 20 = 498 筆的混合狀態。
+- `AppServiceProvider` 的 `RestaurantProviderInterface` 綁定仍會對未知 provider 值靜默
+  退回 mock，只有 `restaurants:sync` 這條路徑修成會 throw。
+- 前端目前沒有任何「依城市／國別」切換或篩選的概念，三個城市的資料是混在同一個
+  `/api/v1/restaurants` 結果裡靠座標區分。要做多城市體驗需要另外規劃。

@@ -14,7 +14,8 @@ class SyncRestaurants extends Command
 {
     protected $signature = 'restaurants:sync
         {--bbox= : "minLat,minLng,maxLat,maxLng"，必填——一次只查一個小範圍，不要撈全台灣}
-        {--provider= : 覆蓋 EXTERNAL_API_RESTAURANT_PROVIDER，mock 或 osm，僅供這次執行使用}';
+        {--provider= : 覆蓋 EXTERNAL_API_RESTAURANT_PROVIDER，mock 或 osm，僅供這次執行使用}
+        {--diet=only : 收錄規則，only（只收純素食店）或 yes（連有素食選項的餐廳一起收），依國別而異，見 config/services.php 的 sync_regions}';
 
     protected $description = '從外部資料源（Overpass／本地 fixture）批次匯入餐廳，見 docs/architecture.md';
 
@@ -37,10 +38,18 @@ class SyncRestaurants extends Command
             return self::FAILURE;
         }
 
-        $provider = $this->resolveProvider();
+        try {
+            $provider = $this->resolveProvider();
+        } catch (\InvalidArgumentException $e) {
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
         $service = new RestaurantSyncService($provider, app(VerificationService::class));
 
         $this->info("Syncing restaurants via [{$provider->sourceName()}] provider (".class_basename($provider).')...');
+        $this->line("收錄規則：diet={$this->option('diet')}");
 
         $stats = $service->sync($bbox);
 
@@ -54,13 +63,15 @@ class SyncRestaurants extends Command
 
     private function resolveProvider(): RestaurantProviderInterface
     {
-        $override = $this->option('provider');
+        // --provider 沒帶就讀 config。這裡刻意對未知值 throw 而不是靜默退回 mock：
+        // AppServiceProvider 的綁定是 `=== 'osm' ? Osm : Mock`，把 EXTERNAL_API_RESTAURANT_PROVIDER
+        // 打成 "overpass" 之類的值會安靜地跑 mock，看起來成功卻一筆真資料都沒進來。
+        $name = $this->option('provider') ?? config('services.restaurant_provider');
 
-        return match ($override) {
-            'osm' => new OsmRestaurantProvider,
+        return match ($name) {
+            'osm' => new OsmRestaurantProvider((string) $this->option('diet')),
             'mock' => new MockRestaurantProvider,
-            null => app(RestaurantProviderInterface::class),
-            default => throw new \InvalidArgumentException("Unknown provider [{$override}], expected mock or osm."),
+            default => throw new \InvalidArgumentException("Unknown provider [{$name}], expected mock or osm."),
         };
     }
 }

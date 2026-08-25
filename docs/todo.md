@@ -185,12 +185,27 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
       （分號分隔第二組），`schedule:list` 確認產生兩條獨立排程
 - [x] `ScheduleTest` 原本鎖死台北的斷言改成台中＋東京，並新增分號分隔解析的測試
 
-**待你決定（東京尚未匯入）**：東京 23 区用我們現行的「只收純素食店」規則只有 **46 家**，
-放寬成 `yes` 有 210 家。日本 OSM 慣用 `diet:vegan=yes` 而非 `only`，不是東京素食店少。
-維持一致 vs 依國別放寬，是產品標準問題，沒有擅自選。
-
 其他未決：台北那 106 筆測試匯入資料仍留在 DB；本機沒有 scheduler container，排程
 實際不會自動跑。細節見 progress.md。
+
+## 補做：收錄規則依國別而異（台中 only／東京 yes）✅ 已完成 2026-08-25
+
+- [x] `EXTERNAL_API_SYNC_BBOXES` 格式升級成 `bbox@規則`，`sync_bboxes` 改名 `sync_regions`
+      並回傳 `['bbox' => ..., 'diet' => ...]`，`routes/console.php` 排程帶上 `--diet`
+- [x] `OsmRestaurantProvider` 建構子收 `only`／`yes`，未知值 throw；`yes` 模式查詢是
+      `~"^(yes|only)$"` 而非 `="yes"`（否則會漏掉純素食店）
+- [x] `restaurants:sync --diet=` 選項；順帶修掉 `resolveProvider()` 對未知 provider 的
+      靜默退回 mock
+- [x] 東京實測：created **195**、17.3 秒。count 查詢說 210，查證差的 15 筆是 OSM 上沒有
+      `name` 的節點（改查「有 name 的節點數」正好 195），不是漏匯入
+- [x] `docs/external-apis.md` 新增「收錄規則」段落，含兩地標籤密度對照表
+- [x] 反向驗證：拔掉排程的 `--diet` 傳遞，測試真的紅
+
+**已知後果（知情決定，非資料錯誤）**：東京 195 家裡包含 CoCo壱番屋、AFURI、
+ドトールコーヒーショップ 這類「有純素選項的連鎖店」，這是 `yes` 規則的必然結果。
+
+未決：DB 目前是台北 106＋台中 177＋東京 195＋種子 20 的混合狀態；前端沒有依城市／國別
+切換的概念，三地資料混在同一組查詢結果裡。細節見 progress.md。
 
 ## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成
 

@@ -15,14 +15,32 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
 {
     private const AMENITIES = ['restaurant', 'cafe'];
 
+    private const DIET_TAGS = ['diet:vegetarian', 'diet:vegan'];
+
+    /** 只收整間店都是素／純素的（diet:*=only）。 */
+    public const DIET_ONLY = 'only';
+
+    /** 連「有素食選項」的一般餐廳一起收（diet:*=yes|only）。 */
+    public const DIET_YES = 'yes';
+
+    public const DIET_MODES = [self::DIET_ONLY, self::DIET_YES];
+
     /**
-     * 只收「純素食店」——OSM 的 diet:* 標籤裡 `only` 代表整間店都是素／純素，`yes` 只代表
-     * 「有素食選項」的一般餐廳（2026-08-25 產品決定：後者不收）。這個篩選一定要下在
-     * Overpass 查詢裡，不能只在 PHP 端過濾：台北市 bbox 下 restaurant|cafe 共 15,974 個
-     * 節點，其中 vegetarian=only ∪ vegan=only 只有 222 個，不篩等於每次同步都把整個城市的
-     * 餐廳搬回來。
+     * 收錄規則依國別而異，因為 OSM 標籤慣例不同（2026-08-25 實測）：台中市 177/220 家標
+     * `only`（80%），東京 23 区只有 46/210（22%），日本社群慣用 `yes`。套同一套規則會讓
+     * 其中一邊失真，所以規則跟著同步範圍走，見 config/services.php 的 sync_regions。
+     *
+     * 不論哪種規則，篩選都必須下在 Overpass 查詢裡而不是 PHP 端：不篩的話台北市 bbox 會
+     * 回 15,974 個節點（篩完 222 個），等於每次同步都把整個城市的餐廳搬回來。
      */
-    private const DIET_ONLY_TAGS = ['diet:vegetarian', 'diet:vegan'];
+    public function __construct(private readonly string $dietMode = self::DIET_ONLY)
+    {
+        if (! in_array($dietMode, self::DIET_MODES, true)) {
+            throw new \InvalidArgumentException(
+                "Unknown diet mode [{$dietMode}], expected ".implode(' or ', self::DIET_MODES).'.'
+            );
+        }
+    }
 
     public function fetch(BoundingBox $bbox): array
     {
@@ -93,10 +111,10 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
         $amenities = implode('|', self::AMENITIES);
 
         // 兩個 diet 標籤各一條 statement 包成 union——Overpass QL 的多個 [tag] 是 AND，
-        // 要「vegetarian=only 或 vegan=only」只能靠 (...); union，不能寫成單一 statement。
+        // 要「vegetarian 或 vegan」只能靠 (...); union，不能寫成單一 statement。
         $clauses = implode("\n", array_map(
-            fn (string $tag) => "  node[\"amenity\"~\"^({$amenities})$\"][\"{$tag}\"=\"only\"]({$box});",
-            self::DIET_ONLY_TAGS,
+            fn (string $tag) => "  node[\"amenity\"~\"^({$amenities})$\"]{$this->dietFilter($tag)}({$box});",
+            self::DIET_TAGS,
         ));
 
         return <<<OVERPASS_QL
@@ -106,6 +124,17 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
             );
             out body;
             OVERPASS_QL;
+    }
+
+    /**
+     * `only` 模式用精確比對；`yes` 模式要同時涵蓋 yes 與 only——純素食店本來就該收進
+     * 「有素食選項」這個較寬的集合，只寫 ="yes" 反而會把純素食店漏掉。
+     */
+    private function dietFilter(string $tag): string
+    {
+        return $this->dietMode === self::DIET_ONLY
+            ? "[\"{$tag}\"=\"only\"]"
+            : "[\"{$tag}\"~\"^(yes|only)$\"]";
     }
 
     /**

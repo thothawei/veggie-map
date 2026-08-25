@@ -9,15 +9,15 @@ use Tests\TestCase;
 class ScheduleTest extends TestCase
 {
     /**
-     * 用指定的 sync_bboxes 重跑一次 routes/console.php，回傳排進去的指令字串。
+     * 用指定的 sync_regions 重跑一次 routes/console.php，回傳排進去的指令字串。
      * 不讀環境變數，避免測試結果跟著 .env 的 EXTERNAL_API_SYNC_BBOXES 飄移。
      *
-     * @param  array<int, string>  $bboxes
+     * @param  array<int, array{bbox: string, diet: string}>  $regions
      * @return array<int, string>
      */
-    private function scheduledCommands(array $bboxes): array
+    private function scheduledCommands(array $regions): array
     {
-        config(['services.sync_bboxes' => $bboxes]);
+        config(['services.sync_regions' => $regions]);
 
         $schedule = new Schedule;
         $this->app->instance(Schedule::class, $schedule);
@@ -38,46 +38,42 @@ class ScheduleTest extends TestCase
         $this->assertTrue($commands->contains(fn ($command) => str_contains($command, 'restaurants:calculate-scores')));
     }
 
-    public function test_sync_is_not_scheduled_when_no_bbox_is_configured(): void
+    public function test_sync_is_not_scheduled_when_no_region_is_configured(): void
     {
         $commands = collect($this->scheduledCommands([]));
 
         $this->assertFalse($commands->contains(fn ($command) => str_contains($command, 'restaurants:sync')));
     }
 
-    public function test_each_configured_bbox_gets_its_own_sync_schedule(): void
+    public function test_each_region_gets_its_own_sync_schedule_carrying_its_own_diet_rule(): void
     {
         $commands = collect($this->scheduledCommands([
-            '24.9613,121.4570,25.2130,121.6663',
-            '22.60,120.28,22.68,120.35',
-        ]));
+            ['bbox' => '23.9500,120.4300,24.4500,121.4700', 'diet' => 'only'],
+            ['bbox' => '35.5300,139.5600,35.8200,139.9200', 'diet' => 'yes'],
+        ]))->filter(fn ($command) => str_contains($command, 'restaurants:sync'))->values();
 
-        $syncCommands = $commands->filter(fn ($command) => str_contains($command, 'restaurants:sync'))->values();
+        $this->assertCount(2, $commands, '兩個範圍要各自產生一條排程，不是合併成一次大查詢');
 
-        $this->assertCount(2, $syncCommands);
-        $this->assertTrue($syncCommands->contains(fn ($command) => str_contains($command, '24.9613,121.4570,25.2130,121.6663')));
-        $this->assertTrue($syncCommands->contains(fn ($command) => str_contains($command, '22.60,120.28,22.68,120.35')));
+        // 收錄規則必須跟著各自的範圍走。要是 --diet 沒帶或帶錯，東京會被套上台灣的 only
+        // 規則，整個 23 区只剩 46 家（見 docs/progress.md 2026-08-25）。
+        $this->assertTrue($commands->contains(
+            fn ($c) => str_contains($c, '23.9500,120.4300,24.4500,121.4700') && str_contains($c, "--diet='only'")
+        ));
+        $this->assertTrue($commands->contains(
+            fn ($c) => str_contains($c, '35.5300,139.5600,35.8200,139.9200') && str_contains($c, "--diet='yes'")
+        ));
     }
 
-    public function test_default_env_covers_taichung_and_tokyo(): void
+    public function test_default_env_covers_taichung_with_only_and_tokyo_with_yes(): void
     {
-        // 預設涵蓋範圍是產品決定（2026-08-25：台中市＋東京 23 区），不是隨手填的值，
-        // 所以鎖在測試裡——有人改動 .env.example 的涵蓋城市時要是有意識的決定。
+        // 涵蓋範圍與各自的收錄規則都是產品決定（2026-08-25），不是隨手填的值，所以鎖在
+        // 測試裡——有人改動時要是有意識的決定。
         $this->assertSame(
             [
-                '23.9500,120.4300,24.4500,121.4700',
-                '35.5300,139.5600,35.8200,139.9200',
+                ['bbox' => '23.9500,120.4300,24.4500,121.4700', 'diet' => 'only'],
+                ['bbox' => '35.5300,139.5600,35.8200,139.9200', 'diet' => 'yes'],
             ],
-            config('services.sync_bboxes')
+            config('services.sync_regions')
         );
-    }
-
-    public function test_semicolon_separated_bboxes_are_parsed_into_separate_schedules(): void
-    {
-        $commands = collect($this->scheduledCommands(
-            config('services.sync_bboxes')
-        ))->filter(fn ($command) => str_contains($command, 'restaurants:sync'));
-
-        $this->assertCount(2, $commands, '兩個城市要各自產生一條排程，不是合併成一次大查詢');
     }
 }

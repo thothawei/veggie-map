@@ -84,6 +84,28 @@ class OsmRestaurantProviderTest extends TestCase
         );
     }
 
+    public function test_yes_mode_also_accepts_places_that_merely_offer_veg_options(): void
+    {
+        Http::fake(['*' => Http::response(['elements' => []])]);
+
+        (new OsmRestaurantProvider(OsmRestaurantProvider::DIET_YES))->fetch($this->bbox());
+
+        $query = $this->sentQuery();
+
+        // 日本用這個規則：東京 23 区只有 46/210 家標 only，套 only 會讓地圖薄到不可用。
+        // 必須是 ^(yes|only)$ 而不是 ="yes"——純素食店本來就該落在這個較寬的集合裡。
+        $this->assertStringContainsString('["diet:vegetarian"~"^(yes|only)$"]', $query);
+        $this->assertStringContainsString('["diet:vegan"~"^(yes|only)$"]', $query);
+        $this->assertStringNotContainsString('="only"', $query);
+    }
+
+    public function test_unknown_diet_mode_is_rejected_instead_of_silently_falling_back(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        new OsmRestaurantProvider('vegan');
+    }
+
     public function test_sends_a_real_user_agent_because_overpass_rejects_the_default_one(): void
     {
         config(['services.overpass.user_agent' => 'VeggieMap/1.0 (+https://example.test/repo)']);
