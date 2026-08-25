@@ -56,7 +56,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 ## `GET /restaurants` 查詢參數
 
 `keyword`, `latitude`, `longitude`, `radius`（公里，上限 50）, `bbox`, `city`, `district`, `diet`, `price_level`,
-`rating_min`, `pet_friendly`, `parking`, `open_now`, `sort`（distance/rating/popular/newest，
+`rating_min`, `pet_friendly`, `parking`（布林，請傳 `1`／`0`；Laravel 的 boolean 規則不接受 `true`／`false` 字串）, `open_now`, `sort`（distance/rating/popular/newest，
 預設 `distance`；帶 `latitude`+`longitude` 才可用 `distance`）, `page`, `per_page`（預設 20，上限 100）。
 
 範例：

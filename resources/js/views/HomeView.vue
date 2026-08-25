@@ -7,8 +7,9 @@ import SearchBox from '@/components/SearchBox.vue';
 import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { rememberCity, useCities } from '@/composables/useCities';
+import { apiFilterParams, useFilterQuery } from '@/composables/useFilterQuery';
 import { haversineKm } from '@/lib/geo';
-import type { ApiSuccess, GeocodedPlace, Restaurant, RestaurantSearchParams } from '@/types';
+import type { ApiSuccess, GeocodedPlace, Restaurant } from '@/types';
 
 const router = useRouter();
 
@@ -20,7 +21,8 @@ const recommended = ref<Restaurant[]>([]);
 const loading = ref(false);
 const loadFailed = ref(false);
 const hasMore = ref(false);
-const filters = ref<Partial<RestaurantSearchParams>>({});
+// 篩選條件跟 city 一樣以網址為真相來源，重新整理與分享連結才留得住。
+const filters = useFilterQuery();
 const mapRef = ref<InstanceType<typeof RestaurantMap> | null>(null);
 
 let currentBounds: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null = null;
@@ -54,7 +56,7 @@ async function loadByBounds() {
                     radius,
                     sort: 'distance',
                     per_page: 100,
-                    ...filters.value,
+                    ...apiFilterParams(filters.value),
                 },
             }),
             // 後端 RuleBasedRecommendationService 依 distance/rating/vegetarian_confidence/

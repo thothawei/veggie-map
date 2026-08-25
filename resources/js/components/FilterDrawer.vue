@@ -51,34 +51,51 @@ onBeforeUnmount(() => {
     mediaQuery?.removeEventListener('change', syncWideScreen);
 });
 
+/**
+ * 一律整組替換而不是就地改欄位。就地改的話，當父層把 filters 接到網址（computed 的
+ * getter 每次回傳新物件）時，改動會落在一個暫時物件上、永遠傳不出去。整組替換走的是
+ * defineModel 的 emit，父層要存在 ref 還是網址都行。
+ */
+function replaceFilters(mutate: (next: Partial<RestaurantSearchParams>) => void) {
+    const next = { ...filters.value };
+    mutate(next);
+    filters.value = next;
+}
+
 function toggleDiet(code: string) {
-    if (filters.value.diet === code) {
-        delete filters.value.diet;
+    replaceFilters((next) => {
+        if (next.diet === code) {
+            delete next.diet;
 
-        return;
-    }
+            return;
+        }
 
-    filters.value.diet = code;
+        next.diet = code;
+    });
 }
 
 function togglePetFriendly() {
-    if (filters.value.pet_friendly) {
-        delete filters.value.pet_friendly;
+    replaceFilters((next) => {
+        if (next.pet_friendly) {
+            delete next.pet_friendly;
 
-        return;
-    }
+            return;
+        }
 
-    filters.value.pet_friendly = true;
+        next.pet_friendly = true;
+    });
 }
 
 function toggleParking() {
-    if (filters.value.parking) {
-        delete filters.value.parking;
+    replaceFilters((next) => {
+        if (next.parking) {
+            delete next.parking;
 
-        return;
-    }
+            return;
+        }
 
-    filters.value.parking = true;
+        next.parking = true;
+    });
 }
 
 // 一個一個點回去才能取消太麻煩，而且使用者未必記得剛剛點了哪些。

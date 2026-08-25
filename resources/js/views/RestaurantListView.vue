@@ -5,7 +5,8 @@ import client from '@/api/client';
 import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { ALL_CITIES, useCities } from '@/composables/useCities';
-import type { ApiSuccess, Restaurant, RestaurantSearchParams } from '@/types';
+import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
+import type { ApiSuccess, Restaurant } from '@/types';
 
 const router = useRouter();
 const route = useRoute();
@@ -25,7 +26,8 @@ const keywordDraft = ref('');
 /** 網址才是「現在正在搜什麼」的真相來源——重新整理、分享連結、上一頁因此都對。 */
 const committedKeyword = computed(() => (typeof route.query.keyword === 'string' ? route.query.keyword : ''));
 
-const filters = ref<Partial<RestaurantSearchParams>>({});
+// 篩選條件跟 city／keyword 一樣以網址為真相來源。
+const filters = useFilterQuery();
 const nextCursor = ref<string | null>(null);
 const loading = ref(false);
 const loadFailed = ref(false);
@@ -55,7 +57,7 @@ async function search(reset = true) {
                 sort: 'newest',
                 per_page: 20,
                 cursor: reset ? undefined : (nextCursor.value ?? undefined),
-                ...filters.value,
+                ...apiFilterParams(filters.value),
             },
         });
 
@@ -127,8 +129,6 @@ const hasActiveFilters = computed(
     () => Object.values(filters.value).some((value) => value !== undefined && value !== null),
 );
 
-watch(filters, () => search(true), { deep: true });
-
 /**
  * 城市清單是非同步載入的。若在載入前就先查一次、載入後因為 activeCity 變了再查一次，
  * 等於每次進頁面都白打一發 API（實測真的會送出兩個請求）。改成用一個「查詢範圍」的
@@ -138,7 +138,7 @@ watch(filters, () => search(true), { deep: true });
 const searchScope = computed(() => {
     if (citiesLoading.value) return null;
 
-    return JSON.stringify([bbox.value ?? ALL_CITIES, committedKeyword.value]);
+    return JSON.stringify([bbox.value ?? ALL_CITIES, committedKeyword.value, filterQueryKey(filters.value)]);
 });
 
 watch(searchScope, (scope) => {

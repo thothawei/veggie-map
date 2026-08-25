@@ -1529,3 +1529,70 @@ computed，只列真正適用的建議——沒下關鍵字卻叫人「換個關
   但參數比較多、要決定網址要長什麼樣（逐個 query 參數還是壓成一個字串），沒有擅自決定。
 - 匯入資料的 `address` 常是空字串，列表卡片會多一行空白（既有問題，首頁推薦卡片也有）。
 - `SearchBox`／`AdminView`／`RestaurantDetailView` 仍無元件測試。
+
+## 2026-08-25 — filters 進網址（逐個 query 參數），並抓到一個從沒運作過的篩選
+
+使用者決定：逐個 query 參數（`?diet=vegan&parking=1`），不是壓成一個編碼字串。理由是
+網址本身要看得懂——使用者回報問題時貼得出有意義的資訊，`?f=dGVzdA` 只有程式看得懂。
+
+**先改 FilterDrawer 的更新方式。** 它原本是「就地改欄位」（`filters.value.diet = code`），
+父層把 filters 接到網址後，computed 的 getter 每次回傳新物件，就地改會落在暫時物件上、
+永遠傳不出去。改成一律整組替換走 `defineModel` 的 emit，父層要存 ref 還是網址都行。
+這順便消掉了我先前寫測試時發現的「就地改 vs 整組替換」兩條路徑行為不一致。
+
+`useFilterQuery` 回傳可寫的 computed，直接接 `v-model:filters`。約定：布林在網址上一律
+寫 `1`，關閉就是「沒有這個參數」，不用 `0` 佔位（否則「關閉」跟「沒設定」變成兩種表示法，
+網址也會愈用愈長）。寫回時先刪掉這三個 key 再重寫，避免被關掉的條件殘留。首頁與列表頁
+都改用它，行為一致。
+
+### 抓到一個「從一開始就沒運作過」的篩選
+
+改完在瀏覽器實測 `?city=taichung&diet=vegan&parking=1`，UI 狀態全對（徽章 2、兩個晶片
+選取）但查詢**失敗**。查 network 面板：
+
+```
+GET /api/v1/restaurants?...&diet=vegan&parking=true → 422
+{"parking":["The parking field must be true or false."]}
+```
+
+根因：axios 把布林 `true` 序列化成字串 `"true"`，而 Laravel 的 `boolean` 規則只接受真布林
+與 `1`/`0`/`"1"`/`"0"`，不吃 `"true"`。
+
+**這是既有 bug，不是這次引入的**——`git show HEAD~3` 確認舊版 FilterDrawer 就是
+`filters.value.parking = true`，再原封不動展開進 axios params。也就是「寵物友善」「停車」
+兩個篩選**從實作出來就沒有真正運作過**。之所以一直沒人發現，是因為舊版前端沒有錯誤處理，
+422 被靜默吞掉、畫面只是沒更新，看起來像「這個條件剛好沒有結果」。是我這輪新加的錯誤
+狀態把它照出來的。
+
+修法：新增 `apiFilterParams()` 在請求邊界把布林轉成 `1`（跟網址的表示法一致），
+並補一條測試釘住「送 1 不是 true」。沒有改後端驗證規則——那會影響所有 API 使用端，
+而 `1` 本來就是我們自己網址上的約定。
+
+**修完實測**：`diet=vegan` 44 筆、`parking=1` 2 筆、兩者交集 1 筆，數字互相吻合，
+不是湊巧回一筆。
+
+### 順帶查證到的資料涵蓋問題
+
+那唯一一筆交集結果是 Faker 種子資料。查下去：**592 筆 OSM 匯入資料裡有 features 的是 0 筆**
+（種子資料 20 筆裡有 14 筆有）。因為 `RestaurantSyncService` 只同步 `dietTypes`，沒有處理
+features。所以「寵物友善」「停車」兩個篩選即使修好了，套在真實匯入資料上仍然永遠是空的。
+OSM 其實有 `wheelchair`／`outdoor_seating` 之類的標籤可以對應，但要不要收、怎麼對應是
+產品決定，沒有擅自加。
+
+### 驗證
+
+前端 74 個測試（新增 13 條：`useFilterQuery` 11 條 + 列表頁 7 條，其中兩條測 `apiFilterParams`），
+後端 107 個測試不受影響，Pint／PHPStan／ESLint／vue-tsc／build 乾淨。
+反向驗證：把列表頁的 filters 改回 local state → 6 條紅。
+瀏覽器實測：帶篩選開頁會回填晶片與徽章、點晶片寫進網址並重查、清除只清篩選而
+city／keyword 留著、上一頁回到套用前的狀態。
+
+過程中修掉一個測試 fixture 缺口：列表頁測試檔的 API mock 沒回 `/diets`／`/features`，
+FilterDrawer 畫不出晶片，篩選相關測試會測到空畫面。
+
+**未完成 / 等待確認：**
+
+- API 目前不接受 `parking=true` 這種寫法（只接受 `1`/`0`）。對我們自己的前端沒問題，
+  但對其他 API 使用端不太友善，要不要放寬是後端 API 設計決定。
+- OSM 匯入沒有帶入任何 feature，`pet_friendly`／`parking` 篩選在真實資料上無效。
+- 匯入資料的 `address` 常是空字串，卡片會多一行空白（既有問題）。

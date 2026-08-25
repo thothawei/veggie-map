@@ -24,6 +24,19 @@ const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) =
         return Promise.resolve({ data: listPayload });
     }
 
+    // FilterDrawer 要有這兩份清單才畫得出晶片，少了它篩選相關的測試會測到空畫面。
+    if (url === '/diets') {
+        return Promise.resolve({
+            data: { data: [{ code: 'vegan', label: '全素（Vegan）' }, { code: 'lacto', label: '奶素（Lacto）' }] },
+        });
+    }
+
+    if (url === '/features') {
+        return Promise.resolve({
+            data: { data: [{ code: 'pet_friendly', label: '寵物友善' }, { code: 'parking', label: '停車' }] },
+        });
+    }
+
     return Promise.resolve({ data: { data: [] } });
 });
 
@@ -299,5 +312,92 @@ describe('RestaurantListView 關鍵字進網址', () => {
         const { wrapper } = await mountList('/restaurants?city=tokyo');
 
         expect(wrapper.find('.notice').text()).not.toContain('換個關鍵字');
+    });
+});
+
+describe('RestaurantListView 篩選進網址', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+    });
+
+    it('網址帶篩選時開頁就套用，晶片也是選取狀態', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taichung&diet=vegan&parking=1');
+
+        expect(lastRestaurantCall().diet).toBe('vegan');
+        expect(lastRestaurantCall().parking).toBe(1);
+        expect(wrapper.findAll('.chip.active').map((c) => c.text())).toContain('停車');
+    });
+
+    it('點晶片會寫進網址並重查', async () => {
+        const { wrapper, router } = await mountList('/restaurants?city=taichung');
+        const before = restaurantCalls.length;
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '停車')!.trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.parking).toBe('1');
+        expect(restaurantCalls.length).toBeGreaterThan(before);
+        expect(lastRestaurantCall().parking).toBe(1);
+        expect(lastRestaurantCall().bbox).toBe('23.9500,120.4300,24.4500,121.4700');
+    });
+
+    it('取消晶片會把參數從網址移除', async () => {
+        const { wrapper, router } = await mountList('/restaurants?city=taichung&parking=1');
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '停車')!.trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.parking).toBeUndefined();
+        expect(lastRestaurantCall().parking).toBeUndefined();
+    });
+
+    it('清除篩選只清篩選，city 與 keyword 留著', async () => {
+        const { wrapper, router } = await mountList('/restaurants?city=taichung&keyword=素食&diet=vegan&parking=1');
+
+        await wrapper.find('.clear').trigger('click');
+        await flushPromises();
+
+        const query = router.currentRoute.value.query;
+        expect(query.diet).toBeUndefined();
+        expect(query.parking).toBeUndefined();
+        expect(query.city).toBe('taichung');
+        expect(query.keyword).toBe('素食');
+    });
+
+    it('城市／關鍵字／篩選三者可共存於網址', async () => {
+        await mountList('/restaurants?city=tokyo&keyword=ramen&diet=vegan');
+
+        const call = lastRestaurantCall();
+        expect(call.bbox).toBe('35.5300,139.5600,35.8200,139.9200');
+        expect(call.keyword).toBe('ramen');
+        expect(call.diet).toBe('vegan');
+    });
+
+    it('改篩選只送一發請求，不是先舊後新兩發', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taichung');
+        const before = restaurantCalls.length;
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '停車')!.trigger('click');
+        await flushPromises();
+
+        expect(restaurantCalls.length - before).toBe(1);
+    });
+
+    it('上一頁會回到套用篩選之前的狀態', async () => {
+        const { wrapper, router } = await mountList('/restaurants?city=taichung');
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '停車')!.trigger('click');
+        await flushPromises();
+        expect(router.currentRoute.value.query.parking).toBe('1');
+
+        await router.back();
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.parking).toBeUndefined();
+        expect(lastRestaurantCall().parking).toBeUndefined();
     });
 });
