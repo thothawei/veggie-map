@@ -1071,3 +1071,72 @@ Horizon 改動造成——單獨用 `--filter` 跑受影響的測試檔（`Calcu
   `EXTERNAL_API_RESTAURANT_PROVIDER=mock`，所以本機排程實際跑起來吃的是 fixture 不是
   真的 Overpass；要讓它真的匯入外部資料，需要另外把 provider 切成 overpass。這是既有的
   環境設定，不是這次改動的一部分，但值得在真的啟用排程前確認一次。
+
+## 2026-08-25 — provider 切 osm：先修查詢範圍，再踩到 Overpass 的 406
+
+承上一則。使用者要求把 `EXTERNAL_API_RESTAURANT_PROVIDER` 從 `mock` 切成真的 Overpass。
+兩件事在動手前就擋下來了，第三件是跑下去才炸出來的。
+
+**1）「overpass」不是合法值，會靜默 fallback。** `AppServiceProvider` 綁定判斷是
+`=== 'osm'`，填 `overpass` 不會報錯，只會安靜地回 `MockRestaurantProvider`。正確值是
+`osm`。（`restaurants:sync --provider=` 那條路反而是安全的，`match` 有 default throw。）
+
+**2）查詢根本沒有素食篩選——這才是大問題。** `OsmRestaurantProvider::buildQuery()` 只查
+`amenity=restaurant|cafe`，`RestaurantSyncService` 也只跳過沒有名字的節點，`dietCodes`
+純粹是拿來寫關聯表、不是過濾條件。實際對 Overpass 量過台北市 bbox：
+
+| 查詢 | 節點數 |
+| --- | --- |
+| `amenity=restaurant\|cafe`（原本會抓的） | 15,974 |
+| `diet:vegetarian=yes\|only` | 385 |
+| `diet:vegan=yes\|only` | 142 |
+| `diet:vegetarian=only ∪ diet:vegan=only`（現在抓的） | 222 |
+
+也就是排程每天會把整個台北市 16k 家餐廳灌進一個素食地圖。使用者決定只收純素食店
+（`only`，不含「有素食選項」的 `yes`），查詢改成 `(...)` union 兩條 statement——Overpass QL
+的多個 `[tag]` 是 AND，要 OR 只能靠 union。
+
+`OsmRestaurantProvider` 原本是**零測試覆蓋**，查詢字串從沒被斷言過，這就是為什麼缺篩選
+一直沒人發現。新增 `tests/Feature/External/OsmRestaurantProviderTest.php`，其中一條用
+regex 掃出每一條 `node[...]` statement、逐條要求帶 `"only"`，未來加第三個 diet 標籤時
+漏篩一樣會紅。
+
+**3）切過去第一次跑，created 0——Overpass 用 HTTP 406 擋掉 Guzzle 預設 User-Agent。**
+`--bbox=25.00,121.51,25.07,121.58` 預期 106 筆，實際 0 筆卻回傳 SUCCESS。查
+`external_api_logs` 只看到 `status=0 / error_code=RequestException`，資訊量為零。分層排查：
+容器內 `curl` 打同一個 query 拿到 **200**，排除網路與查詢語法；改用 Laravel 的 `Http` 打
+同一個 URL 拿到 **406**；只差一個 `User-Agent` header，加上去就 200。根因一句話：**沒帶
+User-Agent → overpass-api.de 回 406 → `retry()` 包成 RequestException 丟出 → catch 吞掉回
+空陣列 → 同步印出「created 0」並回報成功。** 這跟 Phase 8.5 那次 Nominatim 因 UA 帶
+`example.com` 被 403 是同一族的坑，只是這次是完全沒帶。
+
+修法：
+- `config/services.php` 新增 `overpass.user_agent`，`.env` 留空時沿用 Nominatim 那組。
+  這裡踩到第二層：`env('X', env('Y'))` 對「已定義的空字串」不會套用預設值，
+  `EXTERNAL_API_OVERPASS_USER_AGENT=` 會讓 UA 變成空字串再被 406 擋掉——改用 `?:`，
+  且**發布前真的 `config:clear` 印出來確認拿到字串**，不是改完就假設生效。
+- provider 加 `->withHeaders(['User-Agent' => ...])`，並新增一條測試斷言這個 header。
+- 加 `catch (RequestException $e)` 從例外裡取回真實狀態碼，log 記 `HTTP_406` 而不是
+  `RequestException`。原本 `if (! $success)` 裡那段 `HTTP_{status}` 是**死碼**——`retry()`
+  預設 throw，非 429 的失敗根本走不到那行。這是既有問題，不是這次引入的。
+
+**實測結果（修完重跑同一個 bbox）：** created **106**，跟事前用 `out count;` 查到的預期值
+完全一致；DB 從 20 筆變 126 筆，`source_id` 非空的正好 106 筆；抽查是真的台北素食店
+（春天素食／世界素食館／十方齋素食館／古佛素食），座標與 diet 關聯都正確；
+**`whereDoesntHave('dietTypes')` 為 0**，確認沒有非素食店混進來；log 記到
+`status=200 success=1`。87 個測試、263 個 assertion 全綠，Pint／PHPStan 乾淨。
+
+反向驗證做了兩輪。第一輪**失敗但沒發現**：取代字串沒對到原始碼的跳脫形式，檔案根本沒被
+改到，測試自然全綠——差點把「沒改到所以綠」誤讀成「拔掉防線也綠」。用 `diff` 對照備份才
+抓到。重做後：拔掉 diet 篩選 → 2 條紅；拔掉 UA header → 1 條紅。
+
+**未完成 / 等待確認：**
+
+- `.env.example` 仍是 `EXTERNAL_API_RESTAURANT_PROVIDER=mock`（使用者選的 A 案）：只有本機
+  切 osm，CI 與新 clone 的開發者維持不打外部 API 的安全預設。
+- **全台北市 bbox 尚未實跑**，目前只驗證過市中心那組小 bbox（106 筆）。全市預期 222 筆，
+  小 bbox 那次 fetch 花了 17.3 秒（timeout 設 30 秒），全市會更久，值得在啟用排程前實測一次
+  確認不會 timeout。
+- 純素食店的 diet 關聯依賴 OSM 標籤本身：例如「養生素食」只有 `diet:vegan=only`、沒有
+  `diet:vegetarian`，所以在我們的 DB 裡只會掛到 vegan 而不是兩個都掛。要不要自動推導
+  「vegan=only 蘊含 vegetarian」是產品決定，沒有擅自加。

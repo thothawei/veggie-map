@@ -30,6 +30,12 @@ Food API 都更貼合 VeggieMap 的核心需求。
 
 - `OsmRestaurantProvider`：呼叫 Overpass API，把 OSM node 轉換成 `RestaurantData`。僅在
   `php artisan restaurants:sync` 這個離線指令中使用，不掛在使用者請求路徑上。
+  **只抓純素食店**：Overpass 查詢用 `(...)` union 篩 `diet:vegetarian=only` 或
+  `diet:vegan=only`。OSM 的 `only` 是「整間店都是素／純素」，`yes` 只代表「有素食選項」的
+  一般餐廳，2026-08-25 決定不收後者。這個篩選必須下在查詢端：台北市 bbox 下
+  `amenity=restaurant|cafe` 共 15,974 個節點，篩完只剩 222 個。
+  **必須帶 User-Agent**：overpass-api.de 會用 HTTP 406 擋掉 Guzzle 預設 UA，見下方
+  Failure Handling 第 6 點。
 - `MockRestaurantProvider`：從專案內建的 fixture（`storage/app/mock/restaurants.json`）讀取，
   保證 Overpass API 斷線、改政策、或本機無網路時 Demo 仍可跑。**這是規則第 14 條「無法穩定使用時
   建立 Mock Provider」的直接對應**——Overpass 是免金鑰的公開服務，穩定性不受合約保障，必須有退路。
@@ -45,6 +51,13 @@ Overpass／Nominatim 都是「免費但不保證 SLA」的公開服務，因此�
 3. **logging**：所有呼叫寫入 `ExternalApiLog`（見 `docs/database.md`），不記錄任何 key（本來就沒有 key 可記）。
 4. **fallback**：`restaurants:sync` 失敗時不影響既有資料，餐廳查詢 API 永遠只讀自家 MySQL，不會因為 OSM 掛掉而讓 `/api/v1/restaurants` 跟著掛。
 5. **circuit breaker 概念**：連續 N 次（建議 5 次）呼叫失敗後，`restaurants:sync` 該次執行直接標記失敗並停止，不無限重試耗損資源，改由排程下次再試。
+6. **User-Agent 是必要條件，不是禮貌**：`overpass-api.de` 對 Guzzle 預設 User-Agent 直接回
+   **HTTP 406 Not Acceptable**（2026-08-25 實測；同一個查詢用 `curl` 帶 UA 回 200）。
+   `EXTERNAL_API_OVERPASS_USER_AGENT` 留空時沿用 `EXTERNAL_API_NOMINATIM_USER_AGENT`。
+   這個失敗模式特別惡劣：`Http::retry()` 會把 406 包成 `RequestException` 丟出，
+   provider 的 catch 回空陣列，`restaurants:sync` 於是印出「created 0」**並回傳成功**——
+   看起來是「這個範圍沒有素食店」而不是「被擋了」。`ExternalApiLog` 現在會記下真實狀態碼
+   （`HTTP_406`）而不是無資訊量的 `RequestException`，就是為了讓下次一眼看得出差別。
 
 ## 待確認 / 風險
 

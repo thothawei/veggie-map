@@ -39,6 +39,12 @@ return [
     'overpass' => [
         'url' => env('EXTERNAL_API_OVERPASS_URL', 'https://overpass-api.de/api/interpreter'),
         'timeout' => env('EXTERNAL_API_OVERPASS_TIMEOUT', 30),
+        // 必要，不是禮貌性的：overpass-api.de 會用 HTTP 406 擋掉 Guzzle 預設 User-Agent
+        // （2026-08-25 實測，見 docs/progress.md）。預設沿用 Nominatim 那組識別字串——
+        // 同一個專案對同一家 OSM 服務族群，沒有理由用兩個身分。
+        // 用 ?: 而不是 env() 的第二參數：.env 裡寫 `EXTERNAL_API_OVERPASS_USER_AGENT=`
+        // 是「已定義的空字串」，env() 的預設值不會生效，會靜默送出空 UA 再被 406 擋掉。
+        'user_agent' => env('EXTERNAL_API_OVERPASS_USER_AGENT') ?: env('EXTERNAL_API_NOMINATIM_USER_AGENT'),
     ],
 
     'nominatim' => [
@@ -49,9 +55,8 @@ return [
     // mock｜osm，見 App\Providers\AppServiceProvider 的 RestaurantProviderInterface 綁定。
     'restaurant_provider' => env('EXTERNAL_API_RESTAURANT_PROVIDER', 'mock'),
 
-    // routes/console.php 的排程要用，逗號分隔多組 "minLat,minLng,maxLat,maxLng"（用分號分隔
-    // 多組 bbox）。沒有預設值——這個專案沒有正式決定過要自動涵蓋哪些城市範圍，寧可不排程
-    // 也不要自己編一組座標假裝是產品決策，見 docs/todo.md。
+    // routes/console.php 的排程要用，格式 "minLat,minLng,maxLat,maxLng"（用分號分隔多組
+    // bbox）。2026-08-25 決定預設涵蓋台北市，見 .env.example／docs/todo.md；留空則不排程。
     'sync_bboxes' => array_values(array_filter(array_map(
         'trim',
         explode(';', (string) env('EXTERNAL_API_SYNC_BBOXES', ''))

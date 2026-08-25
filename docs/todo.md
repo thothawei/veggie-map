@@ -159,6 +159,23 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
 - [x] `routes/console.php` 兩段過時註解一併更正（一段還停留在 Horizon 之前的
       `dispatchSync` 敘述，一段寫「沒有正式決定過涵蓋範圍」）
 
+## 補做：provider 切 osm ＋ Overpass 查詢只抓純素食店 ✅ 已完成 2026-08-25
+
+- [x] `.env` 的 `EXTERNAL_API_RESTAURANT_PROVIDER` 改 `osm`（`.env.example` 維持 `mock`
+      安全預設，CI／新 clone 不會打外部 API）
+- [x] `OsmRestaurantProvider::buildQuery()` 加素食篩選：union `diet:vegetarian=only`
+      與 `diet:vegan=only`。原本沒有任何篩選，台北市 bbox 會撈回 15,974 家而不是 222 家
+- [x] 修 HTTP 406：Overpass 擋 Guzzle 預設 User-Agent，新增 `overpass.user_agent` config
+      （`?:` 而非 `env()` 第二參數，避免空字串繞過預設）與 `withHeaders`
+- [x] `catch (RequestException)` 取回真實狀態碼，log 記 `HTTP_406` 而非 `RequestException`
+- [x] 新增 `tests/Feature/External/OsmRestaurantProviderTest.php`（6 條，原本零覆蓋），
+      含反向驗證：拔掉 diet 篩選 2 條紅、拔掉 UA header 1 條紅
+- [x] 小 bbox 實跑驗證：created 106，與事前 `out count;` 預期值一致，零非素食店混入
+- [x] `docs/external-apis.md` 補上素食篩選規則與 406 失敗模式
+
+未完成：全台北市 bbox 尚未實跑（小 bbox fetch 花 17.3s／timeout 30s，全市值得先實測）；
+「vegan=only 是否自動蘊含 vegetarian」留待產品決定。細節見 progress.md。
+
 ## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成
 
 `docs/progress.md` 逐項記錄；`git log` 每個 commit 都有對應 GitHub Actions CI 綠燈
