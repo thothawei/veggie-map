@@ -40,7 +40,7 @@ class RestaurantSyncService
             $stats[$wasRecentlyCreated ? 'created' : 'updated']++;
 
             $this->syncDietTypes($restaurant, $data->dietCodes, $dietTypeIds);
-            $this->syncFeatures($restaurant, $data->featureCodes, $featureIds);
+            $this->syncFeatures($restaurant, [...$data->featureCodes, ...$data->cuisineCodes], $featureIds);
 
             $restaurant->load('dietTypes');
             $this->verifications->syncExternalSource($restaurant);

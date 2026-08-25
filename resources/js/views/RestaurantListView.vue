@@ -6,7 +6,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { ALL_CITIES, useCities } from '@/composables/useCities';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
-import { formatRating } from '@/lib/format';
+import { formatAddress, formatCuisines } from '@/lib/format';
 import type { ApiSuccess, Restaurant } from '@/types';
 
 const router = useRouter();
@@ -199,9 +199,9 @@ watch(committedKeyword, (value) => {
                         class="venue-badge"
                         :data-kind="restaurant.venue_kind ?? undefined"
                     >{{ restaurant.venue_badge }}</span>
+                    <span v-if="formatCuisines(restaurant.cuisines)" class="cuisines">{{ formatCuisines(restaurant.cuisines) }}</span>
                     <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
-                    <span class="rating">{{ formatRating(restaurant.rating, restaurant.rating_count) }}</span>
-                    <span v-if="restaurant.address?.trim()" class="address">{{ restaurant.address }}</span>
+                    <span class="address">{{ formatAddress(restaurant) ?? '地址未提供' }}</span>
                 </button>
             </li>
         </ul>
@@ -292,7 +292,12 @@ li button:hover {
 }
 
 .address {
-    color: #718096;
+    color: #2d3748;
+    font-size: 0.9rem;
+}
+
+.cuisines {
+    color: #2f855a;
     font-size: 0.85rem;
 }
 

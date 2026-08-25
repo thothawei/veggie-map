@@ -76,6 +76,7 @@ export interface Restaurant {
     venue_kind?: string | null;
     venue_badge?: string | null;
     venue_summary?: string | null;
+    cuisines?: { code: string; label: string }[];
     features?: string[];
     menu_items?: MenuItem[];
     menu_empty_message?: string | null;

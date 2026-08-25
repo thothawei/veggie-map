@@ -183,7 +183,7 @@ class RestaurantTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.id', $restaurant->id)
             ->assertJsonPath('data.confidence_score', null)
-            ->assertJsonStructure(['data' => ['diet_types', 'venue_kind', 'venue_badge', 'venue_summary', 'features', 'menu_items']]);
+            ->assertJsonStructure(['data' => ['diet_types', 'venue_kind', 'venue_badge', 'venue_summary', 'cuisines', 'features', 'menu_items']]);
     }
 
     public function test_show_includes_menu_empty_message_when_there_are_no_items(): void

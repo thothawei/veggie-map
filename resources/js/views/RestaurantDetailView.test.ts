@@ -40,6 +40,9 @@ const get = vi.fn((url: string) => {
                     id: 1,
                     name: '第一家',
                     address: '忠孝路',
+                    city: '台北市',
+                    district: '大安區',
+                    cuisines: [{ code: 'chinese', label: '中式料理' }, { code: 'stir_fry', label: '中式快炒' }],
                     rating: 4,
                     rating_count: 1,
                     diet_types: ['vegan'],
@@ -141,7 +144,13 @@ describe('RestaurantDetailView', () => {
         expect(wrapper.text()).toContain('外帶');
         expect(wrapper.text()).toContain('素食餐廳');
         expect(wrapper.text()).toContain('整間店都是素食');
+        expect(wrapper.text()).toContain('地址');
+        expect(wrapper.text()).toContain('台北市大安區忠孝路');
+        expect(wrapper.text()).toContain('中式料理、中式快炒');
         expect(wrapper.text()).not.toContain('takeout');
+        expect(wrapper.text()).not.toContain('尚無評分');
+        expect(wrapper.text()).not.toContain('寫評論');
+        expect(wrapper.text()).not.toContain('加入收藏');
         expect(wrapper.find('a[href^="javascript"]').exists()).toBe(false);
         expect(wrapper.text()).not.toContain('官方網站');
     });
@@ -242,6 +251,8 @@ describe('RestaurantDetailView', () => {
 
         expect(wrapper.findAll('a').some((anchor) => anchor.text() === '登入')).toBe(false);
         expect(wrapper.text()).not.toContain('後可以收藏餐廳或寫評論');
+        expect(wrapper.text()).not.toContain('寫評論');
+        expect(wrapper.text()).not.toContain('加入收藏');
     });
 
     it('非 404 的載入失敗顯示錯誤，不是空白頁', async () => {

@@ -33,6 +33,8 @@ class MockRestaurantProvider implements RestaurantProviderInterface
                 phone: $row['phone'] ?? null,
                 website: $row['website'] ?? null,
                 dietCodes: $row['diet_codes'] ?? [],
+                featureCodes: $row['feature_codes'] ?? [],
+                cuisineCodes: $row['cuisine_codes'] ?? [],
             ))
             ->values()
             ->all();

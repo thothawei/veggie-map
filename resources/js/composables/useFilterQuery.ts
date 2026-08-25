@@ -10,20 +10,17 @@ import type { RestaurantSearchParams } from '@/types';
  * 使用者回報問題時也貼不出有意義的資訊。
  */
 function filterKeys(): string[] {
-    return ['diet', venueScopeParam(), 'price_level', 'rating_min', ...FEATURE_CODES];
+    return ['diet', venueScopeParam(), 'price_level', ...FEATURE_CODES];
 }
 
 /** 後端 SearchRestaurantRequest 驗證 price_level 是 1–4 的整數。 */
 export const PRICE_LEVELS = [1, 2, 3, 4] as const;
 
-/** 後端驗證 rating_min 是 0–5；這裡只提供有意義的門檻，不做 0.1 級距的滑桿。 */
-export const RATING_THRESHOLDS = [3, 3.5, 4, 4.5] as const;
+export type UrlFilters = Pick<RestaurantSearchParams, 'diet' | 'venue_scope' | 'price_level'> &
+    Partial<Record<FeatureCode, boolean>>;
 
 /** 布林篩選在網址上一律寫成 1；沒有這個參數就代表沒開，不用 0 佔位。 */
 const ON = '1';
-
-export type UrlFilters = Pick<RestaurantSearchParams, 'diet' | 'venue_scope' | 'price_level' | 'rating_min'> &
-    Partial<Record<FeatureCode, boolean>>;
 
 function isFeatureCode(key: string): key is FeatureCode {
     return (FEATURE_CODES as readonly string[]).includes(key);
@@ -47,11 +44,6 @@ function parse(query: Record<string, unknown>): Partial<UrlFilters> {
     const price = Number(query.price_level);
     if ((PRICE_LEVELS as readonly number[]).includes(price)) {
         filters.price_level = price;
-    }
-
-    const rating = Number(query.rating_min);
-    if (Number.isFinite(rating) && rating > 0 && rating <= 5) {
-        filters.rating_min = rating;
     }
 
     for (const code of FEATURE_CODES) {
@@ -90,7 +82,6 @@ export function useFilterQuery(): WritableComputedRef<Partial<UrlFilters>> {
             }
 
             if (next.price_level) query.price_level = String(next.price_level);
-            if (next.rating_min) query.rating_min = String(next.rating_min);
 
             for (const code of FEATURE_CODES) {
                 if (next[code]) query[code] = ON;
@@ -125,7 +116,6 @@ export function apiFilterParams(filters: Partial<UrlFilters>): Record<string, st
 
     if (filters.diet) params.diet = filters.diet;
     if (filters.price_level) params.price_level = filters.price_level;
-    if (filters.rating_min) params.rating_min = filters.rating_min;
 
     params[scopeParam] = filters.venue_scope ?? venueScopeDefault();
 

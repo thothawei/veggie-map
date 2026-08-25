@@ -437,12 +437,24 @@ describe('RestaurantListView 篩選進網址', () => {
         expect(wrapper.findAll('.chip.active').map((c) => c.text())).toContain('外帶');
     });
 
-    it('空地址不佔一行空白', async () => {
-        listPayload = { data: [{ ...fakeRestaurant(1), address: '' }], meta: { next_cursor: null } };
+    it('空地址明說未提供，不是整行消失', async () => {
+        listPayload = { data: [{ ...fakeRestaurant(1), address: '', city: '', district: '' }], meta: { next_cursor: null } };
 
         const { wrapper } = await mountList('/restaurants?city=taichung');
 
-        expect(wrapper.find('.address').exists()).toBe(false);
+        expect(wrapper.find('.address').text()).toBe('地址未提供');
         expect(wrapper.find('strong').text()).toBe('餐廳 1');
+        expect(wrapper.text()).not.toContain('尚無評分');
+    });
+
+    it('列表顯示料理種類', async () => {
+        listPayload = { data: [{
+            ...fakeRestaurant(1),
+            cuisines: [{ code: 'thai', label: '泰式料理' }],
+        }], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountList('/restaurants?city=taichung');
+
+        expect(wrapper.find('.cuisines').text()).toBe('泰式料理');
     });
 });

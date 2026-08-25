@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Restaurant;
+use App\Support\CuisineCatalog;
 use App\Support\DietCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -46,7 +47,17 @@ class RestaurantResource extends JsonResource
             'venue_kind' => $this->when($presentation !== null, $presentation['kind'] ?? null),
             'venue_badge' => $this->when($presentation !== null, $presentation['badge'] ?? null),
             'venue_summary' => $this->when($presentation !== null, $presentation['summary'] ?? null),
-            'features' => $this->whenLoaded('features', fn () => $this->features->pluck('code')),
+            'cuisines' => $this->whenLoaded('features', fn () => $this->features
+                ->filter(fn ($feature) => CuisineCatalog::isCuisine($feature->code))
+                ->map(fn ($feature) => [
+                    'code' => $feature->code,
+                    'label' => CuisineCatalog::label($feature->code) ?? $feature->label,
+                ])
+                ->values()
+                ->all()),
+            'features' => $this->whenLoaded('features', fn () => $this->features
+                ->reject(fn ($feature) => CuisineCatalog::isCuisine($feature->code))
+                ->pluck('code')),
             'menu_items' => MenuItemResource::collection($this->whenLoaded('menuItems')),
             'menu_empty_message' => $this->when(
                 $this->relationLoaded('menuItems') && $this->menuItems->isEmpty(),

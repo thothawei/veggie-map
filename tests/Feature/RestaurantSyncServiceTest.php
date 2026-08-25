@@ -383,6 +383,37 @@ class RestaurantSyncServiceTest extends TestCase
         $this->assertCount(0, Restaurant::where('source_id', 'node-f4')->firstOrFail()->features);
     }
 
+    public function test_sync_attaches_cuisine_codes_as_features(): void
+    {
+        Feature::factory()->create(['code' => 'japanese', 'label' => '日式料理']);
+        Feature::factory()->create(['code' => 'takeout']);
+
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-c1',
+                name: '日式素食',
+                latitude: 25.03,
+                longitude: 121.55,
+                featureCodes: ['takeout'],
+                cuisineCodes: ['japanese'],
+            ),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-c1')->firstOrFail();
+        $this->assertEqualsCanonicalizing(
+            ['japanese', 'takeout'],
+            $restaurant->features->pluck('code')->all(),
+        );
+
+        $this->getJson("/api/v1/restaurants/{$restaurant->id}")
+            ->assertOk()
+            ->assertJsonPath('data.features', ['takeout'])
+            ->assertJsonPath('data.cuisines.0.code', 'japanese')
+            ->assertJsonPath('data.cuisines.0.label', '日式料理');
+    }
+
     public function test_sync_invalidates_detail_cache_when_only_features_change(): void
     {
         // pivot 寫入不會觸發 Restaurant saved。同一筆餐廳重跑同步時若欄位沒變，

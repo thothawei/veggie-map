@@ -151,6 +151,50 @@ class OsmRestaurantProviderTest extends TestCase
         $this->assertSame('111', $results[0]->sourceId);
         $this->assertSame('信義路 7', $results[0]->address);
         $this->assertEqualsCanonicalizing(['vegetarian', 'vegan_friendly'], $results[0]->dietCodes);
+        $this->assertSame([], $results[0]->cuisineCodes);
+    }
+
+    public function test_city_and_street_are_composed_when_full_address_is_missing(): void
+    {
+        Http::fake([
+            '*' => Http::response(['elements' => [[
+                'id' => 555,
+                'lat' => 24.14,
+                'lon' => 120.67,
+                'tags' => [
+                    'name' => '有城市也有路名',
+                    'diet:vegetarian' => 'only',
+                    'addr:city' => '台中市',
+                    'addr:district' => '西區',
+                    'addr:street' => '公益路',
+                    'addr:housenumber' => '100',
+                ],
+            ]]]),
+        ]);
+
+        $results = (new OsmRestaurantProvider)->fetch($this->bbox());
+
+        $this->assertSame('台中市西區公益路 100', $results[0]->address);
+    }
+
+    public function test_cuisine_tag_maps_from_config_and_drops_diet_values(): void
+    {
+        Http::fake([
+            '*' => Http::response(['elements' => [[
+                'id' => 666,
+                'lat' => 25.03,
+                'lon' => 121.55,
+                'tags' => [
+                    'name' => '日泰素食',
+                    'diet:vegetarian' => 'only',
+                    'cuisine' => 'japanese;thai;vegetarian',
+                ],
+            ]]]),
+        ]);
+
+        $results = (new OsmRestaurantProvider)->fetch($this->bbox());
+
+        $this->assertEqualsCanonicalizing(['japanese', 'thai'], $results[0]->cuisineCodes);
     }
 
     public function test_yes_diet_tags_map_to_friendly_codes(): void

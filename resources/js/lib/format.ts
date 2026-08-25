@@ -22,14 +22,41 @@ export function formatDistance(meters: number | null | undefined): string | null
 }
 
 /**
- * 目前 1159 筆餐廳裡只有 1 筆有評分（OSM 匯入的一筆都沒有），其餘全部會印成
- * 「⭐ 0.0 (0)」——把「還沒有人評分」顯示成「評分 0 分」，等於對使用者說謊，
- * 而且每張卡都印一次反而蓋掉真正有用的資訊。沒有評分就明說沒有。
+ * city／district／address 拼成一行。OSM 常把城市跟路名拆在不同欄位，只印
+ * `address` 會變成「信義路 7」這種看不出在哪的半截。已經含在地址裡的部分不加第二次。
  */
-export function formatRating(rating: number, ratingCount: number): string {
-    if (!ratingCount) {
-        return '尚無評分';
+export function formatAddress(restaurant: {
+    address?: string | null;
+    city?: string | null;
+    district?: string | null;
+}): string | null {
+    const address = restaurant.address?.trim() ?? '';
+    const city = restaurant.city?.trim() ?? '';
+    const district = restaurant.district?.trim() ?? '';
+    const parts: string[] = [];
+
+    if (city && !address.includes(city)) {
+        parts.push(city);
     }
 
-    return `⭐ ${rating.toFixed(1)}（${ratingCount}）`;
+    if (district && !address.includes(district) && !city.includes(district)) {
+        parts.push(district);
+    }
+
+    if (address) {
+        parts.push(address);
+    }
+
+    const result = parts.join('');
+
+    return result === '' ? null : result;
+}
+
+/** 地圖 popup 用的一行菜系；沒有就不顯示，不要印「undefined」。 */
+export function formatCuisines(cuisines?: { label: string }[] | null): string | null {
+    if (!cuisines?.length) {
+        return null;
+    }
+
+    return cuisines.map((item) => item.label).join('、');
 }

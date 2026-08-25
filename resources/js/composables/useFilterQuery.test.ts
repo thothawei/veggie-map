@@ -179,12 +179,11 @@ describe('apiFilterParams', () => {
     });
 });
 
-describe('useFilterQuery 價位與評分', () => {
-    it('讀得出網址上的價位與最低評分', async () => {
-        const h = await mountHarness('/restaurants?price_level=2&rating_min=4');
+describe('useFilterQuery 價位', () => {
+    it('讀得出網址上的價位', async () => {
+        const h = await mountHarness('/restaurants?price_level=2');
 
         expect(h.filters.price_level).toBe(2);
-        expect(h.filters.rating_min).toBe(4);
     });
 
     it('超出後端允許範圍的值直接忽略，不是原封不動送出去', async () => {
@@ -193,34 +192,34 @@ describe('useFilterQuery 價位與評分', () => {
         expect((await mountHarness('/restaurants?price_level=99')).filters.price_level).toBeUndefined();
         expect((await mountHarness('/restaurants?price_level=0')).filters.price_level).toBeUndefined();
         expect((await mountHarness('/restaurants?price_level=abc')).filters.price_level).toBeUndefined();
-        expect((await mountHarness('/restaurants?rating_min=9')).filters.rating_min).toBeUndefined();
-        expect((await mountHarness('/restaurants?rating_min=-1')).filters.rating_min).toBeUndefined();
     });
 
     it('寫回網址時是數字字串，取消後參數消失', async () => {
         const h = await mountHarness('/restaurants');
 
-        h.filters = { price_level: 3, rating_min: 4.5 };
+        h.filters = { price_level: 3 };
         await flushPromises();
         expect(h.router.currentRoute.value.query.price_level).toBe('3');
-        expect(h.router.currentRoute.value.query.rating_min).toBe('4.5');
 
         h.filters = {};
         await flushPromises();
         expect(h.router.currentRoute.value.query.price_level).toBeUndefined();
-        expect(h.router.currentRoute.value.query.rating_min).toBeUndefined();
     });
 
     it('送給 API 的是數字，不是字串', async () => {
-        // 後端驗證 price_level 是 integer、rating_min 是 numeric。
-        expect(apiFilterParams({ price_level: 2, rating_min: 4 })).toMatchObject({
+        expect(apiFilterParams({ price_level: 2 })).toMatchObject({
             price_level: 2,
-            rating_min: 4,
         });
     });
 
-    it('價位與評分會進查詢 key，改了要能觸發重查', () => {
+    it('價位會進查詢 key，改了要能觸發重查', () => {
         expect(filterQueryKey({ price_level: 2 })).not.toBe(filterQueryKey({ price_level: 3 }));
-        expect(filterQueryKey({ rating_min: 4 })).not.toBe(filterQueryKey({}));
+    });
+
+    it('不再讀評分門檻——消費者端地圖不走會員評分', async () => {
+        const h = await mountHarness('/restaurants?rating_min=4');
+
+        expect(h.filters).not.toHaveProperty('rating_min');
+        expect(apiFilterParams(h.filters)).not.toHaveProperty('rating_min');
     });
 });

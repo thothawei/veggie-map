@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDistance, formatRating } from './format';
+import { formatAddress, formatCuisines, formatDistance } from './format';
 
 describe('formatDistance', () => {
     it('一公里以內用公尺，取整到十位', () => {
@@ -32,15 +32,39 @@ describe('formatDistance', () => {
     });
 });
 
-describe('formatRating', () => {
-    it('沒有人評分就明說，不是印成 0.0 分', () => {
-        // 1159 筆餐廳裡只有 1 筆有評分，其餘全部會印「⭐ 0.0 (0)」——
-        // 把「還沒有人評分」顯示成「評分 0 分」等於對使用者說謊。
-        expect(formatRating(0, 0)).toBe('尚無評分');
+describe('formatAddress', () => {
+    it('把城市、行政區、路名拼成一行', () => {
+        expect(formatAddress({
+            address: '公益路 100 號',
+            city: '台中市',
+            district: '西區',
+        })).toBe('台中市西區公益路 100 號');
     });
 
-    it('有評分才顯示星等與人數', () => {
-        expect(formatRating(4.25, 12)).toBe('⭐ 4.3（12）');
-        expect(formatRating(5, 1)).toBe('⭐ 5.0（1）');
+    it('地址裡已經有城市就不再重複', () => {
+        expect(formatAddress({
+            address: '台中市西區公益路 100 號',
+            city: '台中市',
+            district: '西區',
+        })).toBe('台中市西區公益路 100 號');
+    });
+
+    it('完全沒有地址時回 null，讓畫面決定要不要寫「地址未提供」', () => {
+        expect(formatAddress({ address: '', city: '', district: '' })).toBeNull();
+        expect(formatAddress({ address: '   ' })).toBeNull();
+    });
+});
+
+describe('formatCuisines', () => {
+    it('多個菜系用頓號接起來', () => {
+        expect(formatCuisines([
+            { code: 'japanese', label: '日式料理' },
+            { code: 'thai', label: '泰式料理' },
+        ])).toBe('日式料理、泰式料理');
+    });
+
+    it('沒有菜系回 null，不要印空白或 undefined', () => {
+        expect(formatCuisines([])).toBeNull();
+        expect(formatCuisines(undefined)).toBeNull();
     });
 });

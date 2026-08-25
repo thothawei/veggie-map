@@ -3,6 +3,7 @@
 namespace App\Services\External;
 
 use App\Models\ExternalApiLog;
+use App\Support\CuisineCatalog;
 use App\Support\DietCatalog;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
@@ -167,6 +168,9 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
                 website: $tags['website'] ?? $tags['contact:website'] ?? null,
                 dietCodes: $dietCodes,
                 featureCodes: $this->featureCodes($tags),
+                cuisineCodes: CuisineCatalog::mapOsmCuisine(
+                    isset($tags['cuisine']) ? (string) $tags['cuisine'] : null,
+                ),
             );
         }
 
@@ -190,19 +194,49 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
         return $codes;
     }
 
+    /**
+     * @param  array<string, mixed>  $tags
+     */
     private function buildAddress(array $tags): ?string
     {
-        $parts = array_filter([
-            $tags['addr:street'] ?? null,
-            $tags['addr:housenumber'] ?? null,
-        ]);
-
-        if ($parts !== []) {
-            return implode(' ', $parts);
-        }
-
+        // 有完整地址就用它——路名＋門牌常常缺城市，地圖上看不出在哪。
         $full = trim((string) ($tags['addr:full'] ?? ''));
 
-        return $full === '' ? null : $full;
+        if ($full !== '') {
+            return $full;
+        }
+
+        $locality = [];
+
+        foreach (['addr:city', 'addr:district', 'addr:suburb', 'addr:place'] as $key) {
+            $value = trim((string) ($tags[$key] ?? ''));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $joined = implode('', $locality);
+
+            if ($joined === '' || ! str_contains($joined, $value)) {
+                $locality[] = $value;
+            }
+        }
+
+        $street = trim(implode(' ', array_filter([
+            trim((string) ($tags['addr:street'] ?? '')),
+            trim((string) ($tags['addr:housenumber'] ?? '')),
+        ], fn (string $part) => $part !== '')));
+
+        $place = implode('', $locality);
+
+        if ($place !== '' && $street !== '') {
+            return str_contains($place, $street) ? $place : $place.$street;
+        }
+
+        if ($street !== '') {
+            return $street;
+        }
+
+        return $place !== '' ? $place : null;
     }
 }

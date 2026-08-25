@@ -8,7 +8,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { rememberCity, useCities } from '@/composables/useCities';
 import { apiFilterParams, useFilterQuery } from '@/composables/useFilterQuery';
-import { formatDistance, formatRating } from '@/lib/format';
+import { formatAddress, formatCuisines, formatDistance } from '@/lib/format';
 import { formatBbox } from '@/lib/geo';
 import type { ApiSuccess, GeocodedPlace, Restaurant } from '@/types';
 
@@ -221,14 +221,14 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                         class="venue-badge"
                         :data-kind="restaurant.venue_kind ?? undefined"
                     >{{ restaurant.venue_badge }}</span>
+                    <span v-if="formatCuisines(restaurant.cuisines)" class="cuisines">{{ formatCuisines(restaurant.cuisines) }}</span>
                     <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
                     <span class="meta">
                         <span v-if="formatDistance(restaurant.distance_meters)" class="distance">
                             {{ formatDistance(restaurant.distance_meters) }}
                         </span>
-                        <span class="rating">{{ formatRating(restaurant.rating, restaurant.rating_count) }}</span>
                     </span>
-                    <span v-if="restaurant.address?.trim()" class="address">{{ restaurant.address }}</span>
+                    <span class="address">{{ formatAddress(restaurant) ?? '地址未提供' }}</span>
                 </button>
             </div>
         </section>
@@ -372,12 +372,13 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     font-weight: 600;
 }
 
-.card .rating {
-    color: #718096;
+.card .address {
+    color: #2d3748;
+    font-size: 0.9rem;
 }
 
-.card .address {
-    color: #718096;
+.cuisines {
+    color: #2f855a;
     font-size: 0.85rem;
 }
 

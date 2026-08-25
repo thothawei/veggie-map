@@ -30,9 +30,12 @@ class LookupController extends Controller
 
     public function features(): JsonResponse
     {
+        // 菜系也存在 features 表，但不該出現在「寵物友善／停車」這類篩選清單。
         return response()->json([
             'success' => true,
-            'data' => FeatureResource::collection(Feature::orderBy('id')->get())->resolve(),
+            'data' => FeatureResource::collection(
+                Feature::query()->whereIn('code', Feature::CODES)->orderBy('id')->get(),
+            )->resolve(),
         ]);
     }
 

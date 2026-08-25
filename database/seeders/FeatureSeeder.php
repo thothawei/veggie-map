@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Feature;
+use App\Support\CuisineCatalog;
 use Illuminate\Database\Seeder;
 
 class FeatureSeeder extends Seeder
@@ -26,6 +27,10 @@ class FeatureSeeder extends Seeder
 
         foreach ($features as $code => $label) {
             Feature::updateOrCreate(['code' => $code], ['label' => $label]);
+        }
+
+        foreach (CuisineCatalog::types() as $type) {
+            Feature::updateOrCreate(['code' => $type['code']], ['label' => $type['label']]);
         }
     }
 }

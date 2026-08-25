@@ -41,5 +41,7 @@ class LookupTest extends TestCase
         $this->assertEqualsCanonicalizing(Feature::CODES, $codes);
         $this->assertContains('takeout', $codes);
         $this->assertContains('pet_friendly', $codes);
+        $this->assertNotContains('japanese', $codes);
+        $this->assertDatabaseHas('features', ['code' => 'japanese']);
     }
 }

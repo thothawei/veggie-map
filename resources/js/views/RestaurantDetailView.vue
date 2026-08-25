@@ -3,16 +3,15 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { isAxiosError } from 'axios';
 import client from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
-import { useFavoritesStore } from '@/stores/favorites';
 import { extractApiErrorMessage } from '@/lib/apiError';
 import { applyMenuItemDiets, menuItemDiets } from '@/lib/dietCatalog';
+import { formatAddress, formatCuisines } from '@/lib/format';
 import { safeHttpUrl } from '@/lib/redirect';
 import type { AdminVerificationType, ApiSuccess, DietType, Feature, MenuItem, MenuItemDiet, Restaurant } from '@/types';
 
 const props = defineProps<{ id: string }>();
 
 const auth = useAuthStore();
-const favorites = useFavoritesStore();
 
 const restaurant = ref<Restaurant | null>(null);
 const loading = ref(true);
@@ -21,11 +20,6 @@ const loadError = ref<string | null>(null);
 const dietLabels = ref<Record<string, string>>({});
 const featureLabels = ref<Record<string, string>>({});
 const dishDiets = ref<MenuItemDiet[]>([]);
-
-const reviewRating = ref(5);
-const reviewComment = ref('');
-const submittingReview = ref(false);
-const reviewError = ref<string | null>(null);
 
 const newItem = reactive({ name: '', price: '', diet_type: '' });
 const addingItem = ref(false);
@@ -37,8 +31,9 @@ const savingVerification = ref(false);
 const verificationError = ref<string | null>(null);
 const verificationNotice = ref<string | null>(null);
 
-const isFavorite = computed(() => (restaurant.value ? favorites.isFavorite(restaurant.value.id) : false));
 const websiteUrl = computed(() => safeHttpUrl(restaurant.value?.website));
+const displayAddress = computed(() => (restaurant.value ? formatAddress(restaurant.value) : null));
+const cuisineLine = computed(() => formatCuisines(restaurant.value?.cuisines));
 
 const menuGroups = computed(() => {
     const items = restaurant.value?.menu_items ?? [];
@@ -76,7 +71,6 @@ async function load() {
     loading.value = true;
     notFound.value = false;
     loadError.value = null;
-    reviewComment.value = '';
     try {
         const response = await client.get<ApiSuccess<Restaurant>>(`/restaurants/${props.id}`);
         restaurant.value = response.data.data;
@@ -138,33 +132,6 @@ async function submitVerification() {
     }
 }
 
-async function toggleFavorite() {
-    if (!restaurant.value) return;
-    if (isFavorite.value) {
-        await favorites.remove(restaurant.value.id);
-    } else {
-        await favorites.add(restaurant.value.id);
-    }
-}
-
-async function submitReview() {
-    if (!restaurant.value) return;
-    submittingReview.value = true;
-    reviewError.value = null;
-    try {
-        await client.post(`/restaurants/${restaurant.value.id}/reviews`, {
-            rating: reviewRating.value,
-            comment: reviewComment.value || undefined,
-        });
-        reviewComment.value = '';
-        await load();
-    } catch (error: unknown) {
-        reviewError.value = extractApiErrorMessage(error, '送出評論失敗');
-    } finally {
-        submittingReview.value = false;
-    }
-}
-
 async function submitMenuItem() {
     if (!restaurant.value || !newItem.name.trim()) return;
     addingItem.value = true;
@@ -188,9 +155,6 @@ async function submitMenuItem() {
 onMounted(() => {
     loadLookups();
     loadVerificationTypes();
-    if (auth.isAuthenticated && !favorites.loaded) {
-        favorites.fetchAll();
-    }
 });
 
 watch(() => props.id, load, { immediate: true });
@@ -204,20 +168,31 @@ watch(() => props.id, load, { immediate: true });
         <template v-else-if="restaurant">
             <header>
                 <h1>{{ restaurant.name }}</h1>
-                <button v-if="auth.isAuthenticated" type="button" @click="toggleFavorite">
-                    {{ isFavorite ? '★ 已收藏' : '☆ 加入收藏' }}
-                </button>
             </header>
 
-            <p class="rating">
-                <template v-if="restaurant.rating_count">
-                    ⭐ {{ restaurant.rating.toFixed(1) }}（{{ restaurant.rating_count }} 則評論）
-                </template>
-                <template v-else>尚無評分</template>
+            <p v-if="restaurant.venue_badge" class="venue-line">
+                <span class="venue-badge" :data-kind="restaurant.venue_kind ?? undefined">{{ restaurant.venue_badge }}</span>
+                <span v-if="restaurant.venue_summary">{{ restaurant.venue_summary }}</span>
             </p>
-            <p v-if="restaurant.confidence_score !== null && restaurant.confidence_score !== undefined">
-                素食可信度：{{ restaurant.confidence_score }} / 100
+
+            <dl class="facts">
+                <div>
+                    <dt>地址</dt>
+                    <dd>{{ displayAddress ?? '地址未提供' }}</dd>
+                </div>
+                <div v-if="cuisineLine">
+                    <dt>料理</dt>
+                    <dd>{{ cuisineLine }}</dd>
+                </div>
+                <div v-if="restaurant.phone">
+                    <dt>電話</dt>
+                    <dd>{{ restaurant.phone }}</dd>
+                </div>
+            </dl>
+            <p v-if="websiteUrl">
+                <a :href="websiteUrl" target="_blank" rel="noopener noreferrer">官方網站</a>
             </p>
+            <p v-if="restaurant.description">{{ restaurant.description }}</p>
 
             <form v-if="auth.isAdmin && verificationTypes.length" class="verify-form" @submit.prevent="submitVerification">
                 <label>
@@ -234,17 +209,6 @@ watch(() => props.id, load, { immediate: true });
                 <p v-if="verificationError" class="error">{{ verificationError }}</p>
                 <p v-else-if="verificationNotice" role="status" class="notice">{{ verificationNotice }}</p>
             </form>
-            <p v-if="restaurant.address?.trim()">{{ restaurant.address }}</p>
-            <p v-if="restaurant.phone">電話：{{ restaurant.phone }}</p>
-            <p v-if="websiteUrl">
-                <a :href="websiteUrl" target="_blank" rel="noopener noreferrer">官方網站</a>
-            </p>
-            <p v-if="restaurant.description">{{ restaurant.description }}</p>
-
-            <p v-if="restaurant.venue_badge" class="venue-line">
-                <span class="venue-badge" :data-kind="restaurant.venue_kind ?? undefined">{{ restaurant.venue_badge }}</span>
-                <span v-if="restaurant.venue_summary">{{ restaurant.venue_summary }}</span>
-            </p>
 
             <div v-if="restaurant.diet_types?.length" class="tags">
                 <span v-for="code in restaurant.diet_types" :key="code" class="tag">{{ labelFor(code, dietLabels) }}</span>
@@ -294,21 +258,6 @@ watch(() => props.id, load, { immediate: true });
                     </button>
                 </form>
             </section>
-
-            <section class="review-form" v-if="auth.isAuthenticated">
-                <h2>寫評論</h2>
-                <label>
-                    評分
-                    <select v-model.number="reviewRating">
-                        <option v-for="n in [5, 4, 3, 2, 1]" :key="n" :value="n">{{ n }}</option>
-                    </select>
-                </label>
-                <textarea v-model="reviewComment" placeholder="分享你的用餐經驗（選填）"></textarea>
-                <p v-if="reviewError" class="error">{{ reviewError }}</p>
-                <button type="button" :disabled="submittingReview" @click="submitReview">
-                    {{ submittingReview ? '送出中…' : '送出評論' }}
-                </button>
-            </section>
         </template>
     </div>
 </template>
@@ -355,6 +304,31 @@ header {
     color: #2b6cb0;
 }
 
+.facts {
+    display: grid;
+    gap: 0.65rem;
+    margin: 1rem 0;
+}
+
+.facts div {
+    display: grid;
+    grid-template-columns: 3.5rem 1fr;
+    gap: 0.75rem;
+    align-items: baseline;
+}
+
+.facts dt {
+    margin: 0;
+    color: #718096;
+    font-size: 0.85rem;
+}
+
+.facts dd {
+    margin: 0;
+    font-size: 1rem;
+    color: #1a202c;
+}
+
 .tag {
     padding: 0.2rem 0.6rem;
     border-radius: 999px;
@@ -366,18 +340,6 @@ header {
 .tag.feature {
     background: #ebf8ff;
     color: #2b6cb0;
-}
-
-.review-form {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    max-width: 400px;
-}
-
-.review-form textarea {
-    min-height: 80px;
-    padding: 0.5rem;
 }
 
 .error {

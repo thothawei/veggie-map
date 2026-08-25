@@ -107,7 +107,7 @@ class RestaurantRepository
 
             $this->applySort($query, $sort, $hasCoords);
 
-            $query->with(['dietTypes']);
+            $query->with(['dietTypes', 'features']);
 
             return $query->cursorPaginate($perPage);
         });

@@ -180,14 +180,15 @@ describe('RestaurantMap popup', () => {
         expect(html).not.toContain('null');
     });
 
-    it('沒有人評分時 popup 說「尚無評分」，不是 ⭐ 0.0 (0)', () => {
-        // 1159 筆餐廳裡只有 1 筆有評分，這個分支才是絕大多數情況。
+    it('沒有地址時 popup 寫「地址未提供」，不是省略整行', () => {
         mount(RestaurantMap, {
             props: {
                 restaurants: [{
                     id: 1,
                     name: '新匯入的店',
-                    address: '某路',
+                    address: '',
+                    city: '',
+                    district: '',
                     latitude: 25.03,
                     longitude: 121.56,
                     rating: 0,
@@ -199,8 +200,33 @@ describe('RestaurantMap popup', () => {
         });
 
         const html = String(bindPopup.mock.calls[0][0]);
-        expect(html).toContain('尚無評分');
+        expect(html).toContain('地址未提供');
+        expect(html).not.toContain('尚無評分');
         expect(html).not.toContain('0.0');
+    });
+
+    it('popup 顯示料理種類', () => {
+        mount(RestaurantMap, {
+            props: {
+                restaurants: [{
+                    id: 1,
+                    name: '日泰蔬食',
+                    address: '公益路',
+                    city: '台中市',
+                    latitude: 24.14,
+                    longitude: 120.67,
+                    rating: 0,
+                    rating_count: 0,
+                    cuisines: [{ code: 'japanese', label: '日式料理' }],
+                } as Restaurant],
+                center: [24.1477, 120.6736],
+                zoom: 13,
+            },
+        });
+
+        const html = String(bindPopup.mock.calls[0][0]);
+        expect(html).toContain('日式料理');
+        expect(html).toContain('台中市公益路');
     });
 
     it('popup 顯示 API 帶回的 venue_badge，文案不是寫死在元件裡', () => {

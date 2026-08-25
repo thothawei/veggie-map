@@ -251,7 +251,7 @@ describe('HomeView 地圖範圍', () => {
     });
 });
 
-describe('HomeView 推薦卡片的距離與評分', () => {
+describe('HomeView 推薦卡片的距離與地址', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         restaurantCalls.length = 0;
@@ -280,21 +280,37 @@ describe('HomeView 推薦卡片的距離與評分', () => {
         expect(wrapper.find('.card').text()).not.toContain('null');
     });
 
-    it('沒有人評分時說「尚無評分」，不是 ⭐ 0.0 (0)', async () => {
-        // OSM 匯入的 1000+ 筆餐廳一筆評分都沒有，這是絕大多數卡片的實際樣子。
-        recommendedPayload = { data: [{ ...fakeRestaurant(1), rating: 0, rating_count: 0 }] };
+    it('把城市跟路名拼成完整地址', async () => {
+        recommendedPayload = { data: [{
+            ...fakeRestaurant(1),
+            address: '公益路 100 號',
+            city: '台中市',
+            district: '西區',
+        }] };
 
         const { wrapper } = await mountHome('/?city=taipei');
 
-        expect(wrapper.find('.card .rating').text()).toBe('尚無評分');
-        expect(wrapper.find('.card').text()).not.toContain('0.0');
+        expect(wrapper.find('.card .address').text()).toBe('台中市西區公益路 100 號');
+        expect(wrapper.find('.card').text()).not.toContain('尚無評分');
+        expect(wrapper.find('.card').text()).not.toContain('⭐');
     });
 
-    it('有評分時照常顯示星等與人數', async () => {
-        recommendedPayload = { data: [{ ...fakeRestaurant(1), rating: 4.25, rating_count: 12 }] };
+    it('完全沒有地址時明說未提供，不是留空白', async () => {
+        recommendedPayload = { data: [{ ...fakeRestaurant(1), address: '', city: '', district: '' }] };
 
         const { wrapper } = await mountHome('/?city=taipei');
 
-        expect(wrapper.find('.card .rating').text()).toBe('⭐ 4.3（12）');
+        expect(wrapper.find('.card .address').text()).toBe('地址未提供');
+    });
+
+    it('有料理種類就顯示中文標籤', async () => {
+        recommendedPayload = { data: [{
+            ...fakeRestaurant(1),
+            cuisines: [{ code: 'japanese', label: '日式料理' }, { code: 'thai', label: '泰式料理' }],
+        }] };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.card .cuisines').text()).toBe('日式料理、泰式料理');
     });
 });

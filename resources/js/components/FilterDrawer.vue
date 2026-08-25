@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import client from '@/api/client';
 import { FEATURE_CODES, type FeatureCode } from '@/lib/features';
-import { PRICE_LEVELS, RATING_THRESHOLDS } from '@/composables/useFilterQuery';
+import { PRICE_LEVELS } from '@/composables/useFilterQuery';
 import { applyMenuItemDiets, applyVenueScopeMeta, venueScopeDefault, venueScopeMeta } from '@/lib/dietCatalog';
 import type { ApiSuccess, DietType, Feature, MenuItemDiet, RestaurantSearchParams, VenueScopeMeta } from '@/types';
 
@@ -149,18 +149,6 @@ function togglePriceLevel(level: number) {
     });
 }
 
-function toggleRatingMin(threshold: number) {
-    replaceFilters((next) => {
-        if (next.rating_min === threshold) {
-            delete next.rating_min;
-
-            return;
-        }
-
-        next.rating_min = threshold;
-    });
-}
-
 function toggleFeature(code: string) {
     if (!isFeatureCode(code)) {
         return;
@@ -245,21 +233,6 @@ function clearAll() {
                     @click="togglePriceLevel(level)"
                 >
                     {{ '$'.repeat(level) }}
-                </button>
-            </div>
-
-            <div class="group">
-                <span class="label">評分</span>
-                <button
-                    v-for="threshold in RATING_THRESHOLDS"
-                    :key="threshold"
-                    type="button"
-                    class="chip"
-                    :class="{ active: filters.rating_min === threshold }"
-                    :aria-pressed="filters.rating_min === threshold"
-                    @click="toggleRatingMin(threshold)"
-                >
-                    {{ threshold.toFixed(1) }}★ 以上
                 </button>
             </div>
 

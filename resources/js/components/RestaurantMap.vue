@@ -2,7 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet.markercluster';
-import { formatDistance, formatRating } from '@/lib/format';
+import { formatAddress, formatCuisines, formatDistance } from '@/lib/format';
 import { haversineKm } from '@/lib/geo';
 import { escapeHtml } from '@/lib/html';
 import type { Restaurant } from '@/types';
@@ -43,17 +43,18 @@ function renderMarkers() {
 
     for (const restaurant of props.restaurants) {
         const marker = L.marker([restaurant.latitude, restaurant.longitude]);
-        const address = restaurant.address?.trim();
+        const address = formatAddress(restaurant) ?? '地址未提供';
+        const cuisines = formatCuisines(restaurant.cuisines);
         const distance = formatDistance(restaurant.distance_meters);
         marker.bindPopup(
             `<strong>${escapeHtml(restaurant.name)}</strong>` +
                 (restaurant.venue_badge
                     ? `<br><span class="venue-badge">${escapeHtml(restaurant.venue_badge)}</span>`
                     : '') +
+                (cuisines ? `<br>${escapeHtml(cuisines)}` : '') +
                 (restaurant.venue_summary ? `<br>${escapeHtml(restaurant.venue_summary)}` : '') +
-                (address ? `<br>${escapeHtml(address)}` : '') +
-                (distance ? `<br>${escapeHtml(distance)}` : '') +
-                `<br>${escapeHtml(formatRating(restaurant.rating, restaurant.rating_count))}`,
+                `<br>${escapeHtml(address)}` +
+                (distance ? `<br>${escapeHtml(distance)}` : ''),
         );
         marker.on('click', () => emit('select', restaurant));
         clusterGroup.addLayer(marker);
