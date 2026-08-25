@@ -38,6 +38,12 @@ export interface MenuItemDiet {
     label: string;
 }
 
+export interface AdminVerificationType {
+    code: string;
+    label: string;
+    score: number;
+}
+
 export interface MenuItem {
     id: number;
     name: string;

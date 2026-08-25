@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Jobs\CalculateRestaurantScoreJob;
 use App\Models\DietType;
 use App\Models\Feature;
 use App\Models\Restaurant;
@@ -54,7 +53,8 @@ class RestaurantSyncService
                 $stats['duplicates_flagged']++;
             }
 
-            CalculateRestaurantScoreJob::dispatch($restaurant->id);
+            // 分數重算改由 RestaurantVerificationObserver 統一觸發（上面的
+            // syncExternalSource 一定會寫這張表），這裡不再各自 dispatch 一次。
         }
 
         return $stats;

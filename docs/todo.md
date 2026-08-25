@@ -346,8 +346,8 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 「寫進規格、後來擱置或只做半套」的項目。下面依「規劃有沒有明寫」整理，不是憑空加功能。
 完成一項就打勾＋更新 [progress.md](progress.md)，不要一次全做。
 
-**下一批產品工作**：P1 閉環（可信度寫入、重複審核、`open_now`／營業時間、回報
-`closed` 核准後要不要下架）。P0 Phase A／B／C 已完成。
+**下一批產品工作**：P1 閉環（重複審核、`open_now`／營業時間、回報 `closed` 核准後要不要
+下架）。P0 Phase A／B／C 與可信度寫入路徑已完成。
 
 ---
 
@@ -496,15 +496,14 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 這些是總 Prompt 當成特色／搜尋核心寫的，管線或表已經在，但使用者／Admin 走不到。
 
-- [ ] **素食可信度的寫入路徑（第十一節）**
-      計算 Job、`config/vegetarian.php`、OSM 匯入寫 `external_source` 都有了。
-      其餘五種 `verification_type`（`restaurant_claim`／`menu_verified`／`user_report`／
-      `photo_verified`／`admin_verified`）**沒有任何 HTTP 端點或 Admin 動作會呼叫**
-      `VerificationService::record()`。使用者回報核准也不會轉成 `user_report` 驗證。
-      結果：真實匯入餐廳的 confidence score 幾乎只有外部來源那一截，第十一節列的加分項
-      多數永遠是 0。最小可用做法：Admin 手動標記 `admin_verified`、回報核准時寫
-      `user_report`（需先定義每種 report type 對不對應驗證）。店家認領／照片驗證屬
-      Roadmap，不要為了湊類型硬做上傳。
+- [x] **素食可信度的寫入路徑（第十一節）✅ 2026-08-25**
+      `POST /admin/restaurants/{id}/verifications` 讓 admin 手動寫 `admin_verified`／
+      `menu_verified`（合法類型與分數都來自 `config/vegetarian.php`，Controller 不決定分數），
+      餐廳詳情頁的 admin 區塊有下拉可直接標記；回報核准依 `report_verifications` 對照表
+      寫 `user_report`（`closed`／`other` 不寫）。分數重算改掛
+      `RestaurantVerificationObserver`，OSM 同步不再自己 dispatch。
+      `restaurant_claim`／`photo_verified` 仍屬 Roadmap（店家認領／照片上傳），
+      刻意不開手動入口。
 
 - [ ] **`possible_duplicate` 供 Admin 審核（第二十二節）**
       同步時「同名＋距離 <100m」會把兩筆都標 `is_possible_duplicate=1`，**不自動刪**。

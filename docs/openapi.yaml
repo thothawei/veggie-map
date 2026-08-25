@@ -647,6 +647,83 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /admin/verification-types:
+    get:
+      operationId: listAdminVerificationTypes
+      tags: [Admin]
+      summary: 可手動寫入的驗證類型（admin 限定）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            code: { type: string }
+                            label: { type: string }
+                            score: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/restaurants/{id}/verifications:
+    post:
+      operationId: createRestaurantVerification
+      tags: [Admin]
+      summary: 手動記錄一筆驗證（admin 限定；合法類型見 GET /admin/verification-types）
+      description: >
+        分數由 config/vegetarian.php 的 verification_weights 決定，呼叫端不能指定。
+        寫入後由 RestaurantVerificationObserver 觸發 CalculateRestaurantScoreJob 重算
+        restaurant_confidence_scores，回應的 confidence_score 是重算後的值。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [verification_type]
+              properties:
+                verification_type: { type: string }
+                note: { type: string, nullable: true }
+                expires_at: { type: string, format: date-time, nullable: true }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          restaurant_id: { type: integer }
+                          verification_type: { type: string }
+                          score: { type: integer }
+                          verified_by: { type: integer, nullable: true }
+                          verified_at: { type: string, format: date-time }
+                          expires_at: { type: string, format: date-time, nullable: true }
+                          metadata: { type: object, nullable: true }
+                          confidence_score: { type: integer, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
   /admin/reviews:
     get:
       operationId: listAdminReviews

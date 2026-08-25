@@ -232,6 +232,13 @@ Index：`restaurant_id`（詳情頁列出菜單的主要查詢路徑）。
 
 Index：`(restaurant_id, verification_type)`（分數計算時依餐廳＋類型彙總）。
 
+寫入路徑：`external_source` 由 OSM 同步依 venue kind 算分；`admin_verified`／`menu_verified`
+走 `POST /admin/restaurants/{id}/verifications`（合法類型見 `config/vegetarian.php` 的
+`admin_verifiable_types`）；`user_report` 由 Admin 核准回報時依同一份 config 的
+`report_verifications` 自動寫入。`restaurant_claim`／`photo_verified` 要等店家認領與照片上傳，
+目前沒有任何寫入路徑。任何一筆寫入或刪除都會由 `RestaurantVerificationObserver` 觸發
+`CalculateRestaurantScoreJob` 重算分數——所以刪除要走 model delete，query delete 不會觸發。
+
 ### restaurant_confidence_scores
 
 `restaurant_id`（PK，一對一）, `score`（0~100）, `calculated_at`。由

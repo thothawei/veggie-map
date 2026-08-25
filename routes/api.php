@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\MenuItemController as AdminMenuItemController;
 use App\Http\Controllers\Api\Admin\RestaurantReportController as AdminRestaurantReportController;
+use App\Http\Controllers\Api\Admin\RestaurantVerificationController as AdminRestaurantVerificationController;
 use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FavoriteController;
@@ -52,6 +53,8 @@ Route::middleware('throttle:api')->group(function () {
             Route::post('/reviews/{review}/hide', [AdminReviewController::class, 'hide']);
 
             Route::post('/restaurants/{restaurant}/menu-items', [AdminMenuItemController::class, 'store']);
+            Route::get('/verification-types', [AdminRestaurantVerificationController::class, 'types']);
+            Route::post('/restaurants/{restaurant}/verifications', [AdminRestaurantVerificationController::class, 'store']);
         });
     });
 });

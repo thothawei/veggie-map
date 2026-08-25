@@ -7,7 +7,7 @@ import { useFavoritesStore } from '@/stores/favorites';
 import { extractApiErrorMessage } from '@/lib/apiError';
 import { applyMenuItemDiets, menuItemDiets } from '@/lib/dietCatalog';
 import { safeHttpUrl } from '@/lib/redirect';
-import type { ApiSuccess, DietType, Feature, MenuItem, MenuItemDiet, Restaurant } from '@/types';
+import type { AdminVerificationType, ApiSuccess, DietType, Feature, MenuItem, MenuItemDiet, Restaurant } from '@/types';
 
 const props = defineProps<{ id: string }>();
 
@@ -30,6 +30,12 @@ const reviewError = ref<string | null>(null);
 const newItem = reactive({ name: '', price: '', diet_type: '' });
 const addingItem = ref(false);
 const addItemError = ref<string | null>(null);
+
+const verificationTypes = ref<AdminVerificationType[]>([]);
+const newVerification = reactive({ type: '' });
+const savingVerification = ref(false);
+const verificationError = ref<string | null>(null);
+const verificationNotice = ref<string | null>(null);
 
 const isFavorite = computed(() => (restaurant.value ? favorites.isFavorite(restaurant.value.id) : false));
 const websiteUrl = computed(() => safeHttpUrl(restaurant.value?.website));
@@ -100,6 +106,38 @@ async function loadLookups() {
     }
 }
 
+/** 可寫的驗證類型只有 admin 拿得到（端點本身擋 403），所以不是 admin 就不打。 */
+async function loadVerificationTypes() {
+    if (!auth.isAdmin) return;
+    try {
+        const response = await client.get<ApiSuccess<AdminVerificationType[]>>('/admin/verification-types');
+        verificationTypes.value = response.data.data;
+        if (!newVerification.type && verificationTypes.value[0]) {
+            newVerification.type = verificationTypes.value[0].code;
+        }
+    } catch (error: unknown) {
+        verificationError.value = extractApiErrorMessage(error, '載入驗證類型失敗');
+    }
+}
+
+async function submitVerification() {
+    if (!restaurant.value || !newVerification.type) return;
+    savingVerification.value = true;
+    verificationError.value = null;
+    verificationNotice.value = null;
+    try {
+        await client.post(`/admin/restaurants/${restaurant.value.id}/verifications`, {
+            verification_type: newVerification.type,
+        });
+        verificationNotice.value = '已記錄驗證，可信度重新計算完成。';
+        await load();
+    } catch (error: unknown) {
+        verificationError.value = extractApiErrorMessage(error, '記錄驗證失敗');
+    } finally {
+        savingVerification.value = false;
+    }
+}
+
 async function toggleFavorite() {
     if (!restaurant.value) return;
     if (isFavorite.value) {
@@ -149,6 +187,7 @@ async function submitMenuItem() {
 
 onMounted(() => {
     loadLookups();
+    loadVerificationTypes();
     if (auth.isAuthenticated && !favorites.loaded) {
         favorites.fetchAll();
     }
@@ -174,6 +213,22 @@ watch(() => props.id, load, { immediate: true });
             <p v-if="restaurant.confidence_score !== null && restaurant.confidence_score !== undefined">
                 素食可信度：{{ restaurant.confidence_score }} / 100
             </p>
+
+            <form v-if="auth.isAdmin && verificationTypes.length" class="verify-form" @submit.prevent="submitVerification">
+                <label>
+                    標記驗證
+                    <select v-model="newVerification.type">
+                        <option v-for="type in verificationTypes" :key="type.code" :value="type.code">
+                            {{ type.label }}（+{{ type.score }}）
+                        </option>
+                    </select>
+                </label>
+                <button type="submit" :disabled="savingVerification">
+                    {{ savingVerification ? '記錄中…' : '記錄驗證' }}
+                </button>
+                <p v-if="verificationError" class="error">{{ verificationError }}</p>
+                <p v-else-if="verificationNotice" role="status" class="notice">{{ verificationNotice }}</p>
+            </form>
             <p v-if="restaurant.address?.trim()">{{ restaurant.address }}</p>
             <p v-if="restaurant.phone">電話：{{ restaurant.phone }}</p>
             <p v-if="websiteUrl">
@@ -348,6 +403,18 @@ header {
     gap: 0.5rem;
     max-width: 400px;
     margin-top: 1rem;
+}
+
+.verify-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0 1rem;
+}
+
+.notice {
+    color: #2f855a;
 }
 
 .menu-form input,

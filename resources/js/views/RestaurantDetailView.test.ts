@@ -25,6 +25,11 @@ const get = vi.fn((url: string) => {
             },
         });
     }
+    if (url === '/admin/verification-types') {
+        return Promise.resolve({
+            data: { data: [{ code: 'admin_verified', label: 'Admin 已查證', score: 30 }] },
+        });
+    }
     if (url === '/features') {
         return Promise.resolve({ data: { data: [{ code: 'takeout', label: '外帶' }] } });
     }
@@ -176,6 +181,41 @@ describe('RestaurantDetailView', () => {
             diet_type: 'vegan',
             price: undefined,
         });
+    });
+
+    it('admin 可以標記驗證，送出後重新載入可信度', async () => {
+        post.mockResolvedValue({ data: { data: { id: 5, confidence_score: 30 } } });
+        const { wrapper } = await mountDetail('3', 'admin');
+
+        expect(wrapper.find('.verify-form').exists()).toBe(true);
+        expect(wrapper.text()).toContain('Admin 已查證（+30）');
+
+        await wrapper.find('.verify-form').trigger('submit');
+        await flushPromises();
+
+        expect(post).toHaveBeenCalledWith('/admin/restaurants/3/verifications', {
+            verification_type: 'admin_verified',
+        });
+        expect(get).toHaveBeenCalledWith('/restaurants/3');
+        expect(wrapper.find('.notice').exists()).toBe(true);
+    });
+
+    it('標記驗證失敗會把錯誤顯示出來', async () => {
+        post.mockRejectedValue(new Error('boom'));
+        const { wrapper } = await mountDetail('3', 'admin');
+
+        await wrapper.find('.verify-form').trigger('submit');
+        await flushPromises();
+
+        expect(wrapper.find('.verify-form .error').text()).toBe('記錄驗證失敗');
+        expect(wrapper.find('.notice').exists()).toBe(false);
+    });
+
+    it('一般使用者看不到標記驗證表單，也不會打 admin lookup', async () => {
+        const { wrapper } = await mountDetail('3', 'user');
+
+        expect(wrapper.find('.verify-form').exists()).toBe(false);
+        expect(get).not.toHaveBeenCalledWith('/admin/verification-types');
     });
 
     it('一般使用者看不到新增菜單表單', async () => {

@@ -26,6 +26,8 @@ class ReportConsequenceService
         'deactivate',
     ];
 
+    public function __construct(private readonly VerificationService $verifications) {}
+
     public function apply(RestaurantReport $report): void
     {
         $restaurant = $report->restaurant;
@@ -48,6 +50,31 @@ class ReportConsequenceService
             'clear_menu_items' => $this->clearMenuItems($restaurant),
             'deactivate' => $restaurant->update(['status' => 'inactive']),
         };
+
+        $this->recordVerification($report, $restaurant);
+    }
+
+    /**
+     * 第十一節的 `user_report` 寫入路徑：核准＝有真人查證過，依
+     * config/vegetarian.php 的 report_verifications 決定寫哪一種驗證（或不寫）。
+     * 分數重算由 RestaurantVerificationObserver 觸發，這裡不自己 dispatch。
+     */
+    private function recordVerification(RestaurantReport $report, Restaurant $restaurant): void
+    {
+        /** @var array<string, string|null> $map */
+        $map = config('vegetarian.report_verifications', []);
+        $type = $map[$report->type] ?? null;
+
+        if ($type === null) {
+            return;
+        }
+
+        $this->verifications->record(
+            $restaurant,
+            $type,
+            $report->reviewer,
+            ['report_id' => $report->id, 'report_type' => $report->type],
+        );
     }
 
     private function demoteToFriendly(Restaurant $restaurant): void
@@ -112,6 +139,11 @@ class ReportConsequenceService
 
         $restaurant->dietTypes()->sync($sync);
         $restaurant->unsetRelation('dietTypes');
+
+        // 降級後 venue kind 變了，external_source 的分數（exclusive 10／friendly 5）
+        // 也跟著變——不重算的話要等下一次 OSM 同步才修正，中間這家店的可信度是虛高的。
+        $this->verifications->rescoreExternalSourceIfPresent($restaurant);
+
         RestaurantCacheInvalidator::invalidate($restaurant->id);
     }
 }

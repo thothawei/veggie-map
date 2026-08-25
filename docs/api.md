@@ -53,6 +53,8 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 | GET | `/admin/reviews` | 評論列表，含 hidden（Phase 7） | 必須（admin） |
 | POST | `/admin/reviews/{id}/hide` | 隱藏評論（Phase 7） | 必須（admin） |
 | POST | `/admin/restaurants/{id}/menu-items` | 新增菜單（Phase C，diet_type 合法值見 `GET /diets` 的 `meta.menu_item_diets`） | 必須（admin） |
+| GET | `/admin/verification-types` | 可手動寫入的驗證類型（code／label／分數，來自 `config/vegetarian.php`） | 必須（admin） |
+| POST | `/admin/restaurants/{id}/verifications` | 手動記錄一筆驗證，寫完立刻重算素食可信度 | 必須（admin） |
 
 ## `GET /restaurants` 查詢參數
 

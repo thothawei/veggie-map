@@ -1,5 +1,36 @@
 # Progress Log
 
+## 2026-08-25 — P1：素食可信度的寫入路徑
+
+**完成：**
+
+- `POST /api/v1/admin/restaurants/{id}/verifications`（＋`GET /admin/verification-types`
+  給前端下拉）。合法類型來自 `config/vegetarian.php` 的 `admin_verifiable_types`
+  （`admin_verified`／`menu_verified`），分數來自 `verification_weights`，呼叫端不能指定分數。
+  `external_source`／`restaurant_claim`／`photo_verified` 刻意不開放手寫。
+- 回報核准依同一份 config 的 `report_verifications` 寫 `user_report`：`closed`（店都倒了）
+  與 `other`（內容不固定）對到 null 不寫，其餘五種寫一筆。同店多次回報因為 Job 依類型
+  取最高分只算一次 +10，不會被灌分。
+- 分數重算改掛 `RestaurantVerificationObserver`（saved／deleted），OSM 同步不再自己
+  dispatch；餐廳詳情頁的 admin 區塊多了「標記驗證」下拉，送出後重載看得到分數變化。
+- 順手補上 Phase C 留下的缺口：`not_vegetarian` 降級後重算 `external_source` 分數
+  （exclusive 10 → friendly 5），以前要等下次 OSM 同步才修正，中間可信度是虛高的。
+  沒有 `external_source` 的手動建店不會憑空生出一筆。
+
+**驗收：** 後端 199 測試 586 assertion、前端 104 測試全綠；Pint／PHPStan／vue-tsc／
+eslint／build 乾淨。反向：拿掉 `recordVerification()` 後端紅 2 條；拿掉前端
+`if (!auth.isAdmin) return` 守衛前端紅 1 條。
+
+**過程中修掉的兩個 bug：**
+
+- `$report->reviewedBy` 打錯（關聯叫 `reviewer`），Eloquent 對不存在的關聯靜默回 null，
+  驗證的 `verified_by` 會全部是 null——測試斷言 admin id 才抓到。
+- 把 sync 的顯式 dispatch 拿掉後，`syncExternalSource` 收合重複列用的
+  `whereIn(...)->delete()` 是 query delete、不觸發 observer，分數會停在被刪掉那筆的
+  10 分。改成逐筆 model delete。
+
+---
+
 ## 2026-08-25 — P0 Phase C：菜單層葷／素
 
 **完成：**

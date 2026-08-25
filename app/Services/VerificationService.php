@@ -58,15 +58,31 @@ class VerificationService
                 'verified_at' => now(),
             ]);
 
-            $extraIds = $existing->skip(1)->pluck('id');
-
-            if ($extraIds->isNotEmpty()) {
-                $restaurant->verifications()->whereIn('id', $extraIds)->delete();
-            }
+            // 逐筆 delete（不是 whereIn 的 query delete）才會觸發
+            // RestaurantVerificationObserver 重算分數——直接下 query delete 的話，
+            // 被刪掉的那筆 10 分還會留在剛剛算出來的 confidence score 裡。
+            $existing->skip(1)->each(fn (RestaurantVerification $extra) => $extra->delete());
 
             return $keep->refresh();
         }
 
         return $this->record($restaurant, 'external_source', scoreOverride: $score);
+    }
+
+    /**
+     * 已經有 external_source 的店（＝從 OSM 匯入的）在 diet 變動後重算那一筆的分數。
+     * 沒有紀錄就什麼都不做——手動建立的店不該因為改了 diet 就憑空拿到「外部來源」分數。
+     */
+    public function rescoreExternalSourceIfPresent(Restaurant $restaurant): ?RestaurantVerification
+    {
+        $hasExternalSource = $restaurant->verifications()
+            ->where('verification_type', 'external_source')
+            ->exists();
+
+        if (! $hasExternalSource) {
+            return null;
+        }
+
+        return $this->syncExternalSource($restaurant);
     }
 }
