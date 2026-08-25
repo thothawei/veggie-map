@@ -96,4 +96,23 @@ class HealthTest extends TestCase
             ->assertJsonPath('data.checks.workspace.ok', false)
             ->assertJsonPath('data.checks.database.ok', true);
     }
+
+    public function test_empty_workspace_root_env_falls_back_to_the_default_directory(): void
+    {
+        // `.env.example` 寫的是 `AI_OFFICE_WORKSPACE_ROOT=`，那是「已定義的空字串」，
+        // `env()` 的第二參數不會生效。CI 是 `cp .env.example .env`，所以 workspace_root
+        // 會變成 ''、`is_dir('')` 為 false，readiness 固定回 503——**只有 CI 會紅，
+        // 本機（.env 沒有這一行）永遠是綠的**。2026-08-25 實際發生過。
+        $this->assertSame(base_path('workspace'), config('ai_office.workspace_root'));
+
+        putenv('AI_OFFICE_WORKSPACE_ROOT=');
+        $reloaded = require config_path('ai_office.php');
+        putenv('AI_OFFICE_WORKSPACE_ROOT');
+
+        $this->assertSame(
+            base_path('workspace'),
+            $reloaded['workspace_root'],
+            '空字串必須退回預設目錄，不能變成 empty string'
+        );
+    }
 }

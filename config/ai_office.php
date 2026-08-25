@@ -14,7 +14,12 @@ return [
     |
     */
 
-    'workspace_root' => env('AI_OFFICE_WORKSPACE_ROOT', base_path('workspace')),
+    // 用 ?: 而不是 env() 的第二參數：.env.example 裡寫的是 `AI_OFFICE_WORKSPACE_ROOT=`，
+    // 那是「已定義的空字串」，env() 的預設值不會生效，workspace_root 會變成 ''，
+    // is_dir('') 為 false，readiness 檢查固定回 503。CI 是 cp .env.example .env，
+    // 所以只有 CI 會炸、本機（沒有這一行）永遠是綠的。同一個坑先前在
+    // EXTERNAL_API_OVERPASS_USER_AGENT 也踩過一次，見 docs/progress.md。
+    'workspace_root' => env('AI_OFFICE_WORKSPACE_ROOT') ?: base_path('workspace'),
 
     /*
     |--------------------------------------------------------------------------
