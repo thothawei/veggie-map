@@ -24,7 +24,8 @@
 - [x] Phase 8 — Vue Dashboard（`resources/js/ai-office/`：CommandCenter／TaskBoard／TaskDetail／
       AgentCard／ApprovalPanel／ActivityFeed＋SSE 訂閱，48 個前端測試）
       — Usage／成本面板留到 Phase 10（後端還沒有對應端點）
-- [ ] Phase 9 — Pixel Office
+- [x] Phase 9 — Pixel Office（OfficeMap／OfficeRoom／AgentDesk／AgentCharacter／
+      AgentStatusBadge，純 SVG 方塊＋CSS 動畫，掛在總覽與專案詳情兩頁，22 個測試）
 - [ ] Phase 10 — TokenUsage / Cost / AgentMemory / Agent 效能
 - [ ] Phase 11 — Docker Sandbox / GitHub Actions
 - [ ] Phase 12 — 完整 Demo

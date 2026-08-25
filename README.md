@@ -322,7 +322,7 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
   資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
 
-目前進度：**Phase 8 完成**（Phase 7 事件流＋SSE、Phase 8 Vue Dashboard）。已可用的端點：
+目前進度：**Phase 9 完成**（Phase 7 事件流＋SSE、Phase 8 Vue Dashboard、Phase 9 Pixel Office）。已可用的端點：
 
 | Method | Path | 說明 |
 |---|---|---|
@@ -343,6 +343,10 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 前端面板在 `/ai-office`（總覽／專案詳情／Agent／核准），只有具備 AI Office 角色的登入者
 看得到入口。專案詳情頁用 `EventSource` 訂閱上面那條 SSE，任務看板與事件流會即時更新；
 連不上時退回輪詢並在畫面上老實標成「非即時」。
+
+**Pixel Office**：依角色分房間的像素辦公室，每位 Agent 一張桌子，狀態直接畫出來——
+工作中會敲鍵盤、螢幕亮綠燈，等待核准會舉手、螢幕轉黃，錯誤變紅、離線變灰階。
+全部用 SVG 方塊＋CSS 動畫，沒有任何點陣圖，也吃 `prefers-reduced-motion`。
 
 角色權限：`viewer` 唯讀；`developer` 可增修專案與任務但不可刪專案；`manager` 再加上刪除與
 Agent 設定；`admin` 全開；餐廳地圖的一般 `user` 完全進不來。

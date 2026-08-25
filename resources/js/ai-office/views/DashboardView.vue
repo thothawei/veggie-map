@@ -5,7 +5,7 @@ import AiOfficeShell from '../components/AiOfficeShell.vue';
 import CommandCenter from '../components/dashboard/CommandCenter.vue';
 import StatisticsPanel from '../components/dashboard/StatisticsPanel.vue';
 import ApprovalPanel from '../components/dashboard/ApprovalPanel.vue';
-import AgentList from '../components/agent/AgentList.vue';
+import OfficeMap from '../components/office/OfficeMap.vue';
 import { useAgentsStore } from '../stores/agents';
 import { useApprovalsStore } from '../stores/approvals';
 import { useProjectsStore } from '../stores/projects';
@@ -78,11 +78,12 @@ onMounted(() => {
             />
         </div>
 
-        <AgentList
+        <!-- 總覽沒有專案脈絡，所以只畫誰在什麼狀態，不畫在做哪個任務。 -->
+        <OfficeMap
             class="panel agents"
             :agents="agents.agents"
             :loading="agents.loading"
-            @open="router.push({ name: 'ai-office-agents' })"
+            @select="router.push({ name: 'ai-office-agents' })"
         />
     </AiOfficeShell>
 </template>

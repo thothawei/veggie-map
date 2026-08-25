@@ -46,6 +46,7 @@ const ProjectDetailView = (await import('./ProjectDetailView.vue')).default;
 
 const stub = { template: '<div />' };
 let tasksPayload: unknown[] = [];
+let agentsPayload: unknown[] = [];
 
 function activity(id: number, type: string) {
     return { id, project_id: 1, task_id: 1, agent_id: null, type, description: `事件 ${id}`, payload: null, created_at: null };
@@ -87,6 +88,8 @@ describe('ProjectDetailView', () => {
             { id: 2, project_id: 1, title: '寫測試', status: 'pending', priority: 50, assigned_agent_id: null, retry_count: 0, max_retries: 3 },
         ];
 
+        agentsPayload = [{ id: 7, name: '後端小周', role: 'backend', status: 'working', model_provider: 'mock', model_name: 'mock-1', max_concurrency: 2 }];
+
         get.mockImplementation((url: string) => {
             if (url === '/ai-office/projects/1') {
                 return Promise.resolve({ data: { data: { id: 1, name: '待辦 API', status: 'active' } } });
@@ -103,11 +106,7 @@ describe('ProjectDetailView', () => {
             }
 
             if (url === '/ai-office/agents') {
-                return Promise.resolve({
-                    data: {
-                        data: [{ id: 7, name: '後端小周', role: 'backend', status: 'working', model_provider: 'mock', model_name: 'mock-1', max_concurrency: 2 }],
-                    },
-                });
+                return Promise.resolve({ data: { data: agentsPayload } });
             }
 
             if (url === '/ai-office/projects/1/activities') {
@@ -181,6 +180,26 @@ describe('ProjectDetailView', () => {
 
         await wrapper.find('.task-detail .close').trigger('click');
         expect(wrapper.find('.task-detail').exists()).toBe(false);
+    });
+
+    it('像素辦公室顯示那位 Agent 正在跑的任務，跟看板同一份資料', async () => {
+        const wrapper = await mountView();
+        const desk = wrapper.find('.office .desk');
+
+        expect(desk.attributes('data-status')).toBe('working');
+        expect(desk.find('.task').text()).toBe('建立 API');
+        expect(desk.attributes('aria-label')).toBe('後端小周，正在處理 建立 API');
+    });
+
+    it('Agent 狀態事件進來時像素辦公室跟著換狀態，不用重新整理', async () => {
+        const wrapper = await mountView();
+        expect(wrapper.find('.office .desk').attributes('data-status')).toBe('working');
+
+        agentsPayload = [{ ...(agentsPayload[0] as object), status: 'error' }];
+        FakeEventSource.instances[0].emit('activity', activity(8, 'AgentStatusChanged'));
+        await flushPromises();
+
+        expect(wrapper.find('.office .desk').attributes('data-status')).toBe('error');
     });
 
     it('離開頁面時關掉串流，不佔著後端的連線名額', async () => {

@@ -129,6 +129,14 @@ describe('DashboardView', () => {
         expect(wrapper.find('[role="alert"]').text()).toBe('專案名稱已存在');
     });
 
+    it('總覽畫出像素辦公室，但沒有專案脈絡就不寫「在做什麼」', async () => {
+        const { wrapper } = await mountDashboard();
+        const desks = wrapper.findAll('.office-map .desk');
+
+        expect(desks).toHaveLength(2);
+        expect(wrapper.find('.office-map .task').exists()).toBe(false);
+    });
+
     it('viewer 看不到建立表單，也看不到核准按鈕', async () => {
         const { wrapper } = await mountDashboard('viewer');
 

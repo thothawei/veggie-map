@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import AiOfficeShell from '../components/AiOfficeShell.vue';
 import ActivityFeed from '../components/dashboard/ActivityFeed.vue';
 import TaskBoard from '../components/task/TaskBoard.vue';
 import TaskDetail from '../components/task/TaskDetail.vue';
 import StatisticsPanel from '../components/dashboard/StatisticsPanel.vue';
+import OfficeMap from '../components/office/OfficeMap.vue';
 import { useActivityStream } from '../composables/useActivityStream';
 import { useAgentsStore } from '../stores/agents';
 import { useProjectsStore } from '../stores/projects';
@@ -15,6 +17,7 @@ import { extractApiErrorMessage } from '@/lib/apiError';
 
 const props = defineProps<{ id: string }>();
 
+const router = useRouter();
 const auth = useAuthStore();
 const projects = useProjectsStore();
 const tasks = useTasksStore();
@@ -66,6 +69,10 @@ watch(() => activities.value.length, () => {
     }
 });
 
+function openAgents() {
+    void router.push({ name: 'ai-office-agents' });
+}
+
 async function selectTask(taskId: number) {
     actionError.value = null;
     try {
@@ -108,6 +115,16 @@ onUnmounted(() => stopStream());
         <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
 
         <StatisticsPanel :items="stats" />
+
+        <!-- 這裡有專案脈絡，所以桌上會顯示那位 Agent 正在跑的任務；
+             資料跟看板同一份，不會出現「小人在忙、看板卻沒有 running」。 -->
+        <OfficeMap
+            class="panel office"
+            :agents="agents.agents"
+            :tasks="tasks.tasks"
+            :loading="agents.loading"
+            @select="openAgents"
+        />
 
         <div class="board-area">
             <TaskBoard
@@ -155,6 +172,10 @@ onUnmounted(() => stopStream());
     .board-area {
         grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
     }
+}
+
+.office {
+    margin-top: 0.75rem;
 }
 
 .feed {
