@@ -1038,3 +1038,36 @@ Horizon 改動造成——單獨用 `--filter` 跑受影響的測試檔（`Calcu
 
 - 無。「最終完成標準」清單的 10 項（架構圖、ERD、API 文件、Docker、測試結果、CI/CD、
   效能考量、安全性考量、外部 API 文件、README）目前逐項核對都有對應產出。
+
+## 2026-08-25 — `EXTERNAL_API_SYNC_BBOXES` 預設值：台北市
+
+2026-08-24 那則排程記錄的「未完成 / 等待確認」唯一一項——排程裝好了但預設空白，等產品端
+決定涵蓋範圍。使用者 2026-08-25 決定：用台北市當預設。
+
+- `.env.example`／`.env` 都填 `24.9613,121.4570,25.2130,121.6663`（台北市行政區範圍，
+  非新北）。CI 是 `cp .env.example .env`，所以 CI 環境也吃得到這個預設值。
+- **這次改動打破了一個既有測試的前提**：`ScheduleTest::test_sync_bboxes_config_is_empty_by_default_so_sync_is_not_scheduled`
+  斷言 `config('services.sync_bboxes')` 是空陣列，改完立刻紅。這裡沒有把斷言放寬帶過——
+  該測試真正要守的是「空設定就不排程」這個條件分支，而不是「環境變數剛好是空的」。
+  改寫成用 `$this->app->instance(Schedule::class, ...)` + `Facade::clearResolvedInstance()`
+  注入乾淨的 Schedule，再 `require base_path('routes/console.php')` 重跑一次排程註冊，
+  這樣可以對任意 config 值測試，完全不依賴 `.env`。拆成三條：空設定不排程、兩組 bbox
+  各產生一條排程（含 bbox 字串真的有帶進指令）、預設 env 是台北市。
+- **反向驗證**：把 `routes/console.php` 的 `foreach (config('services.sync_bboxes') ...)`
+  暫時換成 `foreach ([] ...)`，「每組 bbox 各產生一條排程」那條真的紅了才還原——確認
+  新測試不是永遠 PASS 的裝飾品。
+- `php artisan schedule:list` 實測：`restaurants:sync --bbox='24.9613,121.4570,25.2130,121.6663'`
+  真的出現在排程清單裡，`Next Due` 正常（01:00，錯開在 rating／score 重算之後）。
+- 全套 81 個測試、241 個 assertion 全綠，Pint／PHPStan level 5 乾淨。
+
+**順手修掉的既有問題（不是這次引入的）：** `routes/console.php` 有兩段註解已經跟程式碼
+現況脫節——一段說「沒有 queue worker，底層 Job 用 dispatchSync」（Horizon 那輪早就改回
+`dispatch()` 了），一段說「這個專案沒有正式決定過要自動涵蓋哪些城市範圍……不要自己編一組
+座標假裝是產品決策」（現在已經有正式決定了）。留著會誤導下一個接手的人，一併更正。
+
+**未完成 / 等待確認：**
+
+- 排程現在真的會每天 01:00 打 Overpass 匯入台北市範圍的餐廳資料。目前 `.env` 的
+  `EXTERNAL_API_RESTAURANT_PROVIDER=mock`，所以本機排程實際跑起來吃的是 fixture 不是
+  真的 Overpass；要讓它真的匯入外部資料，需要另外把 provider 切成 overpass。這是既有的
+  環境設定，不是這次改動的一部分，但值得在真的啟用排程前確認一次。

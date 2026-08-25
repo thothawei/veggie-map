@@ -145,6 +145,20 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
 - [x] `docs/architecture.md`／`README.md` 的系統圖改成 Mermaid `flowchart`，對照現況重畫
 - [x] README「Database Design」順便修正一個既有的表格數量小錯誤
 
+## 補做：`EXTERNAL_API_SYNC_BBOXES` 填入台北市 ✅ 已完成 2026-08-25
+
+排程功能在 2026-08-24 就裝好了，但預設留空代表「裝好了卻不會跑」，等的是產品端決定
+涵蓋範圍。使用者 2026-08-25 決定：預設涵蓋台北市。
+
+- [x] `.env.example`／`.env` 的 `EXTERNAL_API_SYNC_BBOXES` 填入台北市行政區範圍
+      `24.9613,121.4570,25.2130,121.6663`
+- [x] `tests/Feature/Console/ScheduleTest.php` 改寫成不依賴環境變數（原本斷言「預設空
+      陣列」，前提已被這次決定推翻）：改用注入 config 重跑 `routes/console.php` 的方式，
+      分別驗證「空設定不排程」「每組 bbox 各產生一條排程」兩個分支，另加一條確認預設
+      env 真的是台北市。含反向驗證：把 `foreach` 的來源換成空陣列，測試真的會紅。
+- [x] `routes/console.php` 兩段過時註解一併更正（一段還停留在 Horizon 之前的
+      `dispatchSync` 敘述，一段寫「沒有正式決定過涵蓋範圍」）
+
 ## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成
 
 `docs/progress.md` 逐項記錄；`git log` 每個 commit 都有對應 GitHub Actions CI 綠燈
