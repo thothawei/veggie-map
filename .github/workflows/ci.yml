@@ -26,8 +26,20 @@ jobs:
           --health-timeout=5s
           --health-retries=10
 
-    # 測試套件（phpunit.xml）不需要 Redis：CACHE_STORE=array、QUEUE_CONNECTION=sync，
-    # 見 docs/progress.md「Feature Test 補完」的決定，不必為了 CI 多開一個 service。
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    # Redis 原本不需要（phpunit.xml 用 CACHE_STORE=array、QUEUE_CONNECTION=sync），
+    # 但 AI Office 的 /health 是 readiness 檢查，會真的 Redis::ping()——沒有這個 service
+    # 就固定回 503，HealthTest 全紅（main 從 6043905 起就是這樣）。本機有 docker-compose
+    # 的 redis 所以測得過，乾淨 checkout 才會炸，正是 CI 要抓的那類問題。
     env:
       DB_CONNECTION: mysql
       DB_HOST: 127.0.0.1
@@ -35,6 +47,9 @@ jobs:
       DB_DATABASE: veggiemap_testing
       DB_USERNAME: veggiemap
       DB_PASSWORD: veggiemap
+      # .env.example 寫的是 docker-compose 的服務名 `redis`，在 CI 解析不到。
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
 
     steps:
       - uses: actions/checkout@v4

@@ -1813,3 +1813,30 @@ controllers、models，還改了 `routes/api.php`／`bootstrap/providers.php`／
   評分要等使用者評論累積）。
 - 列表頁用 bbox 查詢所以沒有 `distance_meters`，距離只在首頁地圖那條路徑顯示。
   要讓列表也有距離，得在使用者授權定位後把座標一起送出，是另一個題目。
+
+## 2026-08-25 — 修 CI：AI Office health 檢查需要 Redis，CI 沒有
+
+推上前一則的 UI 改動後 CI 後端紅了。我這次零個 PHP 改動，而 CI 是乾淨 checkout，
+所以不可能是本機未提交的東西造成——查 `gh run list` 發現 **main 從 `6043905`
+（AI Office Phase 1）起就已經是紅的**，我的 commit 只是繼承。
+
+失敗全在 `Tests\Feature\AiOffice\HealthTest`：`Failed asserting that 503 is identical to 200`。
+根因：`/api/v1/ai-office/health` 是 readiness 檢查，會真的 `Redis::connection()->ping()`，
+而 `.github/workflows/ci.yml` 的 services 只有 MySQL、沒有 Redis，ping 丟例外 → 固定 503。
+
+本機測得過是因為 docker-compose 有 redis container——**乾淨 checkout 才會炸，正是
+Phase 12 導入 CI 要抓的那類問題**。本機實跑 `--filter=HealthTest` 確實 7 條全過。
+
+逐項確認 Redis 是唯一缺的，不是改一個猜一個：
+
+- `database`：CI 已有 mysql service ✓
+- `queue`：`phpunit.xml` 是 `QUEUE_CONNECTION=sync`，`SyncQueue::size()` 回 0，不需外部服務 ✓
+- `workspace`：`git ls-files workspace/` 確認 `.gitkeep` 有進版控，乾淨 checkout 會有這個目錄 ✓
+- `redis`：CI 沒有 ✗
+
+修法：CI 加 `redis:7-alpine` service（含 healthcheck），並在 job env 補
+`REDIS_HOST=127.0.0.1`——`.env.example` 寫的是 docker-compose 的服務名 `redis`，
+在 CI 解析不到。順帶把 workflow 裡「測試套件不需要 Redis」那段已經過時的註解改掉。
+
+**環境注意**：另一個 session 正在同一個工作目錄寫 AI Office Phase 2（16 張未追蹤 migration、
+controllers、models）。本次一樣逐一列出檔案提交，沒有用 `git add -A`。
