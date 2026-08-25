@@ -6,7 +6,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { ALL_CITIES, useCities } from '@/composables/useCities';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
-import { formatAddress, formatCuisines, formatOpenStatus } from '@/lib/format';
+import { formatAddress, formatConfidence, formatCuisines, formatOpenStatus } from '@/lib/format';
 import type { ApiSuccess, Restaurant } from '@/types';
 
 const router = useRouter();
@@ -204,6 +204,10 @@ watch(committedKeyword, (value) => {
                     <span v-if="formatCuisines(restaurant.cuisines)" class="cuisines">{{ formatCuisines(restaurant.cuisines) }}</span>
                     <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
                     <span
+                        v-if="formatConfidence(restaurant.confidence_score)"
+                        class="confidence"
+                    >{{ formatConfidence(restaurant.confidence_score) }}</span>
+                    <span
                         v-if="formatOpenStatus(restaurant)"
                         class="open-status"
                         :data-state="formatOpenStatus(restaurant)?.state"
@@ -359,5 +363,10 @@ li button:hover {
 
 .open-status[data-state='closed'] {
     color: #718096;
+}
+
+.confidence {
+    color: #2c5282;
+    font-size: 0.85rem;
 }
 </style>

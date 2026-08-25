@@ -90,3 +90,17 @@ export function formatOpenStatus(restaurant: {
 
     return null;
 }
+
+/**
+ * 素食可信度的畫面文字。
+ *
+ * 回傳 null 代表沒有分數——不要印「0 分」：0 跟「還沒有人查證過」在使用者眼裡
+ * 是兩件事，前者看起來像這家店被判定不可信。
+ */
+export function formatConfidence(score: number | null | undefined): string | null {
+    if (typeof score !== 'number' || !Number.isFinite(score) || score <= 0) {
+        return null;
+    }
+
+    return `素食可信度 ${Math.round(score)}`;
+}

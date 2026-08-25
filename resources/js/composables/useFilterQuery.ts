@@ -10,13 +10,16 @@ import type { RestaurantSearchParams } from '@/types';
  * 使用者回報問題時也貼不出有意義的資訊。
  */
 function filterKeys(): string[] {
-    return ['diet', venueScopeParam(), 'price_level', 'open_now', ...FEATURE_CODES];
+    return ['diet', venueScopeParam(), 'price_level', 'open_now', 'confidence_min', ...FEATURE_CODES];
 }
 
 /** 後端 SearchRestaurantRequest 驗證 price_level 是 1–4 的整數。 */
 export const PRICE_LEVELS = [1, 2, 3, 4] as const;
 
-export type UrlFilters = Pick<RestaurantSearchParams, 'diet' | 'venue_scope' | 'price_level' | 'open_now'> &
+export type UrlFilters = Pick<
+    RestaurantSearchParams,
+    'diet' | 'venue_scope' | 'price_level' | 'open_now' | 'confidence_min'
+> &
     Partial<Record<FeatureCode, boolean>>;
 
 /** 布林篩選在網址上一律寫成 1；沒有這個參數就代表沒開，不用 0 佔位。 */
@@ -44,6 +47,13 @@ function parse(query: Record<string, unknown>): Partial<UrlFilters> {
     const price = Number(query.price_level);
     if ((PRICE_LEVELS as readonly number[]).includes(price)) {
         filters.price_level = price;
+    }
+
+    // 合法門檻由後端 meta 決定，但網址是使用者可以隨手改的，所以這裡只驗「0–100 的
+    // 整數」——超出範圍後端會回 422，整個列表會變成「載入失敗」而不是忽略一個條件。
+    const confidence = Number(query.confidence_min);
+    if (Number.isInteger(confidence) && confidence >= 0 && confidence <= 100) {
+        filters.confidence_min = confidence;
     }
 
     // open_now 不是 features.code（它不是店家屬性，是「此刻」的狀態），
@@ -91,6 +101,8 @@ export function useFilterQuery(): WritableComputedRef<Partial<UrlFilters>> {
 
             if (next.open_now) query.open_now = ON;
 
+            if (next.confidence_min) query.confidence_min = String(next.confidence_min);
+
             for (const code of FEATURE_CODES) {
                 if (next[code]) query[code] = ON;
             }
@@ -125,6 +137,7 @@ export function apiFilterParams(filters: Partial<UrlFilters>): Record<string, st
     if (filters.diet) params.diet = filters.diet;
     if (filters.price_level) params.price_level = filters.price_level;
     if (filters.open_now) params.open_now = 1;
+    if (filters.confidence_min) params.confidence_min = filters.confidence_min;
 
     params[scopeParam] = filters.venue_scope ?? venueScopeDefault();
 

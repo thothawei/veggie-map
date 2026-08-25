@@ -61,7 +61,8 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 `keyword`, `latitude`, `longitude`, `radius`（公里，上限 50）, `bbox`, `city`, `district`, `diet`,
 `venue_scope`（`exclusive`／`friendly`／`all`，名稱與合法值見 `GET /diets` 的 `meta.venue_scope`；
 **省略＝不過濾**，前端預設會送 `exclusive`）, `price_level`,
-`rating_min`, 以及 `features.code` 對應的布林篩選（`pet_friendly`／`parking`／`delivery`／`takeout`／`reservation`／`wifi`／`outdoor_seating`／`family_friendly`；請傳 `1`／`0`，也接受 `true`／`false` 字串）, `open_now`（只留此刻在該店**當地時間**營業中的餐廳；沒有可解析營業時間的店不會出現在結果裡）, `sort`（distance/rating/popular/newest，
+`rating_min`, `confidence_min`（素食可信度下限 0–100，門檻選項見 `GET /diets` 的
+`meta.confidence_filters`）, 以及 `features.code` 對應的布林篩選（`pet_friendly`／`parking`／`delivery`／`takeout`／`reservation`／`wifi`／`outdoor_seating`／`family_friendly`；請傳 `1`／`0`，也接受 `true`／`false` 字串）, `open_now`（只留此刻在該店**當地時間**營業中的餐廳；沒有可解析營業時間的店不會出現在結果裡）, `sort`（distance/rating/popular/newest，
 預設 `distance`；帶 `latitude`+`longitude` 才可用 `distance`）, `page`, `per_page`（預設 20，上限 100）。
 
 範例：
@@ -91,6 +92,16 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
   再依 id，避免翻頁時同一家店重複出現或消失。
 - 帶 `keyword` 時**預設就是 `relevance`**；沒帶時維持原本的 `distance`／`newest`。
   `sort=relevance` 沒帶 `keyword` 會回 422，不會悄悄退回其他排序。
+
+### 素食可信度篩選與排序
+
+`confidence_min=N` 只留下可信度 ≥ N 的餐廳；`sort=confidence` 依可信度由高到低排序
+（沒有分數列的餐廳算 0 分排在最後，不是被濾掉）。列表回應現在也帶 `confidence_score`，
+不必點進詳情才看得到。
+
+門檻選項（值與標籤）來自 `config/vegetarian.php` 的 `confidence_filters`，經
+`GET /diets` 的 `meta.confidence_filters` 給前端。前端不決定「幾分算有查證」——那是
+產品判斷，會跟著 `verification_weights` 一起調整。
 
 ### 營業時間
 

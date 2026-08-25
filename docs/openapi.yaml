@@ -81,6 +81,12 @@ paths:
         - name: rating_min
           in: query
           schema: { type: number, minimum: 0, maximum: 5 }
+        - name: confidence_min
+          in: query
+          description: >
+            素食可信度下限（0–100）。門檻選項見 GET /diets 的 meta.confidence_filters。
+            沒有分數列的餐廳等同 0 分。
+          schema: { type: integer, minimum: 0, maximum: 100 }
         - name: open_now
           in: query
           description: >
@@ -118,7 +124,7 @@ paths:
           description: >
             relevance 需要 keyword（否則 422），distance 需要 latitude+longitude。
             預設：有 keyword → relevance；有座標 → distance；其餘 newest。
-          schema: { type: string, enum: [relevance, distance, rating, popular, newest] }
+          schema: { type: string, enum: [relevance, confidence, distance, rating, popular, newest] }
         - name: per_page
           in: query
           description: 預設 20，上限 100

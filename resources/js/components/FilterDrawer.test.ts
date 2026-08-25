@@ -14,6 +14,12 @@ vi.mock('@/api/client', () => ({
                             { code: 'vegan', label: '全素（Vegan）' },
                             { code: 'vegetarian', label: '素食（Vegetarian）' },
                         ],
+                        meta: {
+                            confidence_filters: [
+                                { value: 30, label: '有查證' },
+                                { value: 60, label: '高度可信' },
+                            ],
+                        },
                     },
                 });
             }
@@ -281,5 +287,54 @@ describe('FilterDrawer 價位與評分', () => {
 
         await wrapper.findAll('.chip').find((c) => c.text() === '營業中')!.trigger('click');
         expect('open_now' in wrapper.props('filters')).toBe(false);
+    });
+
+});
+
+describe('FilterDrawer 可信度篩選', () => {
+    beforeEach(() => {
+        setViewportMatches(true);
+        resetVenueScopeMeta();
+        vi.mocked(client.get).mockImplementation((url: string) => {
+            if (url === '/diets') {
+                return Promise.resolve({
+                    data: {
+                        data: [],
+                        meta: {
+                            confidence_filters: [
+                                { value: 30, label: '有查證' },
+                                { value: 60, label: '高度可信' },
+                            ],
+                        },
+                    },
+                });
+            }
+
+            return Promise.resolve({ data: { data: [] } });
+        });
+    });
+
+    it('可信度門檻與標籤來自 API，不是元件寫死的數字', async () => {
+        const wrapper = await mountDrawer();
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '高度可信')!.trigger('click');
+
+        expect(wrapper.props('filters').confidence_min).toBe(60);
+    });
+
+    it('再點一次同一個門檻＝取消，不留 undefined 的 key', async () => {
+        const wrapper = await mountDrawer({ confidence_min: 30 });
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '有查證')!.trigger('click');
+
+        expect('confidence_min' in wrapper.props('filters')).toBe(false);
+    });
+
+    it('沒有回 confidence_filters 時不渲染那一組，不用預設值硬撐', async () => {
+        vi.mocked(client.get).mockImplementation(() => Promise.resolve({ data: { data: [], meta: {} } }));
+
+        const wrapper = await mountDrawer();
+
+        expect(wrapper.text()).not.toContain('素食可信度');
     });
 });

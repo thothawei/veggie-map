@@ -2513,3 +2513,37 @@ PHPStan 過程中擋下兩個我寫錯的東西：`$restaurant->openingHours` �
 **仍未做的：** 沒有在瀏覽器上實際點過首頁的「搜尋餐廳」流程（開發資料庫裡的餐廳
 沒有 `menu_items`，菜色比對在真實資料上會是 0 命中）。目前證據是測試資料庫上的
 HTTP 測試與元件測試。
+
+---
+
+## 2026-08-26 — 素食可信度變成搜尋條件（搜尋強化第三項）
+
+可信度分數從 Phase 6 就存在，但使用者只能在詳情頁看到一個數字——沒辦法用它篩、
+不能用它排，列表卡片甚至根本不回這個欄位。對一個叫 VeggieMap 的產品來說，
+「只看有把握是素食的店」是最核心的需求，卻沒有入口。
+
+- `confidence_min=N`：可信度下限。
+- `sort=confidence`：依分數排序。用 correlated subquery 取 `COALESCE(score, 0)`
+  而不是 join——join 會把沒有分數列的餐廳整批濾掉，那些店應該當 0 分排最後，
+  不是消失。
+- 列表 eager load `confidenceScore`，卡片顯示分數。
+
+### 門檻放 config，不放 Vue
+
+`config/vegetarian.php` 的 `confidence_filters`（30＝有查證、60＝高度可信）經
+`GET /diets` 的 `meta.confidence_filters` 給前端，FilterDrawer 只負責渲染。
+
+理由寫在 config 註解裡：`external_source` 是每家 OSM 匯入的店都有的 10 分底分，
+門檻必須高於它才有意義；而這個數字會跟著 `verification_weights` 一起變——
+`admin_verified` 從 30 調成 40 時，「有查證」的門檻也該動。兩份數字分開維護遲早對不上。
+
+前端有一條測試守著「沒有回 `confidence_filters` 時整組不渲染」——不要用寫死的
+預設值硬撐出一個看起來能用、實際上跟後端不同步的 UI。
+
+`formatConfidence()` 對 0 分回 null：0 分跟「還沒有人查證過」在使用者眼裡是兩件事，
+印「0 分」看起來像這家店被判定不可信。
+
+### 驗證
+
+後端 446 → **450 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
+前端 233 → **238 個測試全綠**，vue-tsc／ESLint 乾淨。

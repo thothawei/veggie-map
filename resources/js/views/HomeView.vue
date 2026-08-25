@@ -8,7 +8,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { rememberCity, useCities } from '@/composables/useCities';
 import { apiFilterParams, useFilterQuery } from '@/composables/useFilterQuery';
-import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
+import { formatAddress, formatConfidence, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
 import { formatBbox } from '@/lib/geo';
 import type { ApiSuccess, GeocodedPlace, Restaurant } from '@/types';
 
@@ -291,6 +291,10 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                             {{ formatDistance(restaurant.distance_meters) }}
                         </span>
                         <span
+                            v-if="formatConfidence(restaurant.confidence_score)"
+                            class="confidence"
+                        >{{ formatConfidence(restaurant.confidence_score) }}</span>
+                        <span
                             v-if="formatOpenStatus(restaurant)"
                             class="open-status"
                             :data-state="formatOpenStatus(restaurant)?.state"
@@ -502,6 +506,11 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     color: #2f855a;
     cursor: pointer;
     text-decoration: underline;
+    font-size: 0.85rem;
+}
+
+.confidence {
+    color: #2c5282;
     font-size: 0.85rem;
 }
 </style>

@@ -33,6 +33,12 @@ export interface City {
     bbox: string;
 }
 
+/** 可信度篩選門檻，來自後端 config/vegetarian.php，前端不自己決定分數。 */
+export interface ConfidenceFilter {
+    value: number;
+    label: string;
+}
+
 export interface MenuItemDiet {
     code: string;
     label: string;
@@ -151,6 +157,8 @@ export interface RestaurantSearchParams {
     rating_min?: number;
     /** 只留下此刻在該店當地時間營業中的餐廳。 */
     open_now?: boolean;
+    /** 素食可信度下限（0–100）。門檻選項見 GET /diets 的 meta.confidence_filters。 */
+    confidence_min?: number;
     pet_friendly?: boolean;
     parking?: boolean;
     delivery?: boolean;
@@ -159,7 +167,7 @@ export interface RestaurantSearchParams {
     wifi?: boolean;
     outdoor_seating?: boolean;
     family_friendly?: boolean;
-    sort?: 'distance' | 'rating' | 'popular' | 'newest';
+    sort?: 'relevance' | 'confidence' | 'distance' | 'rating' | 'popular' | 'newest';
     per_page?: number;
     cursor?: string;
 }

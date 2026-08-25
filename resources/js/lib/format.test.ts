@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from './format';
+import { formatAddress, formatConfidence, formatCuisines, formatDistance, formatOpenStatus } from './format';
 
 describe('formatDistance', () => {
     it('一公里以內用公尺，取整到十位', () => {
@@ -95,5 +95,21 @@ describe('formatOpenStatus', () => {
     it('未知營業時間回 null，畫面不顯示任何狀態', () => {
         expect(formatOpenStatus({ open_status: 'unknown' })).toBeNull();
         expect(formatOpenStatus({})).toBeNull();
+    });
+});
+
+describe('formatConfidence', () => {
+    it('有分數就寫出來', () => {
+        expect(formatConfidence(80)).toBe('素食可信度 80');
+    });
+
+    /**
+     * 0 分跟「還沒有人查證過」在使用者眼裡是兩件事：印「0 分」看起來像
+     * 這家店被判定不可信，實際上只是還沒有任何驗證紀錄。
+     */
+    it('沒有分數或 0 分都不顯示', () => {
+        expect(formatConfidence(0)).toBeNull();
+        expect(formatConfidence(null)).toBeNull();
+        expect(formatConfidence(undefined)).toBeNull();
     });
 });

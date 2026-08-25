@@ -58,6 +58,29 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | 可信度篩選門檻（前端晶片）
+    |--------------------------------------------------------------------------
+    |
+    | GET /diets 的 meta.confidence_filters 會回這份，FilterDrawer 依它渲染
+    | 「素食可信度」晶片，送出時變成 GET /restaurants?confidence_min=N。
+    |
+    | 放 config 而不是寫死在 Vue：門檻是產品判斷（多少分算「有查證」），會隨著
+    | verification_weights 調整而變。兩份數字分開維護遲早會對不上——例如
+    | admin_verified 從 30 調成 40 之後，「已查證」的門檻就該跟著動。
+    |
+    | 目前的取值理由：external_source(10) 是每家 OSM 匯入的店都有的底分，所以
+    | 門檻必須高於它才有意義；30 ＝ 至少有一筆 admin_verified 或多種來源佐證，
+    | 60 ＝ 需要好幾種驗證同時成立。
+    |
+    */
+
+    'confidence_filters' => [
+        ['value' => 30, 'label' => '有查證'],
+        ['value' => 60, 'label' => '高度可信'],
+    ],
+
     'report_verifications' => [
         'closed' => null,
         'not_vegetarian' => 'user_report',

@@ -24,6 +24,9 @@ class LookupController extends Controller
             'meta' => [
                 'venue_scope' => DietCatalog::venueScopeMeta(),
                 'menu_item_diets' => DietCatalog::menuItemDiets(),
+                // 可信度篩選門檻。前端不自己決定「幾分算有查證」——那是產品判斷，
+                // 跟 verification_weights 綁在一起，見 config/vegetarian.php。
+                'confidence_filters' => config('vegetarian.confidence_filters'),
             ],
         ]);
     }

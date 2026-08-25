@@ -35,9 +35,11 @@ class SearchRestaurantRequest extends FormRequest
             // 只留下「此刻在該店當地時間營業中」的餐廳。沒有可解析營業時間的店
             // 不會被算成營業中（見 RestaurantRepository::applyOpenNow）。
             'open_now' => ['nullable', 'boolean'],
+            // 素食可信度下限（0–100，見 config/vegetarian.php）。「只看有證據的店」。
+            'confidence_min' => ['nullable', 'integer', 'between:0,100'],
             // relevance＝關鍵字相關性（店名 > 菜色／料理 > 地區 > 描述），只有帶
             // keyword 才有意義；沒帶時明確回 422，不要悄悄退回其他排序。
-            'sort' => ['nullable', Rule::in(['relevance', 'distance', 'rating', 'popular', 'newest'])],
+            'sort' => ['nullable', Rule::in(['relevance', 'confidence', 'distance', 'rating', 'popular', 'newest'])],
             'per_page' => ['nullable', 'integer', 'between:1,100'],
             'cursor' => ['nullable', 'string'],
             DietCatalog::venueScopeParam() => ['nullable', 'string', Rule::in(DietCatalog::venueScopeKeys())],

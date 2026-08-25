@@ -112,6 +112,13 @@ class RestaurantRepository
                 $computedBindings[] = $lat;
             }
 
+            // 素食可信度排序（總 Prompt 第十一節）。用 correlated subquery 而不是 join：
+            // 沒有分數列的餐廳要當成 0 分排在最後，join 會直接把它們整批濾掉。
+            if ($sort === 'confidence') {
+                $computed[] = '(SELECT COALESCE(rcs.score, 0) FROM restaurant_confidence_scores rcs'
+                    .' WHERE rcs.restaurant_id = restaurants.id) as confidence';
+            }
+
             if ($hasRelevance) {
                 [$relevanceSql, $relevanceBindings] = KeywordSearch::relevanceExpression($terms);
                 $computed[] = "({$relevanceSql}) as relevance";
@@ -134,7 +141,9 @@ class RestaurantRepository
             $this->applySort($query, $sort, $hasCoords, $hasRelevance);
 
             // openingHours 一起載：卡片要顯示「營業中／已打烊」，逐筆補查就是 N+1。
-            $query->with(['dietTypes', 'features', 'openingHours']);
+            // confidenceScore 同理——素食可信度是這個產品的核心資訊，列表卡片就該看得到，
+            // 不是點進詳情才知道。
+            $query->with(['dietTypes', 'features', 'openingHours', 'confidenceScore']);
 
             return $query->cursorPaginate($perPage);
         });
@@ -175,6 +184,15 @@ class RestaurantRepository
 
         if (isset($filters['rating_min'])) {
             $query->where('rating', '>=', $filters['rating_min']);
+        }
+
+        // 素食可信度下限。沒有分數列的餐廳等同 0 分，因此任何 > 0 的門檻都會把它們
+        // 排除——這是對的：門檻的用途就是「只看有證據的店」。
+        if (isset($filters['confidence_min'])) {
+            $query->whereHas(
+                'confidenceScore',
+                fn (Builder $q) => $q->where('score', '>=', $filters['confidence_min']),
+            );
         }
 
         foreach (Feature::CODES as $code) {
@@ -243,6 +261,7 @@ class RestaurantRepository
                 ? $query->orderBy('distance')->orderBy('id')
                 : $query->orderBy('id'),
             'rating' => $query->orderByDesc('rating')->orderBy('id'),
+            'confidence' => $query->orderByDesc('confidence')->orderBy('id'),
             'popular' => $query->orderByDesc('rating_count')->orderBy('id'),
             'newest' => $query->orderByDesc('id'),
             default => $query->orderBy('id'),

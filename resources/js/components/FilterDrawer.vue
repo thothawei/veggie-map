@@ -4,13 +4,23 @@ import client from '@/api/client';
 import { FEATURE_CODES, type FeatureCode } from '@/lib/features';
 import { PRICE_LEVELS } from '@/composables/useFilterQuery';
 import { applyMenuItemDiets, applyVenueScopeMeta, venueScopeDefault, venueScopeMeta } from '@/lib/dietCatalog';
-import type { ApiSuccess, DietType, Feature, MenuItemDiet, RestaurantSearchParams, VenueScopeMeta } from '@/types';
+import type {
+    ApiSuccess,
+    ConfidenceFilter,
+    DietType,
+    Feature,
+    MenuItemDiet,
+    RestaurantSearchParams,
+    VenueScopeMeta,
+} from '@/types';
 
 const filters = defineModel<Partial<RestaurantSearchParams>>('filters', { required: true });
 
 const diets = ref<DietType[]>([]);
 const features = ref<Feature[]>([]);
 const scopeMeta = ref(venueScopeMeta());
+/** 門檻與標籤都來自後端 config/vegetarian.php，不在這裡決定「幾分算有查證」。 */
+const confidenceFilters = ref<ConfidenceFilter[]>([]);
 
 const WIDE_SCREEN = '(min-width: 768px)';
 
@@ -86,6 +96,7 @@ onMounted(async () => {
     const meta = dietsRes.data.meta?.venue_scope as VenueScopeMeta | undefined;
     applyVenueScopeMeta(meta);
     applyMenuItemDiets(dietsRes.data.meta?.menu_item_diets as MenuItemDiet[] | undefined);
+    confidenceFilters.value = (dietsRes.data.meta?.confidence_filters as ConfidenceFilter[] | undefined) ?? [];
     scopeMeta.value = venueScopeMeta();
 });
 
@@ -146,6 +157,19 @@ function togglePriceLevel(level: number) {
         }
 
         next.price_level = level;
+    });
+}
+
+/** 再點一次同一個門檻＝取消，跟價位晶片一致（單選）。 */
+function toggleConfidence(value: number) {
+    replaceFilters((next) => {
+        if (next.confidence_min === value) {
+            delete next.confidence_min;
+
+            return;
+        }
+
+        next.confidence_min = value;
     });
 }
 
@@ -246,6 +270,21 @@ function clearAll() {
                     @click="togglePriceLevel(level)"
                 >
                     {{ '$'.repeat(level) }}
+                </button>
+            </div>
+
+            <div v-if="confidenceFilters.length" class="group">
+                <span class="label">素食可信度</span>
+                <button
+                    v-for="option in confidenceFilters"
+                    :key="option.value"
+                    type="button"
+                    class="chip"
+                    :class="{ active: filters.confidence_min === option.value }"
+                    :aria-pressed="filters.confidence_min === option.value"
+                    @click="toggleConfidence(option.value)"
+                >
+                    {{ option.label }}
                 </button>
             </div>
 
