@@ -1379,3 +1379,56 @@ matchMedia 一律回 false，一次性判斷會誤判且永遠不會修正。改
 - `RestaurantListView`（列表頁）沒有城市概念，只有地圖首頁支援切換。
 - 地圖首次載入時磁磚會有一兩秒只渲染中央十字區域，之後才補齊。看起來像容器尺寸稍晚才
   確定，但因為會自己修正、且這個環境無法可靠重現，沒有動它。
+
+## 2026-08-25 — 補上前端元件測試（3 → 32 個）
+
+上一則點名的缺口：城市切換這種跨元件行為只能手動驗證，而我剛好證明了手動驗證在內嵌
+瀏覽器會卡在輸入層（座標映射不可靠、行動模擬下點擊變成選字）。補元件測試。
+
+裝 `@vue/test-utils` + `jsdom`，`vitest.config.ts` 加 `environment: 'jsdom'` 與
+`resources/js/test/setup.ts`（jsdom 沒有 `matchMedia`，FilterDrawer 掛載就會炸，
+stub 一個並提供 `setViewportMatches()` 讓測試切換寬窄螢幕）。
+
+**選 Playwright 還是元件測試？** Phase 10 判斷 Playwright 的 ROI 偏低，這次維持該判斷：
+真正會壞、而且手動驗不到的是「元件邏輯」（哪個城市 active、undefined key、距離門檻），
+不是「瀏覽器整合」。元件測試跑 1.4 秒、CI 已經在跑 `npm run test`，不用新增 CI 基礎設施。
+
+四個測試檔、32 個測試：
+
+- **`CitySwitcher.test.ts`（5）**：依國家分組、只有一個 active、**點擊送出 slug 而不是
+  label**（送 label 網址會變 `?city=東京`，重新整理就找不到）、未知 modelValue 不會炸、
+  用 `aria-pressed` 表達狀態而不是只有顏色。
+- **`FilterDrawer.test.ts`（8）**：窄螢幕收合／寬螢幕展開／手動選擇蓋過預設、**取消篩選
+  要 `delete` key 而不是留 undefined**（真的踩過的 bug）、徽章數字、清除鈕出現條件、
+  清除一次清光、飲食類型是單選。
+- **`RestaurantMap.test.ts`（5）**：mock 掉 leaflet，斷言**短距離用 `flyTo`、長距離改用
+  `setView`**——這就是造成台北切台南整張地圖空白的那個 bug 的防線；`jumpTo` 一律直接跳、
+  且帶的是各城市自己的 zoom（東京 12、台灣 13，寫死會讓一邊開場看錯範圍）。
+- **`HomeView.test.ts`（11）**：mock leaflet ＋ api client ＋ memory history router，測
+  網址優先、localStorage 備援、都沒有時用第一個、**未知 slug 退回第一個而不是留白**、
+  點擊只改網址、切換時用該城市 center/zoom 直接跳、記住最後選的城市、首次載入不多飛一次；
+  以及計數的 `100+`／實際筆數／空狀態三種分支。
+
+**反向驗證都做了**：拔掉 `flyTo` 的距離防護 → 2 條紅；拔掉 HomeView 的未知 slug fallback
+→ 1 條紅。確認不是永遠 PASS 的裝飾品。
+
+### 過程中的兩個修正
+
+**1）一個測試失敗，但查證後是測試寫法問題不是元件 bug。** 「清除會一次移除所有條件」
+一開始紅，但同一個測試裡「徽章消失」「無 active 晶片」都通過了——代表元件內部狀態確實
+清空了。原因是 `defineModel` 的整組替換靠 emit 回傳父層，而我的測試沒接 v-model；
+反觀就地改欄位那條路徑因為改到同一個物件，沒接線也看得到。修測試（真的接上
+`onUpdate:filters` 回寫），不是改元件。
+
+**2）假資料太簡陋反而測不到重點。** 用 `{ id: i }` 當餐廳讓 `renderMarkers` 炸在
+`rating.toFixed(1)`。API 一定會回 `rating`，所以是測試資料不真實；補成完整形狀的
+`fakeRestaurant()`。
+
+**驗證**：前端 32 個測試全綠（原本 3 個）、ESLint／vue-tsc／build 乾淨；後端 95 個測試
+仍全綠。CI 的 Frontend job 本來就有 `npm run test` 這步，不用改 workflow。
+
+**未完成 / 等待確認：**
+
+- `RestaurantListView`／`SearchBox`／`AdminView` 仍無元件測試，這次只覆蓋多城市相關路徑。
+- 仍然沒有跨頁面的 E2E（真瀏覽器點擊、真後端）。維持 Phase 10 的判斷：這個規模先不投入。
+- `RestaurantListView` 依舊沒有城市概念，只有地圖首頁支援切換。

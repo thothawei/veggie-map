@@ -13,4 +13,10 @@ export default defineConfig({
         },
     },
     plugins: [vue()],
+    test: {
+        // 元件測試需要 DOM；geo.test.ts 那種純函式測試在 jsdom 下一樣跑得動，
+        // 不用為了兩種測試分兩套環境。
+        environment: 'jsdom',
+        setupFiles: ['./resources/js/test/setup.ts'],
+    },
 });

@@ -238,10 +238,25 @@ geocode 有 cache），已補齊，見 progress.md 的詳細記錄與三步自�
       補空狀態與錯誤狀態、a11y（aria-pressed／aria-expanded／focus-visible）
 - [x] 修既有 bug：`filters.diet = undefined` 留下 key 導致篩選計數算錯，改用 `delete`
 
-未完成：點擊層級互動在內嵌瀏覽器無法可靠驗證（最後用 DOM `.click()` 驗邏輯）；
-FilterDrawer 的 media query 監聽「中途改尺寸自我補正」只有推理沒有實測（該環境不派送
-resize 事件）；`RestaurantListView` 尚無城市概念；前端仍無元件測試／E2E。
-細節見 progress.md。
+未完成：FilterDrawer 的 media query 監聽「中途改尺寸自我補正」只有推理沒有實測（該環境
+不派送 resize 事件）；`RestaurantListView` 尚無城市概念。細節見 progress.md。
+
+## 補做：前端元件測試（3 → 32 個）✅ 已完成 2026-08-25
+
+上一項點名的缺口。手動驗證在內嵌瀏覽器會卡在輸入層，改用元件測試守住邏輯。
+
+- [x] `@vue/test-utils` + `jsdom`，`resources/js/test/setup.ts` stub `matchMedia`
+- [x] `CitySwitcher.test.ts`（5）：分組、active、**送 slug 不送 label**、aria-pressed
+- [x] `FilterDrawer.test.ts`（8）：收合預設、**delete 而非 undefined**、徽章、清除
+- [x] `RestaurantMap.test.ts`（5）：**短距離 flyTo／長距離 setView** 的距離門檻，
+      也就是台北切台南破圖那個 bug 的防線
+- [x] `HomeView.test.ts`（11）：網址優先／localStorage 備援／未知 slug 不留白／
+      切換帶對 center+zoom／計數 100+ 與空狀態
+- [x] 反向驗證：拔距離防護 2 條紅、拔 slug fallback 1 條紅
+- [x] CI 的 Frontend job 本來就有 `npm run test`，不用改 workflow
+
+未完成：`RestaurantListView`／`SearchBox`／`AdminView` 仍無測試；仍無真瀏覽器 E2E
+（維持 Phase 10「這個規模 ROI 偏低」的判斷）。
 
 ## 現況：總體規劃全部 Phase（0～13＋8.5）＋ 已知技術債＋兩輪 gap analysis 全部完成
 

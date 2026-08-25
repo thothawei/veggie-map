@@ -1,0 +1,104 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mount } from '@vue/test-utils';
+import type { Restaurant } from '@/types';
+
+const mapStub = {
+    setView: vi.fn().mockReturnThis(),
+    flyTo: vi.fn().mockReturnThis(),
+    addLayer: vi.fn(),
+    on: vi.fn(),
+    remove: vi.fn(),
+    getCenter: vi.fn(() => ({ lat: 25.033, lng: 121.5654 })),
+    getBounds: vi.fn(() => ({
+        getSouth: () => 24.9,
+        getWest: () => 121.4,
+        getNorth: () => 25.1,
+        getEast: () => 121.7,
+    })),
+};
+
+const clusterStub = { clearLayers: vi.fn(), addLayer: vi.fn() };
+
+vi.mock('leaflet', () => ({
+    default: {
+        map: vi.fn(() => mapStub),
+        tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
+        markerClusterGroup: vi.fn(() => clusterStub),
+        marker: vi.fn(() => ({ bindPopup: vi.fn().mockReturnThis(), on: vi.fn() })),
+    },
+}));
+vi.mock('leaflet.markercluster', () => ({}));
+
+const RestaurantMap = (await import('./RestaurantMap.vue')).default;
+
+/**
+ * 掛載時 `L.map(...).setView(center, zoom)` 本來就會呼叫一次 setView，那是地圖初始化
+ * 不是視角切換。清掉初始化的呼叫紀錄，後面斷言的才是切換行為本身。
+ */
+function mountMap() {
+    const wrapper = mount(RestaurantMap, {
+        props: { restaurants: [] as Restaurant[], center: [25.033, 121.5654] as [number, number], zoom: 13 },
+    });
+
+    mapStub.setView.mockClear();
+    mapStub.flyTo.mockClear();
+
+    return wrapper;
+}
+
+describe('RestaurantMap 視角切換', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('短距離用 flyTo 做動畫', () => {
+        // 台北市中心 → 台北車站附近，約 2km。
+        const wrapper = mountMap();
+
+        (wrapper.vm as unknown as { flyTo: (a: number, b: number) => void }).flyTo(25.0478, 121.517);
+
+        expect(mapStub.flyTo).toHaveBeenCalledTimes(1);
+        expect(mapStub.setView).not.toHaveBeenCalled();
+    });
+
+    it('長距離改用 setView，不做飛行動畫', () => {
+        // Leaflet 的 flyTo 跨長距離會把 tile layer 的 transform 留在壞掉的狀態：
+        // 磁磚被排到容器外好幾千 px、畫面一片空白，而 marker 走另一條 pane 路徑所以
+        // 位置照樣正確。實測台北→台南（約 300km）會重現。
+        const wrapper = mountMap();
+
+        (wrapper.vm as unknown as { flyTo: (a: number, b: number) => void }).flyTo(22.9997, 120.227);
+
+        expect(mapStub.setView).toHaveBeenCalledTimes(1);
+        expect(mapStub.flyTo).not.toHaveBeenCalled();
+    });
+
+    it('跨國距離同樣不做動畫', () => {
+        const wrapper = mountMap();
+
+        (wrapper.vm as unknown as { flyTo: (a: number, b: number) => void }).flyTo(35.6762, 139.6503);
+
+        expect(mapStub.setView).toHaveBeenCalledTimes(1);
+        expect(mapStub.flyTo).not.toHaveBeenCalled();
+    });
+
+    it('jumpTo 一律直接跳，即使距離很近', () => {
+        // 城市切換走這條。近距離也不該animate——切換城市是換場景，不是平移。
+        const wrapper = mountMap();
+
+        (wrapper.vm as unknown as { jumpTo: (a: number, b: number, c: number) => void }).jumpTo(25.0478, 121.517, 13);
+
+        expect(mapStub.setView).toHaveBeenCalledWith([25.0478, 121.517], 13);
+        expect(mapStub.flyTo).not.toHaveBeenCalled();
+    });
+
+    it('jumpTo 會帶上該城市自己的 zoom，不是寫死的值', () => {
+        // 東京 23 区範圍大，用 12；台灣各市用 13。寫死會讓其中一邊一開場就看錯範圍。
+        const wrapper = mountMap();
+
+        (wrapper.vm as unknown as { jumpTo: (a: number, b: number, c: number) => void }).jumpTo(35.6762, 139.6503, 12);
+
+        expect(mapStub.setView).toHaveBeenCalledWith([35.6762, 139.6503], 12);
+    });
+});
