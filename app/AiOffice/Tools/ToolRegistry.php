@@ -32,8 +32,7 @@ class ToolRegistry
      * 把指定工具組底下已登記的動作，轉成 LLM 看得懂的定義。
      *
      * 工具組裡沒有任何已實作的動作時就是空陣列，不 throw——Agent 身上掛著一個
-     * 還沒實作的工具組（Phase 5 之前全部都是）不該讓整個任務跑不動，只是那次
-     * 對話裡沒有工具可用而已。
+     * 還沒實作的工具組不該讓整個任務跑不動，只是那次對話裡沒有工具可用而已。
      *
      * @param  list<string>  $toolsets
      * @return list<array<string, mixed>>

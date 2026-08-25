@@ -12,7 +12,10 @@ use App\AiOffice\Models\Task;
 use App\AiOffice\Policies\AgentPolicy;
 use App\AiOffice\Policies\ProjectPolicy;
 use App\AiOffice\Policies\TaskPolicy;
+use App\AiOffice\Tools\DockerEngine;
+use App\AiOffice\Tools\ToolRegistrar;
 use App\AiOffice\Tools\ToolRegistry;
+use App\AiOffice\Tools\UnavailableDockerEngine;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -57,9 +60,14 @@ class AiOfficeServiceProvider extends ServiceProvider
             return new Client(apiKey: $apiKey);
         });
 
-        // 工具登記處是單例：Phase 5 的五個工具會在這裡註冊，
-        // 測試也靠它換上假工具。目前是空的，Agent 那一輪就沒有工具可用。
-        $this->app->singleton(ToolRegistry::class);
+        $this->app->singleton(DockerEngine::class, UnavailableDockerEngine::class);
+
+        $this->app->singleton(ToolRegistry::class, function ($app) {
+            $registry = new ToolRegistry;
+            $app->make(ToolRegistrar::class)->register($registry);
+
+            return $registry;
+        });
     }
 
     public function boot(): void

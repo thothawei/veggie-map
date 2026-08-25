@@ -147,4 +147,117 @@ return [
         'retry_delay_seconds' => (int) env('AI_OFFICE_RETRY_DELAY', 10),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Tools（規格第 16～20、22 節）
+    |--------------------------------------------------------------------------
+    |
+    | 風險等級、白名單、禁止關鍵字全部放這裡。工具類別只負責執行與讀設定，
+    | 不寫死 `if ($cmd === 'rm -rf /')` 或 `if ($sql starts with SELECT)`。
+    |
+    */
+
+    'tools' => [
+        'max_output_bytes' => (int) env('AI_OFFICE_TOOL_MAX_OUTPUT', 32_000),
+
+        'file' => [
+            'max_read_bytes' => (int) env('AI_OFFICE_FILE_MAX_READ', 512_000),
+            'max_write_bytes' => (int) env('AI_OFFICE_FILE_MAX_WRITE', 1_048_576),
+            'max_search_results' => 50,
+            'actions' => [
+                'read_file' => ['risk' => 'low'],
+                'list_files' => ['risk' => 'low'],
+                'search_files' => ['risk' => 'low'],
+                'write_file' => ['risk' => 'medium'],
+            ],
+        ],
+
+        'git' => [
+            'protected_branches' => ['main', 'master'],
+            // Phase 5 還沒有沙箱內的 deploy key；關掉 SSH，避免用到 host 的 ~/.ssh。
+            'ssh_command' => env('AI_OFFICE_GIT_SSH_COMMAND', 'false'),
+            'actions' => [
+                'git_status' => ['risk' => 'low'],
+                'git_diff' => ['risk' => 'low'],
+                'git_log' => ['risk' => 'low'],
+                'git_branch' => ['risk' => 'low'],
+                'git_checkout' => ['risk' => 'medium'],
+                'git_add' => ['risk' => 'medium'],
+                'git_commit' => ['risk' => 'medium'],
+                'git_push' => ['risk' => 'high'],
+            ],
+        ],
+
+        'terminal' => [
+            'actions' => [
+                'execute_command' => ['risk' => 'medium'],
+            ],
+            // 指令必須完全等於某一項，或以其後接一個空白當前綴。
+            'allowlist' => [
+                'php artisan test',
+                'php artisan migrate',
+                'php artisan pint',
+                'phpunit',
+                'vendor/bin/pint',
+                'vendor/bin/phpstan',
+                'composer test',
+                'npm test',
+                'npm run build',
+                'ls',
+                'cat',
+                'head',
+                'tail',
+                'wc',
+                'echo',
+            ],
+            // 即使被加進 allowlist 也硬擋（規格第 18 節）。
+            'denylist_patterns' => [
+                '/rm\s+-rf\s+\//',
+                '/\bshutdown\b/i',
+                '/\breboot\b/i',
+                '/\bsudo\b/i',
+                '/\bmkfs\b/i',
+                '/\.ssh\b/',
+                '/id_rsa/',
+                '/docker\.sock/',
+                '/:\(\)\s*\{/',
+            ],
+            'denied_metacharacters' => [';', '|', '&', '`', '$(', "\n", "\r", '>', '<'],
+        ],
+
+        'docker' => [
+            'actions' => [
+                'docker_build' => ['risk' => 'medium'],
+                'docker_run' => ['risk' => 'medium'],
+                'docker_logs' => ['risk' => 'medium'],
+                'docker_stop' => ['risk' => 'medium'],
+            ],
+            // {id} 會被換成專案 id。Agent 只能動自己專案的 image／container。
+            'name_pattern' => '/^ai-office-project-{id}(-[a-z0-9][a-z0-9-]*)?$/',
+            'denied_substrings' => [
+                'docker.sock',
+                '--privileged',
+                'network=host',
+                '--pid=host',
+                '--network=host',
+                '/:/',
+                ':/:',
+            ],
+        ],
+
+        'database' => [
+            'actions' => [
+                'database_read' => ['risk' => 'low'],
+            ],
+            'allowed_environments' => ['local', 'testing'],
+            'allowed_prefixes' => ['select', 'explain', 'describe', 'desc'],
+            'denied_keywords' => [
+                'drop', 'truncate', 'delete', 'update', 'alter', 'insert',
+                'replace', 'grant', 'revoke', 'load', 'outfile', 'dumpfile',
+                'into', 'handler', 'lock', 'unlock', 'call', 'do',
+            ],
+            'max_rows' => 100,
+        ],
+    ],
+
 ];

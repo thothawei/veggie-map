@@ -322,7 +322,7 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
   資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
 
-目前進度：**Phase 4 完成**（規劃 → 建任務圖 → 指派 → 佇列執行 → 失敗重試，全程 MockProvider，HTTP 內不呼叫 LLM）。已可用的端點：
+目前進度：**Phase 5 完成**（五個 Tool 已掛上 Runtime；路徑／指令／SQL 都有硬邊界；沙箱未就緒時 Terminal／Docker 拒絕在 host 執行）。已可用的端點：
 
 | Method | Path | 說明 |
 |---|---|---|
@@ -356,6 +356,12 @@ JSON（角色白名單在 `config/ai_office.php` 的 `planner.assignable_roles`�
 就緒任務進 `ExecuteTaskJob` → `AgentRuntime`；失敗且未達 `max_retries` 進
 `RetryFailedTaskJob`，達上限寫 `TaskPermanentlyFailed` 活動通知 CEO Agent。Horizon 有獨立
 supervisor 吃這條佇列。
+
+**工具與邊界**（Phase 5）：File／Git／Terminal／Docker／Database 已登記，動作名稱與
+`agent_permissions.ability` 同一套。檔案路徑經 `WorkspaceGuard`（`realpath()`、擋 symlink
+與跨專案）；Terminal 走 `CommandAllowlist`（allowlist + denylist 硬擋 + 禁止 shell 中介字元）；
+SQL 只允許 config 裡的前綴。`AI_OFFICE_SANDBOX_ENABLED=true`（預設）時 Terminal／Docker
+**拒絕在 host 執行**，不退回本機跑。git push `main`／`master` 一律拒絕。
 
 ## Future Roadmap
 

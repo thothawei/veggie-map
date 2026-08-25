@@ -1,5 +1,36 @@
 # Progress Log
 
+## 2026-08-25 — AI Office Phase 5：五個 Tool + 路徑／指令／SQL 硬邊界
+
+**完成：**
+
+- `FileTool`／`GitTool`／`TerminalTool`／`DockerTool`／`DatabaseTool` 登記進
+  `ToolRegistry`，動作名稱與 `agent_permissions.ability` 同一套。風險等級讀
+  `config/ai_office.php` 的 `tools.*.actions.*.risk`。
+- `WorkspaceGuard`：`realpath()` 之後必須落在該專案 workspace。擋 `..`、絕對系統路徑、
+  空位元組、symlink 逃逸、跨 Project、非法 `workspace_path`。
+- `CommandAllowlist`：allowlist 前綴 + denylist regex 硬擋 + 禁止 `;` `|` `$()` 等
+  中介字元。denylist 即使被加進 allowlist 也贏。
+- `SqlReadGuard`：前綴白名單 + 關鍵字黑名單；多句 SQL 拒絕。production 不在
+  `allowed_environments` 裡。
+- `SandboxPolicy`：`SANDBOX_ENABLED=true`（預設）時 Terminal／Docker 拒絕在 host 執行。
+  Docker 預設引擎是 `UnavailableDockerEngine`，就算有人把沙箱關掉也不碰 host docker.sock。
+- `git_push` 受保護分支（預設 main／master）在跑 git 之前就拒絕。SSH 預設
+  `GIT_SSH_COMMAND=false`，避免用到 host 的 `~/.ssh`。
+
+**驗收：** 後端 314 測試 914 assertion 全綠；Pint／PHPStan 乾淨。前端這輪沒動。
+
+**反向：**
+
+- denylist 拿掉之後，allowlist 裡的 `rm -rf /` 會過——證明擋下來的是 denylist。
+- config 拿掉 `select` 前綴，`SELECT 1` 變非法。
+- `protected_branches` 改成 `develop`，push develop 會被拒。
+- Docker `name_pattern` 改成 `custom-{id}` 後，原本合法的 `ai-office-project-{id}` 被拒。
+
+**下一步：** Phase 6 — Approval / RiskLevel / human-in-the-loop。
+
+---
+
 ## 2026-08-25 — AI Office Phase 4：規劃／派工／佇列／重試
 
 **完成：**

@@ -8,7 +8,7 @@ use App\AiOffice\Models\TaskRun;
 
 /**
  * 工具執行時的處境：誰、為了哪個任務、第幾次執行。
- * Phase 5 的 WorkspaceGuard 會從這裡的 task->project 推出可存取的目錄邊界。
+ * WorkspaceGuard 從這裡的 task->project 推出可存取的目錄邊界。
  */
 readonly class ToolContext
 {

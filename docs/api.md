@@ -281,6 +281,23 @@ GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.
 `tries` 疊加。達 `max_retries` 後寫活動 `TaskPermanentlyFailed`，專案若沒有仍在進行的
 任務則標 `failed`。
 
+### 工具與安全邊界
+
+Agent 執行迴圈裡的工具呼叫先過 `PermissionGate`（預設拒絕），再進工具本體：
+
+- **FileTool**：讀寫／列出／搜尋都關在該專案 `workspace/{workspace_path}/`。`..`、
+  `/etc/passwd`、symlink 逃逸、讀別的專案，一律拒絕。
+- **GitTool**：cwd 是該專案 workspace，不是本 repo。`git_push` 碰到
+  `tools.git.protected_branches`（預設 `main`／`master`）直接拒絕。
+- **TerminalTool**：指令必須在 `tools.terminal.allowlist`；denylist 即使被加進
+  allowlist 也硬擋。`SANDBOX_ENABLED=true` 時拒絕執行，不退回 host。
+- **DockerTool**：名稱必須符合 `tools.docker.name_pattern`（含專案 id）；參數含
+  `docker.sock`／`--privileged` 等片段直接拒絕。沙箱未就緒同樣不呼叫引擎。
+- **DatabaseTool**：只允許 `allowed_prefixes`（SELECT／EXPLAIN／DESCRIBE）；
+  `allowed_environments` 預設不含 production。
+
+風險等級、白名單、禁止關鍵字都在 `config/ai_office.php` 的 `tools`，不寫死在工具類別裡。
+
 ### 任務相依是否滿足
 
 `dependencies_satisfied` 只在所有前置任務都是 `completed` 或 `approved` 時為 `true`。
