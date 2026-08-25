@@ -5,24 +5,39 @@
 素食 × 地圖 × 多條件搜尋 × 寵物友善 × 使用者回報 × 素食可信度的餐廳探索平台。這是一個以「展示中高階
 Backend Engineer 系統設計能力」為目標的作品專案，不是一個簡單 CRUD demo。
 
-現況：後端 API（Phase 0–8.5）與前端 MVP（Phase 9：地圖／搜尋／收藏／評論／Admin 審核）已完成
-並實測。詳細進度見 [docs/progress.md](docs/progress.md)，剩餘規劃見 [docs/todo.md](docs/todo.md)。
+現況：後端 API 與 Vue 前端已完成並實測（485 個後端測試、253 個前端測試全綠）。
+2026-08-26 補上一批**搜尋強化**：營業中篩選、關鍵字比對菜色與料理種類＋相關性排序、
+搜尋建議（自動完成）、素食可信度篩選／排序。詳細進度見
+[docs/progress.md](docs/progress.md)，剩餘規劃見 [docs/todo.md](docs/todo.md)。
 
 ## Features
 
 - **地理空間搜尋**：MySQL `POINT SRID 4326` + Spatial Index，兩段式查詢（Bounding Box 過濾 →
   `ST_Distance_Sphere` 精算距離），不把整張表撈出來在 PHP 算距離。
-- **多條件篩選**：keyword／city／district／diet（vegan/vegetarian/…）／price_level／rating_min／
-  pet_friendly／parking，搭配 cursor pagination。
+- **關鍵字搜尋**：比對店名、地址、行政區、**菜色名稱與料理種類**——素食使用者常打的
+  是「拉麵」「滷味」「泰式」，那些不是店名。多詞 AND、`%`／`_` 跳脫，並依相關性排序
+  （店名完全相同 > 開頭 > 包含 > 菜色 > 料理種類 > 地區 > 描述）。
+- **搜尋建議（自動完成）**：`GET /restaurants/suggest` 回三種型別——店名、料理種類、
+  行政區，各自對應不同的後續動作。料理種類只建議實際上有餐廳掛著的分類。
+- **營業中篩選**：OSM `opening_hours` 解析成可查詢的時段表，`open_now` 用 SQL 篩、
+  依**該店所在地的當地時間**判斷（台北與東京差一小時）。解析不了的寫法一律回
+  「營業時間未知」，不猜——把打烊的店標成營業中比留白更糟。
+- **多條件篩選**：city／district／diet／venue_scope（純素食店／素食友善）／price_level／
+  rating_min／**confidence_min**（素食可信度下限）／pet_friendly／parking… 搭配 cursor pagination。
 - **地址搜尋（Geocoding）**：使用者輸入地名/地標（例如「台中一中街」）轉經緯度，串接
   `GET /restaurants` 半徑搜尋，Redis cache 擋掉重複查詢。
 - **素食可信度系統**：`restaurant_verifications`（店家自主認領／菜單驗證／使用者確認／照片／
-  外部資料源／管理員確認六種類型，各自帶可調整權重）加總成 0–100 的 confidence score。
+  外部資料源／管理員確認六種類型，各自帶可調整權重）加總成 0–100 的 confidence score，
+  並且**可以拿來篩選與排序**（`confidence_min`、`sort=confidence`），不只是詳情頁的一個數字。
 - **使用者系統**：Sanctum Bearer Token 認證、收藏、評論（同一使用者對同一餐廳只留一筆
   active review，重新評論＝覆蓋並保留歷史）、店家問題回報。
-- **Admin 審核**：回報／評論的 approve／reject／hide 端點，Policy 限定 admin 角色。
+- **Admin 審核**：回報／評論的 approve／reject／hide，以及**重複餐廳審核**
+  （依「同名＋100m 內」分組，只提供保留／下架，刻意沒有合併——那會把一家真實存在的
+  店抹掉且不可逆）。Policy 限定 admin 角色。
 - **外部資料匯入**：`restaurants:sync` 從 OpenStreetMap Overpass API 匯入餐廳資料，Adapter Pattern
   可替換成其他資料源；同名＋距離 <100m 標記為 possible duplicate，不自動合併/刪除。
+  失敗處理是四層：timeout → retry → **circuit breaker**（狀態存 Redis，因為排程是
+  五個獨立的 artisan 程序）→ fallback。
 
 ## Architecture
 
@@ -119,7 +134,8 @@ ERD 見 [docs/database.md](docs/database.md#erd)。
 | Method | Path | 說明 | 認證 |
 |---|---|---|---|
 | GET | `/restaurants` | 列表＋多條件搜尋＋半徑搜尋 | 選用 |
-| GET | `/restaurants/{id}` | 詳情（含 diet types／features／menu／confidence score） | 選用 |
+| GET | `/restaurants/suggest?q=` | 搜尋建議：店名／料理種類／行政區 | 無 |
+| GET | `/restaurants/{idOrSlug}` | 詳情（含 diet types／features／menu／confidence score／營業時間） | 選用 |
 | GET | `/restaurants/{id}/reviews` | 評論列表 | 選用 |
 | POST | `/restaurants/{id}/favorite` | 加入收藏 | 必須 |
 | DELETE | `/restaurants/{id}/favorite` | 取消收藏 | 必須 |
@@ -131,11 +147,14 @@ ERD 見 [docs/database.md](docs/database.md#erd)。
 | POST | `/auth/logout` | 登出（撤銷 token） | 必須 |
 | GET | `/me` \| `/me/favorites` | 個人資料／收藏列表 | 必須 |
 | GET/POST | `/admin/reports`、`/admin/reviews` | Admin 審核回報／評論 | 必須（admin） |
+| GET/POST | `/admin/duplicates`、`/admin/restaurants/{id}/duplicate` | 重複餐廳審核（保留／下架） | 必須（admin） |
 
 範例：
 
 ```
 GET /api/v1/restaurants?latitude=24.1477&longitude=120.6736&radius=5&diet=vegan&pet_friendly=1
+GET /api/v1/restaurants?keyword=台中 拉麵&open_now=1&confidence_min=30
+GET /api/v1/restaurants/suggest?q=日式
 GET /api/v1/geocode?q=台中一中街
 ```
 
@@ -188,13 +207,18 @@ docker compose logs -f horizon   # 確認 queue worker 真的在跑、有沒有 
 docker compose exec app php artisan test
 ```
 
-206 個 Feature/Unit test、608 個 assertion（2026-08-25 實測），涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
+485 個 Feature/Unit test、1378 個 assertion（＋4 個需要 docker 的整合測試在容器內 skip；
+2026-08-26 實測），涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
 Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:sync` 冪等性與去重、
 `RestaurantRepository` bounding box 純數學、`ReviewService` 真實併發競態、
 `RuleBasedRecommendationService` 加權排序、search/detail cache 命中與失效、rate limiting
-429、`users:promote`、批次計算 Job 排程——不是只驗證回應內容，快取那組測試直接斷言重複
-請求的 DB query 數為 0；測試環境 `QUEUE_CONNECTION=sync`，Job 仍然同步跑完才斷言結果，
-不需要真的等 Horizon worker）。
+429、`users:promote`、批次計算 Job 排程、`opening_hours` 解析與 `open_now`（時間釘死，
+否則半夜跑會整批反過來）、關鍵字相關性排序、搜尋建議、外部 API 斷路器、重複審核——
+不是只驗證回應內容，快取那組測試直接斷言重複請求的 DB query 數為 0；測試環境
+`QUEUE_CONNECTION=sync`，Job 仍然同步跑完才斷言結果，不需要真的等 Horizon worker）。
+
+前端 253 個 Vitest 測試（`npx vitest run`），涵蓋地圖、篩選抽屜、搜尋建議的 debounce
+與競態、Admin 重複審核，以及「未知營業時間不能顯示成已打烊」這類產品規則。
 
 測試用 MySQL（非 sqlite in-memory）——schema 用了 `POINT`／`ST_Distance_Sphere`／`MBRContains`
 等 MySQL 專屬空間函式，sqlite 跑不起來，所以需要 `scripts/setup-test-db.sh` 先建立
@@ -262,14 +286,17 @@ Bounding Box，`MBRContains` 過濾出候選集合（能用到 Spatial Index）�
 
 - 密碼 hashing：Laravel 原生（不自行實作）。
 - 認證：Laravel Sanctum Bearer Token（API-only，未使用 SPA cookie 模式）。
-- 授權：Policy（`ReviewPolicy`／`RestaurantReportPolicy`），Admin 動作額外檢查 `role`。
+- 授權：Policy（`ReviewPolicy`／`RestaurantReportPolicy`／`RestaurantVerificationPolicy`／
+  `MenuItemPolicy`／`RestaurantPolicy`），Admin 動作額外檢查 `role`。
 - Rate Limiting：整個 `/api/v1/*` 60 次／分鐘，Redis-based（`AppServiceProvider` 的
   `RateLimiter::for('api', ...)`），依登入使用者 id 或 IP 分桶，超過回 429。
 - Mass assignment：所有 Model 明確宣告 `$fillable`。
 - API 錯誤格式統一經 `ApiExceptionRenderer`，不外洩 Laravel 預設例外堆疊訊息（production）。
 - `.env`／API Key 不進版控（`.gitignore` 已排除）。
-- 已知待處理：`composer audit` 的 `CVE-2026-48019`（email 驗證規則 CRLF injection），MVP 範圍
-  接受，正式升版前需處理，見 [docs/progress.md](docs/progress.md)。
+- `CVE-2026-48019`（Laravel 預設 `email` 規則的 CRLF injection）：**已緩解、未根治**。
+  所有吃 email 的 FormRequest 都掛 `App\Rules\SafeEmail` 擋控制字元——實測過預設規則
+  會放行 `"user\r\n"@example.com` 這種帶引號的 local part。`composer audit` 仍會報，
+  真正的修補要升到 Laravel 12.61.1+，屬於 major upgrade。
 
 ## Performance
 
@@ -279,6 +306,10 @@ Bounding Box，`MBRContains` 過濾出候選集合（能用到 Spatial Index）�
   `restaurant_confidence_scores.score`），不即時計算，由 Job 批次更新。
 
 ## Observability
+
+每個 API 回應都帶 `X-Response-Time-Ms`；超過門檻（預設 1000ms）的請求另外寫一筆
+warning log，記的是 route 樣板而不是完整網址（逐筆 id 聚合不起來），且不記
+query string（裡面有使用者的搜尋關鍵字與座標）。
 
 外部 API 呼叫（Overpass／Nominatim）記錄進 `external_api_logs`（provider／status／
 response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統一格式化並記進
