@@ -54,6 +54,12 @@ export interface MenuItem {
     is_available: boolean;
 }
 
+/** 料理種類標籤：`code` 供程式比對，`label` 給畫面顯示。 */
+export interface Cuisine {
+    code: string;
+    label: string;
+}
+
 export interface Restaurant {
     id: number;
     name: string;
@@ -76,7 +82,7 @@ export interface Restaurant {
     venue_kind?: string | null;
     venue_badge?: string | null;
     venue_summary?: string | null;
-    cuisines?: { code: string; label: string }[];
+    cuisines?: Cuisine[];
     features?: string[];
     menu_items?: MenuItem[];
     menu_empty_message?: string | null;

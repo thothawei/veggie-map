@@ -3,6 +3,8 @@
  * 與卡片（template）用同一份規則，不會兩邊各寫一套。
  */
 
+import type { Cuisine } from '@/types';
+
 /**
  * 後端 `distance_meters` 只在帶座標查詢時才有（見 RestaurantResource），
  * 所以呼叫端可能拿到 undefined——回 null 讓 template 用 v-if 決定要不要顯示。
@@ -53,7 +55,7 @@ export function formatAddress(restaurant: {
 }
 
 /** 地圖 popup 用的一行菜系；沒有就不顯示，不要印「undefined」。 */
-export function formatCuisines(cuisines?: { label: string }[] | null): string | null {
+export function formatCuisines(cuisines?: Cuisine[] | null): string | null {
     if (!cuisines?.length) {
         return null;
     }
