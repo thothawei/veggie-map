@@ -101,7 +101,9 @@ export interface User {
     id: number;
     name: string;
     email: string;
-    role: 'user' | 'admin';
+    // AI Office 的四個角色（admin／manager／developer／viewer）跟餐廳地圖的
+    // 一般消費者 `user` 共用同一個欄位，見 App\Models\User::AI_OFFICE_ROLES。
+    role: 'user' | 'admin' | 'manager' | 'developer' | 'viewer';
     created_at: string;
 }
 

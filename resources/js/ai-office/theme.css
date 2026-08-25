@@ -1,0 +1,32 @@
+/*
+ * AI Office 的配色（規格第 69 節）。刻意用 `.ai-office` 這一層 class 包住，
+ * 而不是掛在 :root：餐廳地圖是白底綠色的消費者介面，兩套配色共存於同一個 SPA，
+ * 全域覆蓋會把地圖也一起弄黑。
+ */
+.ai-office {
+    --ai-bg: #0b0f14;
+    --ai-surface: #111820;
+    --ai-border: #26313d;
+    --ai-muted: #8a97a6;
+
+    min-height: calc(100vh - 3rem);
+    padding: 1rem;
+    background: var(--ai-bg);
+    color: #e6edf3;
+}
+
+.ai-office a {
+    color: #7fd18f;
+}
+
+.ai-office h1 {
+    font-size: 1.35rem;
+    margin: 0 0 0.75rem;
+}
+
+.ai-office .panel {
+    padding: 0.75rem;
+    background: var(--ai-surface);
+    border: 1px solid var(--ai-border);
+    border-radius: 0.5rem;
+}

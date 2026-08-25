@@ -15,6 +15,11 @@ export const useAuthStore = defineStore('auth', {
     getters: {
         isAuthenticated: (state) => state.token !== null,
         isAdmin: (state) => state.user?.role === 'admin',
+        // AI Office 的入口條件跟後端 EnsureAiOfficeRole 一致：一般消費者 `user`
+        // 註冊過也看不到。user 還沒載入時回 false——寧可少顯示一個連結，
+        // 也不要先顯示再閃掉。
+        canAccessAiOffice: (state) => ['admin', 'manager', 'developer', 'viewer']
+            .includes(state.user?.role ?? ''),
     },
     actions: {
         async login(email: string, password: string) {

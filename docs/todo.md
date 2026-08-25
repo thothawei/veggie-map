@@ -21,7 +21,9 @@
 - [x] Phase 5 — 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist
 - [x] Phase 6 — Approval / RiskLevel / human-in-the-loop
 - [x] Phase 7 — Activity + SSE（事件流 REST／SSE 串流／一次性票／連線上限／狀態變動 observer，13 個測試）
-- [ ] Phase 8 — Vue Dashboard
+- [x] Phase 8 — Vue Dashboard（`resources/js/ai-office/`：CommandCenter／TaskBoard／TaskDetail／
+      AgentCard／ApprovalPanel／ActivityFeed＋SSE 訂閱，48 個前端測試）
+      — Usage／成本面板留到 Phase 10（後端還沒有對應端點）
 - [ ] Phase 9 — Pixel Office
 - [ ] Phase 10 — TokenUsage / Cost / AgentMemory / Agent 效能
 - [ ] Phase 11 — Docker Sandbox / GitHub Actions

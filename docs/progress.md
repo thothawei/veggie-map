@@ -2096,3 +2096,54 @@ PHP-FPM worker」，排隊等於同樣佔著 worker。每人預設 3 條，計�
 **沒有做的：** 前端還沒有任何東西訂閱這條串流（那是 Phase 8 的 Dashboard），
 所以只在測試環境驗證過，沒有在瀏覽器裡開過真的 `EventSource`。壓測（多少條連線會
 壓垮 PHP-FPM）也還沒做——上限值是保守猜測，不是量測結果。
+
+---
+
+## 2026-08-25 — AI Office Phase 8：Vue Dashboard（接上 Phase 7 的 SSE）
+
+Phase 7 把事件流開出來之後，沒有任何前端在讀它。這階段補上 `resources/js/ai-office/`：
+
+```
+ai-office/
+├── api/         projects / tasks / agents / approvals / events
+├── stores/      projects / tasks / agents / approvals（Pinia）
+├── composables/ useActivityStream（SSE 連線生命週期）
+├── components/  dashboard（CommandCenter, ActivityFeed, StatisticsPanel, ApprovalPanel）
+│                task（TaskBoard, TaskCard, TaskDetail）／agent（AgentList, AgentCard）
+└── views/       DashboardView / ProjectDetailView / AgentsView / ApprovalsView
+```
+
+路由掛在 `/ai-office/*`，`meta.requiresAiOffice` 對應後端的 `ai-office` 中介層；
+導覽列的入口只在 `auth.canAccessAiOffice` 為真時出現。配色照規格第 69 節
+（`#0B0F14`／`#111820`／`#26313D`），包在 `.ai-office` 這層 class 底下——掛在 `:root`
+會把白底綠色的餐廳地圖一起弄黑。
+
+### 三個實作決定
+
+**斷線重連前一定先用 REST 對帳。** SSE 只送連線期間的事件，斷線視窗裡的那些沒有人會補。
+`useActivityStream` 每次連線（含重連）都先打 `/activities?after_id=`，再開串流。
+反向驗證：把這段拿掉，7 個 composable 測試紅 3 個。
+
+**收到 `error` 就自己關掉重連，不靠瀏覽器的自動重連。** 票是一次性的，瀏覽器拿同一張票
+重連只會一路 401，而且它不會自己停——會變成穩定的錯誤迴圈。
+
+**事件只當觸發器，狀態一律重抓。** 收到 `Task*`／`Agent*` 事件時重打任務清單，而不是拿
+事件 payload 在前端套用新狀態。真相在後端，前端猜錯就會顯示一個資料庫裡根本不存在的狀態。
+
+還有一個測試逼出來的修正：換不到票而退回輪詢時，原本輪詢成功會把 `error` 清成 null，
+畫面就變成「輪詢中」卻不說為什麼。改成把降級原因單獨記著，只清「這次抓失敗」的訊息。
+
+### 驗證
+
+前端 140 → **188 個測試全綠**（48 個新測試），`vue-tsc`、ESLint、`npm run build` 都過。
+**反向驗證三項**：拿掉重連前的對帳 → 3 條紅；拿掉路由守衛 → 1 條紅；
+拿掉「收到事件就重抓」 → 1 條紅。
+
+**沒有做的：**
+
+- **還沒在真的瀏覽器裡開過這個面板**（本輪決定由使用者自己登入驗），所以「`EventSource`
+  在真實 nginx＋PHP-FPM 下會不會被緩衝住」只有後端送了 `X-Accel-Buffering: no` 這個
+  預防措施，沒有實測證據。
+- Usage／成本面板（規格第 44 節的元件清單有列）留到 Phase 10：後端還沒有 token 用量端點，
+  現在做只能寫死數字，那正是規格第 7／38／74 節禁止的事。
+- Pixel Office（Phase 9）還沒開始，目前是純資訊面板。

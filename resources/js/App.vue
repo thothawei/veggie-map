@@ -24,6 +24,7 @@ async function handleLogout() {
             <nav>
                 <RouterLink to="/restaurants">餐廳搜尋</RouterLink>
                 <!-- 消費者端是公開地圖：不需要帳號、收藏、評論。後台與 AI Office 仍走 /login。 -->
+                <RouterLink v-if="auth.canAccessAiOffice" to="/ai-office">AI Office</RouterLink>
                 <RouterLink v-if="auth.isAdmin" to="/admin">管理後台</RouterLink>
                 <button v-if="auth.isAuthenticated" type="button" class="link-button" @click="handleLogout">登出</button>
             </nav>
