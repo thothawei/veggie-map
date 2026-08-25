@@ -64,16 +64,33 @@ class ScheduleTest extends TestCase
         ));
     }
 
-    public function test_default_env_covers_taichung_with_only_and_tokyo_with_yes(): void
+    public function test_default_env_covers_four_taiwanese_cities_with_only_and_tokyo_with_yes(): void
     {
         // 涵蓋範圍與各自的收錄規則都是產品決定（2026-08-25），不是隨手填的值，所以鎖在
         // 測試裡——有人改動時要是有意識的決定。
         $this->assertSame(
             [
-                ['bbox' => '23.9500,120.4300,24.4500,121.4700', 'diet' => 'only'],
-                ['bbox' => '35.5300,139.5600,35.8200,139.9200', 'diet' => 'yes'],
+                ['bbox' => '24.9613,121.4570,25.2130,121.6663', 'diet' => 'only'],  // 台北市
+                ['bbox' => '23.9500,120.4300,24.4500,121.4700', 'diet' => 'only'],  // 台中市
+                ['bbox' => '22.4500,120.1500,23.3000,121.0600', 'diet' => 'only'],  // 高雄市
+                ['bbox' => '22.8500,120.0000,23.4500,120.7000', 'diet' => 'only'],  // 台南市
+                ['bbox' => '35.5300,139.5600,35.8200,139.9200', 'diet' => 'yes'],   // 東京 23 区
             ],
             config('services.sync_regions')
         );
+    }
+
+    public function test_only_tokyo_uses_the_relaxed_diet_rule(): void
+    {
+        $regions = collect(config('services.sync_regions'));
+
+        // 台灣四市一律 only、只有日本放寬成 yes。要是哪天有人順手把台灣某市改成 yes，
+        // 那個城市會混進「有素食選項的一般餐廳」，跟其他三市的收錄標準不一致。
+        $this->assertSame(
+            1,
+            $regions->where('diet', 'yes')->count(),
+            '目前只有東京該用 yes 規則'
+        );
+        $this->assertSame(4, $regions->where('diet', 'only')->count());
     }
 }
