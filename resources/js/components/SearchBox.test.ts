@@ -113,7 +113,7 @@ describe('SearchBox 自動完成', () => {
 
     it('選店名建議會發 restaurant-selected，不是關鍵字搜尋', async () => {
         get.mockResolvedValue(suggestPayload({
-            restaurants: [{ id: 7, name: '十方齋', city: '台中市', district: '西區' }],
+            restaurants: [{ id: 7, name: '十方齋', slug: 'shi-fang-zhai', address: '公益路 1 號', city: '台中市', district: '西區' }],
         }));
 
         const wrapper = mount(SearchBox);
@@ -155,5 +155,21 @@ describe('SearchBox 自動完成', () => {
         await typeAndSettle(wrapper, '日式');
 
         expect(wrapper.text()).not.toContain('找不到符合的地點');
+    });
+
+    it('沒有城市／行政區時退回地址，五筆同名的店才分得出來', async () => {
+        get.mockResolvedValue(suggestPayload({
+            restaurants: [
+                { id: 1, name: '素食', slug: 'a', address: '台北市中正區羅斯福路 1 號', city: null, district: null },
+                { id: 2, name: '素食', slug: 'b', address: null, city: null, district: null },
+            ],
+        }));
+
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '素食');
+
+        const hints = wrapper.findAll('.suggestion .hint').map((h) => h.text());
+        expect(hints[0]).toBe('台北市中正區羅斯福路 1 號');
+        expect(hints[1]).toBe('地址未提供');
     });
 });

@@ -90,4 +90,49 @@ class RestaurantSuggestTest extends TestCase
 
         $this->assertSame([], $data['restaurants']);
     }
+
+    /**
+     * OSM 匯入的餐廳有大量 city／district 是空的，光靠那兩欄，建議清單會出現
+     * 「五筆都叫素食、看不出差別」（2026-08-26 瀏覽器實測）。所以 address 也要回。
+     */
+    public function test_suggestion_carries_enough_to_tell_two_same_named_shops_apart(): void
+    {
+        Restaurant::factory()->create([
+            'name' => '素食',
+            'slug' => 'su-shi-a',
+            'address' => '台北市中正區羅斯福路 1 號',
+            'city' => '',
+            'district' => '',
+        ]);
+
+        $suggestion = $this->getJson('/api/v1/restaurants/suggest?q=素食')->json('data.restaurants.0');
+
+        $this->assertSame('台北市中正區羅斯福路 1 號', $suggestion['address']);
+        $this->assertSame('su-shi-a', $suggestion['slug']);
+        $this->assertNull($suggestion['city'], '空字串要正規化成 null，前端才能用 ?? 退回地址');
+    }
+
+    public function test_suggestions_that_can_say_where_they_are_come_first(): void
+    {
+        // 兩筆相關性一樣，但其中一筆連地址與城市都是空的（OSM 有一批這種資料），
+        // 在清單上只會顯示「素食 地址未提供」，對使用者沒有幫助。
+        $nameless = Restaurant::factory()->create([
+            'name' => '素食',
+            'address' => '',
+            'city' => '',
+            'district' => '',
+        ]);
+        $located = Restaurant::factory()->create([
+            'name' => '素食',
+            'address' => '台北市中正區羅斯福路 1 號',
+            'city' => '台北市',
+        ]);
+
+        $ids = array_column(
+            $this->getJson('/api/v1/restaurants/suggest?q=素食')->json('data.restaurants'),
+            'id',
+        );
+
+        $this->assertSame([$located->id, $nameless->id], $ids);
+    }
 }

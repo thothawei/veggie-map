@@ -135,6 +135,17 @@ function searchByKeyword() {
     emit('keyword-search', keyword);
 }
 
+/**
+ * 同名的素食店很多，清單上必須看得出差別。OSM 匯入的資料有大量 city／district
+ * 是空的（實測台北一批全空），所以退回地址；連地址都沒有就明說「地址未提供」，
+ * 而不是留一片空白讓五筆長得一模一樣。
+ */
+function suggestionHint(restaurant: SuggestedRestaurant): string {
+    const locality = [restaurant.city, restaurant.district].filter(Boolean).join(' ');
+
+    return locality || restaurant.address || '地址未提供';
+}
+
 function selectRestaurant(restaurant: SuggestedRestaurant) {
     showResults.value = false;
     emit('restaurant-selected', restaurant);
@@ -178,9 +189,7 @@ function select(place: GeocodedPlace) {
                 @mousedown.prevent="selectRestaurant(restaurant)"
             >
                 {{ restaurant.name }}
-                <span v-if="restaurant.district || restaurant.city" class="hint">
-                    {{ [restaurant.city, restaurant.district].filter(Boolean).join(' ') }}
-                </span>
+                <span class="hint">{{ suggestionHint(restaurant) }}</span>
             </li>
 
             <li

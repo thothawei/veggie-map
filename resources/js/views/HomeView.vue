@@ -178,11 +178,11 @@ function handleLocateFailed() {
 }
 
 function goToDetail(restaurant: Restaurant | SuggestedRestaurant) {
-    // slug 優先：網址看得懂是規劃第二十六節的目的。建議清單只回四個欄位、沒有
-    // slug，那就退回 id——後端兩種都收。
+    // slug 優先：網址看得懂是規劃第二十六節的目的。沒有 slug 就退回 id，
+    // 後端兩種都收。
     router.push({
         name: 'restaurant-detail',
-        params: { id: 'slug' in restaurant ? restaurant.slug : restaurant.id },
+        params: { id: restaurant.slug ?? restaurant.id },
     });
 }
 

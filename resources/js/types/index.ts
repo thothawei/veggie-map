@@ -121,6 +121,8 @@ export interface Restaurant {
 export interface SuggestedRestaurant {
     id: number;
     name: string;
+    slug: string;
+    address: string | null;
     city: string | null;
     district: string | null;
 }

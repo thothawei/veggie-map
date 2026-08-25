@@ -28,6 +28,15 @@ function emitBounds() {
     if (!map) return;
     const b = map.getBounds();
     const c = map.getCenter();
+
+    // 掛載當下容器可能還沒有寬高（實測首次渲染時 east === west），算出來的 bbox
+    // 是一條線。送出去後端會回 422，畫面閃一下「載入失敗」再自己修正——看起來
+    // 像壞掉，實際上只是還沒量到尺寸。退化的 bbox 直接不送，等 moveend 或
+    // invalidateSize 之後那次。
+    if (b.getEast() === b.getWest() || b.getNorth() === b.getSouth()) {
+        return;
+    }
+
     emit('bounds-changed', {
         minLat: b.getSouth(),
         minLng: b.getWest(),

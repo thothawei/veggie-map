@@ -28,7 +28,7 @@ class RestaurantSuggestionRepository
 
     /**
      * @return array{
-     *     restaurants: list<array{id: int, name: string, city: string|null, district: string|null}>,
+     *     restaurants: list<array{id: int, name: string, slug: string, address: string|null, city: string|null, district: string|null}>,
      *     cuisines: list<array{code: string, label: string}>,
      *     districts: list<array{city: string, district: string}>
      * }
@@ -57,7 +57,7 @@ class RestaurantSuggestionRepository
 
     /**
      * @param  list<string>  $terms
-     * @return list<array{id: int, name: string, city: string|null, district: string|null}>
+     * @return list<array{id: int, name: string, slug: string, address: string|null, city: string|null, district: string|null}>
      */
     private function restaurants(array $terms, ?string $city): array
     {
@@ -70,18 +70,28 @@ class RestaurantSuggestionRepository
             $query->where('city', $city);
         }
 
-        // 建議清單只需要這四個欄位。撈整列（含 description／location）在自動完成
+        // 建議清單只需要這幾個欄位。撈整列（含 description／location）在自動完成
         // 這種每打一個字就查一次的路徑上特別浪費。
+        //
+        // address 是必要的：OSM 匯入的餐廳有大量 city／district 是空的，光靠那兩欄
+        // 會出現「五筆都叫素食、看不出差別」的清單（2026-08-26 瀏覽器實測）。
+        // slug 則是為了讓選取後直接走得懂的網址。
         return $query
-            ->select(['id', 'name', 'city', 'district'])
+            ->select(['id', 'name', 'slug', 'address', 'city', 'district'])
             ->selectRaw("({$relevanceSql}) as relevance", $relevanceBindings)
             ->orderByDesc('relevance')
+            // 同分時，說得出在哪裡的排前面。OSM 有一批餐廳連地址與城市都是空的，
+            // 那幾筆在清單上只會顯示「素食 地址未提供」，五筆長得一模一樣、無從選起
+            // （2026-08-26 瀏覽器實測）。這不是排序偏好，是「哪一筆對使用者有用」。
+            ->orderByRaw("CASE WHEN COALESCE(restaurants.address, '') <> '' OR COALESCE(restaurants.city, '') <> '' THEN 1 ELSE 0 END DESC")
             ->orderBy('id')
             ->limit(self::LIMIT_PER_GROUP)
             ->get()
             ->map(fn (Restaurant $restaurant): array => [
                 'id' => $restaurant->id,
                 'name' => $restaurant->name,
+                'slug' => $restaurant->slug,
+                'address' => $restaurant->address ?: null,
                 'city' => $restaurant->city ?: null,
                 'district' => $restaurant->district ?: null,
             ])

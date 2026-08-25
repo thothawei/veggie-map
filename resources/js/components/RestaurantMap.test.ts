@@ -9,7 +9,7 @@ const mapStub = {
     on: vi.fn(),
     remove: vi.fn(),
     getCenter: vi.fn(() => ({ lat: 25.033, lng: 121.5654 })),
-    getBounds: vi.fn(() => ({
+    getBounds: vi.fn((): { getSouth: () => number; getWest: () => number; getNorth: () => number; getEast: () => number } => ({
         getSouth: () => 24.9,
         getWest: () => 121.4,
         getNorth: () => 25.1,
@@ -251,5 +251,40 @@ describe('RestaurantMap popup', () => {
         const html = String(bindPopup.mock.calls[0][0]);
         expect(html).toContain('素食友善');
         expect(html).toContain('菜單有素食（無肉）選項');
+    });
+});
+
+describe('RestaurantMap bounds 事件', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mapStub.getBounds.mockReturnValue({
+            getSouth: () => 24.9,
+            getWest: () => 121.4,
+            getNorth: () => 25.1,
+            getEast: () => 121.7,
+        });
+    });
+
+    it('掛載後送出目前的 bbox', () => {
+        const wrapper = mountMap();
+
+        expect(wrapper.emitted('bounds-changed')).toHaveLength(1);
+    });
+
+    /**
+     * 2026-08-26 瀏覽器實測：首次渲染時容器還沒量到寬度，east === west，
+     * 算出來的 bbox 是一條線，後端回 422，畫面閃一下「載入失敗」。
+     */
+    it('容器還沒有寬度時不送退化的 bbox', () => {
+        mapStub.getBounds.mockReturnValue({
+            getSouth: () => 25.0,
+            getWest: () => 121.56,
+            getNorth: () => 25.06,
+            getEast: () => 121.56,
+        });
+
+        const wrapper = mountMap();
+
+        expect(wrapper.emitted('bounds-changed')).toBeUndefined();
     });
 });
