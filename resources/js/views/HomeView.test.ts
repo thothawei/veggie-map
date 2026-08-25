@@ -54,6 +54,7 @@ const mapStub = {
     remove: vi.fn(),
     getCenter: vi.fn(() => ({ lat: 25.033, lng: 121.5654 })),
     getBounds: vi.fn(() => ({ getSouth: () => 24.9, getWest: () => 121.4, getNorth: () => 25.1, getEast: () => 121.7 })),
+    fitBounds: vi.fn(),
 };
 
 vi.mock('leaflet', () => ({
@@ -61,6 +62,7 @@ vi.mock('leaflet', () => ({
         map: vi.fn(() => mapStub),
         tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
         markerClusterGroup: vi.fn(() => ({ clearLayers: vi.fn(), addLayer: vi.fn() })),
+        latLngBounds: vi.fn((points: unknown) => points),
         marker: vi.fn(() => ({ bindPopup: vi.fn().mockReturnThis(), on: vi.fn() })),
     },
 }));
@@ -312,5 +314,59 @@ describe('HomeView 推薦卡片的距離與地址', () => {
         const { wrapper } = await mountHome('/?city=taipei');
 
         expect(wrapper.find('.card .cuisines').text()).toBe('日式料理、泰式料理');
+    });
+});
+
+describe('HomeView 關鍵字搜尋', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        restaurantsPayload = { data: [] };
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('網址帶 keyword 時會送給 API，並改用相關性排序', async () => {
+        await mountHome('/?city=taipei&keyword=拉麵');
+
+        const call = restaurantCalls[restaurantCalls.length - 1];
+        expect(call.keyword).toBe('拉麵');
+        expect(call.sort).toBe('relevance');
+    });
+
+    it('沒有 keyword 時維持距離排序，也不送空字串', async () => {
+        await mountHome('/?city=taipei');
+
+        const call = restaurantCalls[restaurantCalls.length - 1];
+        expect(call.sort).toBe('distance');
+        expect(call.keyword).toBeUndefined();
+    });
+
+    it('SearchBox 發出 keyword-search 會寫進網址', async () => {
+        const { wrapper, router } = await mountHome('/?city=taipei');
+
+        wrapper.findComponent({ name: 'SearchBox' }).vm.$emit('keyword-search', '滷味');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.keyword).toBe('滷味');
+    });
+
+    it('關鍵字有結果時把地圖收到那些店身上', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1), fakeRestaurant(2)] };
+
+        await mountHome('/?city=taipei&keyword=拉麵');
+
+        expect(mapStub.fitBounds).toHaveBeenCalled();
+    });
+
+    it('關鍵字沒有結果時不動地圖視角，讓空狀態說明原因', async () => {
+        restaurantsPayload = { data: [] };
+
+        const { wrapper } = await mountHome('/?city=taipei&keyword=不存在的菜');
+
+        expect(mapStub.fitBounds).not.toHaveBeenCalled();
+        expect(wrapper.text()).toContain('沒有符合「不存在的菜」的餐廳');
     });
 });

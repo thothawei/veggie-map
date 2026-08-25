@@ -6,6 +6,7 @@ import type { ApiSuccess, GeocodedPlace } from '@/types';
 
 const emit = defineEmits<{
     (e: 'place-selected', place: GeocodedPlace): void;
+    (e: 'keyword-search', keyword: string): void;
 }>();
 
 const query = ref('');
@@ -15,24 +16,35 @@ const showResults = ref(false);
 const error = ref<string | null>(null);
 
 async function search() {
-    if (query.value.trim().length < 2) {
+    const q = query.value.trim();
+
+    if (q === '') {
         results.value = [];
         showResults.value = false;
         error.value = null;
+
+        return;
+    }
+
+    // 先把候選清單打開：就算 geocode 失敗或太短，使用者仍然看得到「搜尋餐廳」
+    // 那一項。舊版在這裡直接 return，打「麵」按 Enter 完全沒有反應。
+    showResults.value = true;
+    error.value = null;
+
+    if (q.length < 2) {
+        results.value = [];
+
         return;
     }
 
     loading.value = true;
-    error.value = null;
     try {
         const response = await client.get<ApiSuccess<GeocodedPlace[]>>('/geocode', {
-            params: { q: query.value.trim() },
+            params: { q },
         });
         results.value = response.data.data;
-        showResults.value = true;
     } catch (e: unknown) {
         results.value = [];
-        showResults.value = false;
         error.value = extractApiErrorMessage(e, '搜尋地點失敗，請再試一次');
     } finally {
         loading.value = false;
@@ -43,6 +55,22 @@ function handleBlur() {
     window.setTimeout(() => {
         showResults.value = false;
     }, 150);
+}
+
+/**
+ * 「拉麵」「滷味」「日式」這類詞在 Nominatim 是查不到地點的，先前打進來只會得到
+ * 「找不到符合的地點」——明明後端支援菜色／料理種類搜尋，使用者卻走不到。
+ * 所以候選清單永遠先放一個「搜尋餐廳」，地點結果排在它後面。
+ */
+function searchByKeyword() {
+    const keyword = query.value.trim();
+
+    if (keyword === '') {
+        return;
+    }
+
+    showResults.value = false;
+    emit('keyword-search', keyword);
 }
 
 function select(place: GeocodedPlace) {
@@ -57,18 +85,22 @@ function select(place: GeocodedPlace) {
         <input
             v-model="query"
             type="search"
-            placeholder="搜尋地點，例如「台中一中街」"
+            placeholder="搜尋地點或餐廳，例如「台中一中街」「拉麵」"
             @keyup.enter="search"
+            @focus="showResults = query.trim().length > 0"
             @blur="handleBlur"
         />
         <button type="button" :disabled="loading" @click="search">{{ loading ? '搜尋中…' : '搜尋' }}</button>
 
-        <ul v-if="showResults && results.length" class="results">
+        <ul v-if="showResults" class="results">
+            <li class="keyword-option" @mousedown.prevent="searchByKeyword">
+                搜尋餐廳「{{ query.trim() }}」（店名、菜色、料理種類）
+            </li>
             <li v-for="place in results" :key="place.display_name" @mousedown.prevent="select(place)">
                 {{ place.display_name }}
             </li>
+            <li v-if="!loading && results.length === 0" class="empty-item">找不到符合的地點</li>
         </ul>
-        <p v-else-if="showResults && !loading" class="empty">找不到符合的地點</p>
         <p v-if="error" class="empty" role="alert">{{ error }}</p>
     </div>
 </template>
@@ -126,6 +158,22 @@ button:disabled {
 
 .results li:hover {
     background: #f0fff4;
+}
+
+.results .keyword-option {
+    font-weight: 600;
+    color: #2f855a;
+    border-bottom: 1px solid #edf2f7;
+}
+
+/* 不是選項，只是說明，所以不給 hover 也不給游標。 */
+.results .empty-item {
+    color: #718096;
+    cursor: default;
+}
+
+.results .empty-item:hover {
+    background: none;
 }
 
 .empty {

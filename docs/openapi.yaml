@@ -38,6 +38,10 @@ paths:
       parameters:
         - name: keyword
           in: query
+          description: >
+            比對店名、地址、城市、行政區、描述、菜色名稱與料理種類標籤。
+            空白／逗號分隔的多個詞是 AND；% 與 _ 會被跳脫。
+            帶 keyword 時預設排序是 relevance。
           schema: { type: string, maxLength: 255 }
         - name: latitude
           in: query
@@ -111,7 +115,10 @@ paths:
           schema: { type: boolean }
         - name: sort
           in: query
-          schema: { type: string, enum: [distance, rating, popular, newest] }
+          description: >
+            relevance 需要 keyword（否則 422），distance 需要 latitude+longitude。
+            預設：有 keyword → relevance；有座標 → distance；其餘 newest。
+          schema: { type: string, enum: [relevance, distance, rating, popular, newest] }
         - name: per_page
           in: query
           description: 預設 20，上限 100

@@ -380,7 +380,7 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 ## 2026-08-26 搜尋強化批次（依使用者指示：不做會員／評分評論，集中在搜尋）
 
 - [x] 營業時間／`open_now`（見下方 P1 該項）
-- [ ] 關鍵字搜尋強化（多詞、料理種類／菜色、相關性排序）
+- [x] 關鍵字搜尋強化（多詞、料理種類／菜色、相關性排序）✅ 2026-08-26
 - [ ] 列表 API `select()` 收欄位
 - [ ] External API circuit breaker
 - [ ] `possible_duplicate` Admin 審核入口

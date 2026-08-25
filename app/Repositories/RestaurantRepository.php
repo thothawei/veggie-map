@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Models\Feature;
 use App\Models\Restaurant;
+use App\Repositories\Search\KeywordSearch;
 use App\Support\CityCatalog;
 use App\Support\DietCatalog;
 use Carbon\CarbonImmutable;
@@ -70,44 +71,67 @@ class RestaurantRepository
 
         return Cache::tags(['restaurants'])->remember($cacheKey, 300, function () use ($filters) {
             $hasCoords = isset($filters['latitude'], $filters['longitude']);
-            $sort = $filters['sort'] ?? ($hasCoords ? 'distance' : 'newest');
+            // 預設排序：有打關鍵字就以相關性優先——使用者輸入具體字詞時，想要的是
+            // 「最符合的」而不是「最近的」。相關性同分時仍然依距離排（見 applySort）。
+            $sort = $filters['sort'] ?? match (true) {
+                ! empty($filters['keyword']) => 'relevance',
+                $hasCoords => 'distance',
+                default => 'newest',
+            };
             $perPage = min((int) ($filters['per_page'] ?? 20), 100);
 
             $corners = isset($filters['bbox']) ? $this->parseBbox((string) $filters['bbox']) : null;
 
+            $terms = ! empty($filters['keyword']) ? KeywordSearch::terms((string) $filters['keyword']) : [];
+            $hasRelevance = $terms !== [];
+
+            $lat = (float) ($filters['latitude'] ?? 0);
+            $lng = (float) ($filters['longitude'] ?? 0);
+            $radiusKm = (float) ($filters['radius'] ?? 5);
+
+            $inner = $this->baseQuery($filters, $terms);
+
             if ($hasCoords || $corners !== null) {
-                $lat = (float) ($filters['latitude'] ?? 0);
-                $lng = (float) ($filters['longitude'] ?? 0);
-                $radiusKm = (float) ($filters['radius'] ?? 5);
-
                 // bbox 優先：明確給定的矩形就是邊界本身，不需要再從半徑推一個出來。
-                $inner = $this->baseQuery($filters)
-                    ->whereRaw('MBRContains(ST_SRID(ST_GeomFromText(?), 4326), location)', [
-                        $corners !== null
-                            ? $this->polygonFromCorners(...$corners)
-                            : $this->boundingBoxPolygon($lat, $lng, $radiusKm),
-                    ]);
-
-                if (! $hasCoords) {
-                    // 沒有中心點就算不出距離，也就不需要外層那圈 fromSub。
-                    $query = $inner;
-                } else {
-                    $inner->selectRaw('restaurants.*, ST_Distance_Sphere(location, ST_SRID(POINT(?, ?), 4326)) as distance', [
-                        $lng, $lat,
-                    ]);
-
-                    $query = Restaurant::query()->fromSub($inner, 'restaurants');
-
-                    // 帶 bbox 時邊界已經由矩形決定，再套半徑會把矩形四角切掉。
-                    if ($corners === null) {
-                        $query->where('distance', '<=', $radiusKm * 1000);
-                    }
-                }
-            } else {
-                $query = $this->baseQuery($filters);
+                $inner->whereRaw('MBRContains(ST_SRID(ST_GeomFromText(?), 4326), location)', [
+                    $corners !== null
+                        ? $this->polygonFromCorners(...$corners)
+                        : $this->boundingBoxPolygon($lat, $lng, $radiusKm),
+                ]);
             }
 
-            $this->applySort($query, $sort, $hasCoords);
+            // distance 與 relevance 都是 SELECT 出來的計算欄位，MySQL 不允許在同一層
+            // WHERE／ORDER BY 直接引用 SELECT 別名，所以有任何一個就包一層 fromSub。
+            // bindings 的順序必須跟 SQL 字串裡 `?` 出現的順序一致（distance 在前）。
+            $computed = [];
+            $computedBindings = [];
+
+            if ($hasCoords) {
+                $computed[] = 'ST_Distance_Sphere(location, ST_SRID(POINT(?, ?), 4326)) as distance';
+                $computedBindings[] = $lng;
+                $computedBindings[] = $lat;
+            }
+
+            if ($hasRelevance) {
+                [$relevanceSql, $relevanceBindings] = KeywordSearch::relevanceExpression($terms);
+                $computed[] = "({$relevanceSql}) as relevance";
+                $computedBindings = [...$computedBindings, ...$relevanceBindings];
+            }
+
+            if ($computed === []) {
+                $query = $inner;
+            } else {
+                $inner->selectRaw('restaurants.*, '.implode(', ', $computed), $computedBindings);
+
+                $query = Restaurant::query()->fromSub($inner, 'restaurants');
+
+                // 帶 bbox 時邊界已經由矩形決定，再套半徑會把矩形四角切掉。
+                if ($hasCoords && $corners === null) {
+                    $query->where('distance', '<=', $radiusKm * 1000);
+                }
+            }
+
+            $this->applySort($query, $sort, $hasCoords, $hasRelevance);
 
             // openingHours 一起載：卡片要顯示「營業中／已打烊」，逐筆補查就是 N+1。
             $query->with(['dietTypes', 'features', 'openingHours']);
@@ -116,16 +140,15 @@ class RestaurantRepository
         });
     }
 
-    private function baseQuery(array $filters): Builder
+    /**
+     * @param  list<string>  $terms  已斷詞的關鍵字（見 KeywordSearch::terms）
+     */
+    private function baseQuery(array $filters, array $terms = []): Builder
     {
         $query = Restaurant::query()->where('status', 'active');
 
-        if (! empty($filters['keyword'])) {
-            $keyword = $filters['keyword'];
-            $query->where(function (Builder $q) use ($keyword) {
-                $q->where('name', 'like', "%{$keyword}%")
-                    ->orWhere('address', 'like', "%{$keyword}%");
-            });
+        if ($terms !== []) {
+            KeywordSearch::applyTo($query, $terms);
         }
 
         if (! empty($filters['city'])) {
@@ -206,9 +229,16 @@ class RestaurantRepository
         });
     }
 
-    private function applySort(Builder $query, string $sort, bool $hasCoords): void
+    private function applySort(Builder $query, string $sort, bool $hasCoords, bool $hasRelevance = false): void
     {
         match ($sort) {
+            // 相關性同分（例如兩家店都只是地址命中）就退回距離／id，否則同分的
+            // 順序會由 MySQL 決定，翻頁時同一家店可能出現兩次或消失。
+            'relevance' => $hasRelevance
+                ? ($hasCoords
+                    ? $query->orderByDesc('relevance')->orderBy('distance')->orderBy('id')
+                    : $query->orderByDesc('relevance')->orderBy('id'))
+                : ($hasCoords ? $query->orderBy('distance')->orderBy('id') : $query->orderBy('id')),
             'distance' => $hasCoords
                 ? $query->orderBy('distance')->orderBy('id')
                 : $query->orderBy('id'),

@@ -63,7 +63,9 @@ async function search(reset = true) {
             params: {
                 keyword: committedKeyword.value || undefined,
                 bbox: bbox.value,
-                sort: 'newest',
+                // 有關鍵字就交給後端的相關性排序（店名 > 菜色／料理 > 地區），
+                // 寫死 newest 的話，最符合的那家店可能排在第 40 名。
+                sort: committedKeyword.value ? 'relevance' : 'newest',
                 per_page: 20,
                 cursor: reset ? undefined : (nextCursor.value ?? undefined),
                 ...apiFilterParams(filters.value),
@@ -174,7 +176,7 @@ watch(committedKeyword, (value) => {
             <input
                 v-model="keywordDraft"
                 type="search"
-                placeholder="搜尋餐廳名稱（跨全部城市）"
+                placeholder="搜尋店名、菜色、料理種類（跨全部城市）"
                 @keyup.enter="submitSearch"
             />
             <button type="button" @click="submitSearch">搜尋</button>

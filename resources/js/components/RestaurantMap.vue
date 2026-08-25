@@ -87,6 +87,21 @@ defineExpose({
 
         map.flyTo([lat, lng], zoom);
     },
+    /**
+     * 關鍵字搜尋用：把視角收到這批餐廳的範圍。只有一筆時 fitBounds 會縮到最大倍率，
+     * 所以單點改用 flyTo 的行為（zoom 16）——不然畫面會變成一片建築物看不出在哪。
+     */
+    fitToRestaurants(points: Array<[number, number]>) {
+        if (!map || points.length === 0) return;
+
+        if (points.length === 1) {
+            map.setView(points[0], 16);
+
+            return;
+        }
+
+        map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 });
+    },
     /** 城市切換用：一律直接跳，不做動畫。 */
     jumpTo(lat: number, lng: number, zoom: number) {
         map?.setView([lat, lng], zoom);

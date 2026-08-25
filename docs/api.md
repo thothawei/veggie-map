@@ -76,6 +76,22 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 （文案來自 `config/diet.php` 的 `copy`，不是前端寫死）。有任何 exclusive diet 就是
 純素食店；否則有 friendly diet 就是素食友善。
 
+### 關鍵字搜尋
+
+`keyword` 比對的欄位：**店名、地址、城市、行政區、描述、菜色名稱、料理種類標籤**。
+之所以不只比店名——素食使用者常用的搜尋詞是「拉麵」「滷味」「泰式」，那些是菜色與
+料理種類。
+
+- **多詞是 AND**：`keyword=台中 拉麵` 兩個條件都要命中；空白、`,`、`，`、`、` 都可分隔。
+- **長度門檻**（`config/veggiemap.php`）只用來砍掉多詞查詢裡的雜訊詞；全部被砍光時
+  退回用原字串當單一詞，不會變成「回傳全部餐廳」。
+- **`%`／`_` 會被跳脫**，`keyword=100%` 不會退化成萬用字元查詢。
+- **`sort=relevance`**：店名完全相同 > 店名開頭 > 店名包含 > 菜色 > 料理種類 >
+  地區 > 描述（權重見 `App\Repositories\Search\KeywordSearch`）。同分時依距離、
+  再依 id，避免翻頁時同一家店重複出現或消失。
+- 帶 `keyword` 時**預設就是 `relevance`**；沒帶時維持原本的 `distance`／`newest`。
+  `sort=relevance` 沒帶 `keyword` 會回 422，不會悄悄退回其他排序。
+
 ### 營業時間
 
 列表與詳情都會帶 `open_status`（`open`／`closed`／`unknown` 三態）、`open_now`

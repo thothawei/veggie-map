@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import client from '@/api/client';
 import RestaurantMap from '@/components/RestaurantMap.vue';
 import SearchBox from '@/components/SearchBox.vue';
@@ -13,6 +13,14 @@ import { formatBbox } from '@/lib/geo';
 import type { ApiSuccess, GeocodedPlace, Restaurant } from '@/types';
 
 const router = useRouter();
+const route = useRoute();
+
+/**
+ * 關鍵字跟篩選一樣以網址為真相來源，重新整理與分享連結才留得住
+ * （`/?keyword=拉麵`）。後端會比對店名、菜色、料理種類與地區，見
+ * `App\Repositories\Search\KeywordSearch`。
+ */
+const keyword = computed(() => (typeof route.query.keyword === 'string' ? route.query.keyword : ''));
 
 // 地圖一定得看著某個地方，所以退回清單第一個城市，並記住上次選的。
 const { cities, loading: citiesLoading, loadFailed: citiesLoadFailed, activeCity, selectCity } = useCities({
@@ -38,6 +46,14 @@ let currentBounds: { minLat: number; minLng: number; maxLat: number; maxLng: num
  */
 let requestSeq = 0;
 
+/**
+ * 已經為哪個關鍵字調整過視角。用「值變了才收視角」而不是「每次載入都收」：
+ * 載入是 moveend 觸發的，每次都 fitBounds 會再觸發一次 moveend，變成無限迴圈。
+ * 記成 null 而不是 boolean，是為了讓「分享連結進來時關鍵字已經在網址上」這條
+ * 路徑也會收一次視角——那是使用者最需要它的時候。
+ */
+let lastFittedKeyword: string | null = null;
+
 async function loadByBounds() {
     if (!currentBounds) return;
 
@@ -59,7 +75,10 @@ async function loadByBounds() {
                     bbox,
                     latitude: midLat,
                     longitude: midLng,
-                    sort: 'distance',
+                    // 有關鍵字時交給後端的相關性排序（店名 > 菜色／料理 > 地區），
+                    // 同分才看距離；沒關鍵字維持純距離。
+                    sort: keyword.value ? 'relevance' : 'distance',
+                    keyword: keyword.value || undefined,
                     per_page: 100,
                     ...filterParams,
                 },
@@ -84,6 +103,7 @@ async function loadByBounds() {
             restaurants.value = restaurantsResult.value.data.data;
             hasMore.value = Boolean(restaurantsResult.value.data.meta?.next_cursor);
             loadFailed.value = false;
+            fitToKeywordResults();
         } else {
             loadFailed.value = true;
             restaurants.value = [];
@@ -106,6 +126,25 @@ async function loadByBounds() {
     }
 }
 
+/**
+ * 命中的店可能不在目前視野內。有結果就把地圖收到它們身上；沒有結果就不動視角，
+ * 讓空狀態說明「這個範圍沒有符合的店」，而不是把使用者丟到不知道哪裡。
+ */
+function fitToKeywordResults() {
+    if (!keyword.value || keyword.value === lastFittedKeyword) {
+        return;
+    }
+
+    if (restaurants.value.length === 0) {
+        return;
+    }
+
+    lastFittedKeyword = keyword.value;
+    mapRef.value?.fitToRestaurants(
+        restaurants.value.map((restaurant): [number, number] => [restaurant.latitude, restaurant.longitude]),
+    );
+}
+
 function handleBoundsChanged(bounds: { minLat: number; minLng: number; maxLat: number; maxLng: number }) {
     currentBounds = bounds;
     loadByBounds();
@@ -113,6 +152,20 @@ function handleBoundsChanged(bounds: { minLat: number; minLng: number; maxLat: n
 
 function handlePlaceSelected(place: GeocodedPlace) {
     mapRef.value?.flyTo(place.latitude, place.longitude);
+}
+
+/**
+ * 「拉麵」這種詞 geocode 查不到地點，但後端搜尋得到。寫進網址後由 watch 觸發重查，
+ * 再把地圖視角收到命中的餐廳上——否則使用者搜完還要自己把地圖拖到對的地方。
+ */
+async function handleKeywordSearch(value: string) {
+    await router.push({ query: { ...route.query, keyword: value || undefined } });
+}
+
+function clearKeyword() {
+    const query = { ...route.query };
+    delete query.keyword;
+    router.push({ query });
 }
 
 function handleLocate() {
@@ -129,6 +182,8 @@ function goToDetail(restaurant: Restaurant) {
 }
 
 watch(filters, loadByBounds, { deep: true });
+
+watch(keyword, loadByBounds);
 
 watch(activeCity, (city, previous) => {
     if (!city) return;
@@ -164,10 +219,14 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
             />
 
             <div class="hero-controls">
-                <SearchBox @place-selected="handlePlaceSelected" />
+                <SearchBox @place-selected="handlePlaceSelected" @keyword-search="handleKeywordSearch" />
                 <button type="button" class="locate-button" @click="handleLocate">📍 使用目前位置</button>
             </div>
             <p v-if="locateError" class="locate-error" role="alert">{{ locateError }}</p>
+            <p v-if="keyword" class="keyword-badge" role="status">
+                只顯示符合「{{ keyword }}」的餐廳
+                <button type="button" @click="clearKeyword">清除</button>
+            </p>
             <FilterDrawer v-model:filters="filters" />
         </section>
 
@@ -198,9 +257,13 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
         </section>
 
         <section v-if="showEmptyState" class="empty-state">
-            <p class="empty-title">這個範圍還沒有素食餐廳</p>
+            <p class="empty-title">
+                <template v-if="keyword">這個範圍沒有符合「{{ keyword }}」的餐廳</template>
+                <template v-else>這個範圍還沒有素食餐廳</template>
+            </p>
             <p class="empty-hint">
                 試著把地圖拉遠一點，或切換到其他城市看看。
+                <template v-if="keyword"> 也可以清掉關鍵字。</template>
                 <template v-if="hasActiveFilters"> 也可以先清掉篩選條件。</template>
             </p>
         </section>
@@ -419,5 +482,26 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 
 .open-status[data-state='closed'] {
     color: #718096;
+}
+
+.keyword-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem auto 0;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    background: #f0fff4;
+    color: #22543d;
+    font-size: 0.85rem;
+}
+
+.keyword-badge button {
+    border: none;
+    background: none;
+    color: #2f855a;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 0.85rem;
 }
 </style>
