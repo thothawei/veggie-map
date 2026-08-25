@@ -1,5 +1,44 @@
 # Progress Log
 
+## 2026-08-25 — AI Office Phase 4：規劃／派工／佇列／重試
+
+**完成：**
+
+- `CeoPlanner` + `PlanSchema`：從 LLM 抽出 JSON（含 markdown fence），驗證 title／
+  agent／dependencies，擋重複 title、未知 title、環。角色白名單讀
+  `config/ai_office.php` 的 `planner.assignable_roles`，不寫死 `backend`。
+  自然語言清單（沒有 `{...}`）回 null，不會被拆成任務。
+- `AgentSelector`：只依 role + idle 優先 + 最低 workload。標題再像後端工作，沒有
+  該角色的 Agent 就回 null，不猜。
+- `AgentOrchestrator`：`planProject` → 建 DAG → 指派 → `dispatchReadyTasks`。
+  規劃失敗只把 `planning` 標 `failed`；派工不包在同一個 catch，避免執行失敗被當成
+  規劃失敗。並行上限在 **dispatch** 時看 `running` vs `max_concurrency`，有人可派就
+  先留下 `assigned_agent_id`。
+- Jobs：`PlanProjectJob`（unique `plan-{id}`）、`ExecuteTaskJob`、`RetryFailedTaskJob`，
+  獨立佇列 `ai-office`，timeout／tries 讀 config。領域重試不跟 Laravel job retry 疊加。
+  Horizon 新增 `supervisor-ai-office`。
+- `POST /projects` 只 dispatch 規劃 Job；人手建任務／PATCH 指派後走 `tryDispatch`。
+  規劃階段的 token 與 activity 可以沒有 task。
+
+**過程中修掉的 bug：** `ExecuteTaskJob` 若加 `ShouldBeUnique`，sync 佇列下失敗重試會在
+同一輪 `afterTaskRun` 再 dispatch 自己，unique lock 還沒放掉，第二次執行被默默丟掉，
+任務卡在 `assigned`。改成狀態檢查 + 原子 `UPDATE ... WHERE status IN (pending, assigned)`
+搶占，重複派工第二個 worker 直接 return。
+
+**驗收：** 後端 273 測試 816 assertion 全綠；Pint／PHPStan 乾淨。前端這輪沒動。
+
+**反向：**
+
+- 拿掉 `handleFailure` 裡的 `RetryFailedTaskJob::dispatch`，重試測試 `retry_count`
+  停在 1（預期 2）——確認不是裝飾品。
+- `PlanSchemaTest`：config 拿掉 `backend` 後含 backend 的規劃會丟
+  `PlanValidationException`。
+- `AgentSelectorTest`：標題再像後端，沒有 backend Agent 就回 null。
+
+**下一步：** Phase 5 — 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist。
+
+---
+
 ## 2026-08-25 — P1：素食可信度的寫入路徑
 
 **完成：**

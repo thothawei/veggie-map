@@ -7,6 +7,7 @@ use App\AiOffice\Http\Requests\UpdateTaskRequest;
 use App\AiOffice\Http\Resources\TaskResource;
 use App\AiOffice\Models\Project;
 use App\AiOffice\Models\Task;
+use App\AiOffice\Orchestration\AgentOrchestrator;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -74,6 +75,10 @@ class TaskController extends Controller
             return $task;
         });
 
+        // 人手建立且已指派、前置也齊了才進佇列。沒指派的維持 pending，
+        // 不在這裡猜角色（規格第 29 節的角色來自規劃 JSON 或呼叫端）。
+        app(AgentOrchestrator::class)->tryDispatch($task->fresh(['dependencies', 'agent']));
+
         return response()->json([
             'success' => true,
             'data' => (new TaskResource($task->load('dependencies')))->resolve(),
@@ -100,6 +105,10 @@ class TaskController extends Controller
         $this->authorize('update', $task);
 
         $task->update($request->validated());
+
+        // 人手改成 assigned／補上 Agent 時，跟 POST 建立任務同一條派工入口。
+        // tryDispatch 自己會擋沒指派、前置未齊、Agent 忙碌的情況。
+        app(AgentOrchestrator::class)->tryDispatch($task->fresh(['dependencies', 'agent']));
 
         return response()->json([
             'success' => true,

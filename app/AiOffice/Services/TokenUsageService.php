@@ -3,6 +3,8 @@
 namespace App\AiOffice\Services;
 
 use App\AiOffice\Llm\LlmResponse;
+use App\AiOffice\Models\Agent;
+use App\AiOffice\Models\Project;
 use App\AiOffice\Models\Task;
 use App\AiOffice\Models\TaskRun;
 use App\AiOffice\Models\TokenUsage;
@@ -15,13 +17,26 @@ class TokenUsageService
 {
     public function record(LlmResponse $response, Task $task, TaskRun $taskRun): TokenUsage
     {
+        return $this->recordUsage($response, $task->agent, $task->project, $task, $taskRun);
+    }
+
+    /**
+     * 規劃階段沒有 task_run，一樣要記帳（規格第 40 節）。
+     */
+    public function recordUsage(
+        LlmResponse $response,
+        ?Agent $agent = null,
+        ?Project $project = null,
+        ?Task $task = null,
+        ?TaskRun $taskRun = null,
+    ): TokenUsage {
         return TokenUsage::create([
             'provider' => $response->provider,
             'model' => $response->model,
-            'agent_id' => $taskRun->agent_id,
-            'project_id' => $task->project_id,
-            'task_id' => $task->id,
-            'task_run_id' => $taskRun->id,
+            'agent_id' => $agent !== null ? $agent->id : $taskRun?->agent_id,
+            'project_id' => $project !== null ? $project->id : $task?->project_id,
+            'task_id' => $task?->id,
+            'task_run_id' => $taskRun?->id,
             'input_tokens' => $response->inputTokens,
             'output_tokens' => $response->outputTokens,
             'total_tokens' => $response->totalTokens(),

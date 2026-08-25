@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\AiOffice;
 
+use App\AiOffice\Jobs\ExecuteTaskJob;
 use App\AiOffice\Models\Agent;
 use App\AiOffice\Models\Project;
 use App\AiOffice\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class TaskTest extends TestCase
@@ -112,6 +114,7 @@ class TaskTest extends TestCase
 
     public function test_task_can_be_assigned_to_an_agent(): void
     {
+        Queue::fake();
         $project = Project::factory()->create();
         $task = Task::factory()->create(['project_id' => $project->id]);
         $agent = Agent::factory()->role('backend')->create();
@@ -124,6 +127,8 @@ class TaskTest extends TestCase
         ])->assertStatus(200)
             ->assertJsonPath('data.assigned_agent_id', $agent->id)
             ->assertJsonPath('data.status', 'assigned');
+
+        Queue::assertPushed(ExecuteTaskJob::class, fn (ExecuteTaskJob $job) => $job->taskId === $task->id);
     }
 
     public function test_viewer_cannot_create_tasks(): void

@@ -322,12 +322,12 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
   資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
 
-目前進度：**Phase 3 完成**（Agent 執行迴圈可跑，全程用 MockProvider 驗證，未呼叫真 API）。已可用的端點：
+目前進度：**Phase 4 完成**（規劃 → 建任務圖 → 指派 → 佇列執行 → 失敗重試，全程 MockProvider，HTTP 內不呼叫 LLM）。已可用的端點：
 
 | Method | Path | 說明 |
 |---|---|---|
 | GET | `/ai-office/health` | readiness：DB／Redis／佇列／workspace 真實連線檢查 |
-| GET/POST | `/ai-office/projects` | 專案列表（可依 status 篩選）／建立 |
+| GET/POST | `/ai-office/projects` | 專案列表（可依 status 篩選）／建立（POST 只建檔，規劃丟進 `PlanProjectJob`） |
 | GET/PUT/DELETE | `/ai-office/projects/{id}` | 專案詳情／更新／刪除 |
 | GET/POST | `/ai-office/projects/{id}/tasks` | 任務列表（依 priority 排序）／建立（可帶 dependencies） |
 | GET/PATCH | `/ai-office/tasks/{id}` | 任務詳情（含 `dependencies_satisfied`）／更新 |
@@ -348,6 +348,14 @@ token 預算。工具權限**預設拒絕**——沒有在 `ai_office_agent_perm
 
 LLM provider 可替換（`claude` / `mock`），預設 `mock`；設定成不存在的 provider 會直接 throw
 而不是靜默退回，避免「看起來正常、其實一個字都沒送出去」。
+
+**規劃與派工**（Phase 4）：`POST /ai-office/projects` 同步只建 `planning` 專案，接著
+`PlanProjectJob` 在 `ai-office` 佇列跑 `CeoPlanner`。CEO 必須吐出通過 `PlanSchema` 驗證的
+JSON（角色白名單在 `config/ai_office.php` 的 `planner.assignable_roles`）；自然語言清單
+不會被拆成任務。`AgentSelector` 只依 role + idle + 最低 workload 挑人，不從標題猜角色。
+就緒任務進 `ExecuteTaskJob` → `AgentRuntime`；失敗且未達 `max_retries` 進
+`RetryFailedTaskJob`，達上限寫 `TaskPermanentlyFailed` 活動通知 CEO Agent。Horizon 有獨立
+supervisor 吃這條佇列。
 
 ## Future Roadmap
 

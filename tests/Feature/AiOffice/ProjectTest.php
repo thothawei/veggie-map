@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\AiOffice;
 
+use App\AiOffice\Jobs\PlanProjectJob;
 use App\AiOffice\Models\Project;
 use App\AiOffice\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class ProjectTest extends TestCase
@@ -24,6 +26,8 @@ class ProjectTest extends TestCase
     {
         $user = $this->actingAsRole('developer');
 
+        Queue::fake();
+
         $response = $this->postJson('/api/v1/ai-office/projects', [
             'name' => '台灣素食餐廳地圖',
             'description' => '示範專案',
@@ -36,6 +40,8 @@ class ProjectTest extends TestCase
         // ——存絕對路徑的話換機器就全錯（見 ProjectController 註解）。
         $id = $response->json('data.id');
         $this->assertSame("project-{$id}", $response->json('data.workspace_path'));
+
+        Queue::assertPushed(PlanProjectJob::class, fn (PlanProjectJob $job) => $job->projectId === $id);
     }
 
     public function test_viewer_can_read_but_cannot_create(): void

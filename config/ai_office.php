@@ -113,4 +113,38 @@ return [
 
     'queue' => env('AI_OFFICE_QUEUE', 'ai-office'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Planner（CEO 拆任務）
+    |--------------------------------------------------------------------------
+    |
+    | 規格第 28 節：CEO 必須輸出通過 schema 驗證的 JSON，禁止把自然語言當 Task。
+    | 角色白名單、重試次數、規劃用的 Agent role 全部放這裡——CeoPlanner 不寫死
+    | `ceo` 或 `backend`。
+    |
+    */
+
+    'planner' => [
+        'agent_role' => env('AI_OFFICE_PLANNER_ROLE', 'ceo'),
+        'max_attempts' => (int) env('AI_OFFICE_PLANNER_MAX_ATTEMPTS', 3),
+        'assignable_roles' => ['frontend', 'backend', 'automation', 'qa', 'design', 'devops'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Jobs
+    |--------------------------------------------------------------------------
+    |
+    | LLM 單次 timeout 見 llm.providers.claude.timeout。Job timeout 必須比它長，
+    | 否則 worker 會先砍掉還在等模型的 process。tries=1：領域層的重試走
+    | RetryFailedTaskJob，不要跟 Laravel 的 job retry 疊加把 retry_count 算亂。
+    |
+    */
+
+    'jobs' => [
+        'timeout' => (int) env('AI_OFFICE_JOB_TIMEOUT', 300),
+        'tries' => 1,
+        'retry_delay_seconds' => (int) env('AI_OFFICE_RETRY_DELAY', 10),
+    ],
+
 ];

@@ -32,26 +32,31 @@ class Project extends Model
         'status' => 'planning',
     ];
 
+    /** @return BelongsTo<User, $this> */
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /** @return HasMany<Task, $this> */
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
     }
 
+    /** @return HasMany<Activity, $this> */
     public function activities(): HasMany
     {
         return $this->hasMany(Activity::class);
     }
 
+    /** @return HasMany<Approval, $this> */
     public function approvals(): HasMany
     {
         return $this->hasMany(Approval::class);
     }
 
+    /** @return HasMany<ProjectFile, $this> */
     public function files(): HasMany
     {
         return $this->hasMany(ProjectFile::class);

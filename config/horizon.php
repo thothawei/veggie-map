@@ -210,6 +210,22 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+        // AI Office 的 LLM Job 跟餐廳評分重算分開排隊，timeout 必須長過
+        // config('ai_office.llm.providers.claude.timeout')。tries=1：領域重試
+        // 走 RetryFailedTaskJob。
+        'supervisor-ai-office' => [
+            'connection' => 'redis',
+            'queue' => [env('AI_OFFICE_QUEUE', 'ai-office')],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 300,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -219,11 +235,17 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-ai-office' => [
+                'maxProcesses' => 3,
+            ],
         ],
 
         'local' => [
             'supervisor-1' => [
                 'maxProcesses' => 3,
+            ],
+            'supervisor-ai-office' => [
+                'maxProcesses' => 2,
             ],
         ],
     ],

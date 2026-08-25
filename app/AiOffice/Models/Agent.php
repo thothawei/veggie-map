@@ -56,8 +56,9 @@ class Agent extends Model
     }
 
     /**
-     * 目前手上真的在跑的任務數，AgentSelector 用它判斷還吃不吃得下
-     * （規格第 29 節的 current workload）。
+     * 目前手上占著的任務數（已指派＋執行中），AgentSelector 用來挑最不忙的人。
+     * 能不能再 dispatch 一筆 ExecuteTaskJob 看的是 running 數對 max_concurrency，
+     * 兩者不要混用——否則滿載時連「之後輪到誰」都會丟。
      */
     public function activeTaskCount(): int
     {

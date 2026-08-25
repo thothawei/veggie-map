@@ -204,7 +204,7 @@ GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.
 |---|---|---|---|
 | GET | `/ai-office/health` | readiness：DB／Redis／佇列／workspace 真實連線檢查 | 唯讀 |
 | GET | `/ai-office/projects` | 專案列表（`?status=`、`?per_page=`） | 唯讀 |
-| POST | `/ai-office/projects` | 建立專案 | admin, manager, developer |
+| POST | `/ai-office/projects` | 建立專案（同步只建檔，`PlanProjectJob` 進佇列規劃） | admin, manager, developer |
 | GET | `/ai-office/projects/{id}` | 專案詳情（含 `task_count`） | 唯讀 |
 | PUT/PATCH | `/ai-office/projects/{id}` | 更新專案 | admin, manager, developer |
 | DELETE | `/ai-office/projects/{id}` | 刪除專案（連帶刪除底下任務） | admin, manager |
@@ -260,6 +260,26 @@ GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.
 永遠等不到，只是安靜地不動——跑起來才發現的成本遠高於建立時就拒絕。
 
 菱形相依（B、C 都依賴 A，D 依賴 B 與 C）是合法 DAG，不會被擋。
+
+### 規劃與派工（Queue）
+
+`POST /ai-office/projects` **不會**在 HTTP request 裡呼叫 LLM。回應 201 時專案已建立、
+`status` 仍是 `planning`；規劃由 `PlanProjectJob` 在 `ai-office` 佇列執行（Horizon
+`supervisor-ai-office`）。測試環境 `QUEUE_CONNECTION=sync` 會立刻跑完，CRUD 測試必須
+`Queue::fake()`，否則沒有 Agent 時規劃會把專案標成 failed。
+
+規劃產出必須是通過 `PlanSchema` 驗證的 JSON。角色白名單來自
+`config/ai_office.php` 的 `planner.assignable_roles`，不是寫死的 `backend`／`frontend`。
+抽不出 `{...}` 的自然語言清單會被拒絕，CEO 最多重試 `planner.max_attempts` 次後專案
+`failed`。
+
+指派只看 role、idle 優先、最低 workload；並行上限在 **dispatch** 時檢查
+（`running` 數 vs `max_concurrency`），沒人可跑時任務仍會留下 `assigned_agent_id`。
+人手 `POST .../tasks` 或 `PATCH /tasks/{id}` 補上 Agent 且前置齊了，才 `tryDispatch`。
+
+失敗重試走 `RetryFailedTaskJob`（延遲 `jobs.retry_delay_seconds`），不跟 Laravel job
+`tries` 疊加。達 `max_retries` 後寫活動 `TaskPermanentlyFailed`，專案若沒有仍在進行的
+任務則標 `failed`。
 
 ### 任務相依是否滿足
 

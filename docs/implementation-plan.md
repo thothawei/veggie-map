@@ -291,8 +291,8 @@ AI Office 需要的增量：
 | 1 | §72 P1 | 基礎設施驗證（Laravel/MySQL/Redis/Docker/Sanctum 皆已存在）、`config/ai_office.php` 設定骨架、`.env.example` 補鍵、RBAC 四角色擴充、真實 health/readiness 端點 + 測試 | ✅ 完成 |
 | 2 | §72 P2 | 16 張 migration + 16 個 Model + Project/Task CRUD + Agent 唯讀 + TaskDependency（含環偵測）+ 初始 Agent seeder | ✅ 完成 |
 | 3 | §72 P3 | LlmProviderInterface / ClaudeProvider / MockProvider / AgentRuntime + AgentLoopGuard + PermissionGate + TokenUsageService（全程用 Mock 驗，未呼叫真 API） | ✅ 完成 |
-| 4 | §72 P4 | AgentOrchestrator / CeoPlanner（JSON schema 驗證）/ AgentSelector / Queue / Retry | ← 現在做 |
-| 5 | §72 P5 | 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist | |
+| 4 | §72 P4 | AgentOrchestrator / CeoPlanner（JSON schema 驗證）/ AgentSelector / Queue / Retry | ✅ 完成 |
+| 5 | §72 P5 | 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist | ← 現在做 |
 | 6 | §72 P6 | Approval / RiskLevel / human-in-the-loop | |
 | 7 | §72 P7 | Activity + SSE + Agent/Task 狀態即時推送 | |
 | 8 | §72 P8 | Vue Dashboard：CommandCenter / AgentCard / TaskBoard / TaskDetail / ApprovalPanel / Usage | |

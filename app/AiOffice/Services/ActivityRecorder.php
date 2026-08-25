@@ -4,6 +4,7 @@ namespace App\AiOffice\Services;
 
 use App\AiOffice\Models\Activity;
 use App\AiOffice\Models\Agent;
+use App\AiOffice\Models\Project;
 use App\AiOffice\Models\Task;
 
 /**
@@ -21,9 +22,10 @@ class ActivityRecorder
         ?Task $task = null,
         ?Agent $agent = null,
         array $payload = [],
+        ?Project $project = null,
     ): Activity {
         return Activity::create([
-            'project_id' => $task?->project_id,
+            'project_id' => $task !== null ? $task->project_id : $project?->id,
             'task_id' => $task?->id,
             'agent_id' => $agent?->id,
             'type' => $type,

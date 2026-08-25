@@ -5,6 +5,7 @@ namespace App\AiOffice\Http\Controllers;
 use App\AiOffice\Http\Requests\StoreProjectRequest;
 use App\AiOffice\Http\Requests\UpdateProjectRequest;
 use App\AiOffice\Http\Resources\ProjectResource;
+use App\AiOffice\Jobs\PlanProjectJob;
 use App\AiOffice\Models\Project;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -53,6 +54,10 @@ class ProjectController extends Controller
         // 資料庫裡的值不用跟著改（規格第 42 節）。實體目錄等 FileTool 第一次寫入
         // 時才建立（Phase 5），這裡不碰檔案系統。
         $project->update(['workspace_path' => "project-{$project->id}"]);
+
+        // 規格第 30 節：HTTP 只建 Project，規劃丟進佇列。測試環境 QUEUE_CONNECTION=sync
+        // 仍會立刻跑完，所以 CRUD 測試要 Queue::fake()，否則沒 seed Agent 時規劃會失敗。
+        PlanProjectJob::dispatch($project->id);
 
         return response()->json([
             'success' => true,

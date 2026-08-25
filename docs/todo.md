@@ -17,7 +17,7 @@
       循環偵測 + 初始 Agent seeder（33 個 AI Office 測試）
 - [x] Phase 3 — LlmProviderInterface / ClaudeProvider（官方 SDK）/ MockProvider /
       AgentRuntime + AgentLoopGuard + PermissionGate + TokenUsageService（18 個測試）
-- [ ] Phase 4 — AgentOrchestrator / CeoPlanner / AgentSelector / Queue / Retry
+- [x] Phase 4 — AgentOrchestrator / CeoPlanner / AgentSelector / Queue / Retry
 - [ ] Phase 5 — 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist
 - [ ] Phase 6 — Approval / RiskLevel / human-in-the-loop
 - [ ] Phase 7 — Activity + SSE
