@@ -23,11 +23,14 @@ async function handleLogout() {
             <RouterLink to="/" class="brand">VeggieMap</RouterLink>
             <nav>
                 <RouterLink to="/restaurants">餐廳搜尋</RouterLink>
-                <RouterLink v-if="auth.isAuthenticated" to="/favorites">收藏</RouterLink>
-                <RouterLink v-if="auth.isAuthenticated" to="/profile">個人資料</RouterLink>
+                <!--
+                    消費者端不需要登入：瀏覽、搜尋、看詳細資料全部免帳號（2026-08-25 決定）。
+                    導覽列因此不再出現收藏／個人資料／登入。管理後台與登出保留——後台審核
+                    與 AI Office 子系統仍然需要登入，那些不是消費者功能。路由本身沒有刪除，
+                    /login 仍可直接輸入網址進入，否則管理員無從登入。
+                -->
                 <RouterLink v-if="auth.isAdmin" to="/admin">管理後台</RouterLink>
-                <RouterLink v-if="!auth.isAuthenticated" to="/login">登入</RouterLink>
-                <button v-else type="button" class="link-button" @click="handleLogout">登出</button>
+                <button v-if="auth.isAuthenticated" type="button" class="link-button" @click="handleLogout">登出</button>
             </nav>
         </header>
         <main>

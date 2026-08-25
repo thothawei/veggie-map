@@ -309,10 +309,6 @@ watch(() => props.id, load, { immediate: true });
                     {{ submittingReview ? '送出中…' : '送出評論' }}
                 </button>
             </section>
-            <p v-else>
-                <RouterLink :to="{ name: 'login', query: { redirect: `/restaurants/${restaurant.id}` } }">登入</RouterLink>
-                後可以收藏餐廳或寫評論。
-            </p>
         </template>
     </div>
 </template>

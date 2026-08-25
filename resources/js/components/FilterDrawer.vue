@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import client from '@/api/client';
 import { FEATURE_CODES, type FeatureCode } from '@/lib/features';
+import { PRICE_LEVELS, RATING_THRESHOLDS } from '@/composables/useFilterQuery';
 import { applyMenuItemDiets, applyVenueScopeMeta, venueScopeDefault, venueScopeMeta } from '@/lib/dietCatalog';
 import type { ApiSuccess, DietType, Feature, MenuItemDiet, RestaurantSearchParams, VenueScopeMeta } from '@/types';
 
@@ -135,6 +136,31 @@ function isFeatureOn(code: string): boolean {
     return isFeatureCode(code) && Boolean(filters.value[code]);
 }
 
+/** 再點一次同一個價位＝取消，跟飲食類型的晶片行為一致（單選，不是多選）。 */
+function togglePriceLevel(level: number) {
+    replaceFilters((next) => {
+        if (next.price_level === level) {
+            delete next.price_level;
+
+            return;
+        }
+
+        next.price_level = level;
+    });
+}
+
+function toggleRatingMin(threshold: number) {
+    replaceFilters((next) => {
+        if (next.rating_min === threshold) {
+            delete next.rating_min;
+
+            return;
+        }
+
+        next.rating_min = threshold;
+    });
+}
+
 function toggleFeature(code: string) {
     if (!isFeatureCode(code)) {
         return;
@@ -203,6 +229,37 @@ function clearAll() {
                     @click="toggleDiet(diet.code)"
                 >
                     {{ diet.label }}
+                </button>
+            </div>
+
+            <div class="group">
+                <span class="label">價位</span>
+                <button
+                    v-for="level in PRICE_LEVELS"
+                    :key="level"
+                    type="button"
+                    class="chip"
+                    :class="{ active: filters.price_level === level }"
+                    :aria-pressed="filters.price_level === level"
+                    :aria-label="`價位 ${level} 級`"
+                    @click="togglePriceLevel(level)"
+                >
+                    {{ '$'.repeat(level) }}
+                </button>
+            </div>
+
+            <div class="group">
+                <span class="label">評分</span>
+                <button
+                    v-for="threshold in RATING_THRESHOLDS"
+                    :key="threshold"
+                    type="button"
+                    class="chip"
+                    :class="{ active: filters.rating_min === threshold }"
+                    :aria-pressed="filters.rating_min === threshold"
+                    @click="toggleRatingMin(threshold)"
+                >
+                    {{ threshold.toFixed(1) }}★ 以上
                 </button>
             </div>
 

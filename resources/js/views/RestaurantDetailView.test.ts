@@ -235,12 +235,13 @@ describe('RestaurantDetailView', () => {
         expect(get).toHaveBeenCalledWith('/restaurants/2');
     });
 
-    it('未登入時登入連結會帶回這間店', async () => {
+    it('未登入時不再出現登入引導——消費者端不需要帳號', async () => {
+        // 2026-08-25 決定移除消費者端登入入口：瀏覽、搜尋、看詳細資料全部免帳號。
+        // 原本這裡有「登入後可以收藏餐廳或寫評論」，等於把匿名使用者推去註冊。
         const { wrapper } = await mountDetail('1');
-        const login = wrapper.findAll('a').find((anchor) => anchor.text() === '登入');
 
-        expect(login?.attributes('href')).toContain('/login');
-        expect(decodeURIComponent(login?.attributes('href') ?? '')).toContain('/restaurants/1');
+        expect(wrapper.findAll('a').some((anchor) => anchor.text() === '登入')).toBe(false);
+        expect(wrapper.text()).not.toContain('後可以收藏餐廳或寫評論');
     });
 
     it('非 404 的載入失敗顯示錯誤，不是空白頁', async () => {

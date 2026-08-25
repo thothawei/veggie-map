@@ -220,3 +220,62 @@ describe('FilterDrawer venue_scope 依 /diets meta 渲染', () => {
         expect(wrapper.find('.count').exists()).toBe(false);
     });
 });
+
+describe('FilterDrawer 價位與評分', () => {
+    beforeEach(() => {
+        setViewportMatches(true);
+    });
+
+    it('價位晶片用 $ 數量表示級距', async () => {
+        const wrapper = await mountDrawer();
+        const labels = wrapper.findAll('.chip').map((c) => c.text());
+
+        expect(labels).toContain('$');
+        expect(labels).toContain('$$$$');
+    });
+
+    it('點價位會寫進 filters，再點一次取消', async () => {
+        const wrapper = await mountDrawer();
+        const chip = wrapper.findAll('.chip').find((c) => c.text() === '$$')!;
+
+        await chip.trigger('click');
+        expect(wrapper.props('filters').price_level).toBe(2);
+
+        await chip.trigger('click');
+        expect(wrapper.props('filters').price_level).toBeUndefined();
+    });
+
+    it('價位是單選——換一個會取代而不是累加', async () => {
+        const wrapper = await mountDrawer();
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '$$')!.trigger('click');
+        await wrapper.findAll('.chip').find((c) => c.text() === '$$$')!.trigger('click');
+
+        expect(wrapper.props('filters').price_level).toBe(3);
+    });
+
+    it('評分門檻只提供有意義的級距，不是 0.1 滑桿', async () => {
+        const wrapper = await mountDrawer();
+        const labels = wrapper.findAll('.chip').map((c) => c.text());
+
+        expect(labels).toContain('4.0★ 以上');
+        expect(labels).toContain('4.5★ 以上');
+    });
+
+    it('點評分門檻會寫進 filters', async () => {
+        const wrapper = await mountDrawer();
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '4.0★ 以上')!.trigger('click');
+
+        expect(wrapper.props('filters').rating_min).toBe(4);
+    });
+
+    it('價位與評分都算進徽章數字', async () => {
+        const wrapper = await mountDrawer();
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '$$')!.trigger('click');
+        await wrapper.findAll('.chip').find((c) => c.text() === '4.0★ 以上')!.trigger('click');
+
+        expect(wrapper.find('.count').text()).toBe('2');
+    });
+});

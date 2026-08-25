@@ -39,7 +39,15 @@ const loadFailed = ref(false);
  * 也不能換算成 latitude+radius——台中半對角線 59.6km、高雄 66.4km，都超過 radius
  * 上限 50km（見 tests/Feature/Api/RestaurantBboxSearchTest.php）。
  */
-const bbox = computed(() => activeCity.value?.bbox);
+/**
+ * **打了關鍵字就跨全部城市搜尋**（2026-08-25 決定）。原本選了城市就只在那個城市的
+ * bbox 內找，使用者搜「Loving Hut」卻只看到台北那幾家，會誤以為其他城市沒有。
+ * 城市切換是「瀏覽某個地區」的工具，關鍵字搜尋則是「我知道要找什麼」，不該被地區綁住。
+ */
+const bbox = computed(() => (committedKeyword.value ? undefined : activeCity.value?.bbox));
+
+/** 有關鍵字時城市限制會被忽略，畫面要講清楚，不能讓人以為還在該城市內找。 */
+const searchIsGlobal = computed(() => Boolean(committedKeyword.value) && activeCity.value !== null);
 
 // 同時有「搜尋」「改篩選」「換城市」三個觸發來源，慢的舊請求可能在新請求之後才回來，
 // 把畫面蓋回舊資料；載入更多還會把舊的一頁重複接上去。用序號讓過期回應直接丟掉。
@@ -106,10 +114,10 @@ function goToDetail(restaurant: Restaurant) {
     router.push({ name: 'restaurant-detail', params: { id: restaurant.id } });
 }
 
-const scopeLabel = computed(() => activeCity.value?.label ?? '全部城市');
+const scopeLabel = computed(() => (bbox.value ? (activeCity.value?.label ?? '全部城市') : '全部城市'));
 
 const emptyMessage = computed(() => {
-    const where = activeCity.value ? activeCity.value.label : '';
+    const where = bbox.value ? (activeCity.value?.label ?? '') : '';
     const what = committedKeyword.value ? `符合「${committedKeyword.value}」的餐廳` : '符合條件的餐廳';
 
     return `${where}沒有${what}。`;
@@ -122,7 +130,7 @@ const emptySuggestions = computed(() => {
 
     if (committedKeyword.value) suggestions.push('換個關鍵字');
     if (hasActiveFilters.value) suggestions.push('清掉篩選條件');
-    if (activeCity.value) suggestions.push('切換到其他城市');
+    if (activeCity.value && bbox.value) suggestions.push('切換到其他城市');
 
     return suggestions;
 });
@@ -166,13 +174,17 @@ watch(committedKeyword, (value) => {
             <input
                 v-model="keywordDraft"
                 type="search"
-                :placeholder="activeCity ? `在${activeCity.label}搜尋餐廳名稱` : '搜尋餐廳名稱'"
+                placeholder="搜尋餐廳名稱（跨全部城市）"
                 @keyup.enter="submitSearch"
             />
             <button type="button" @click="submitSearch">搜尋</button>
             <button v-if="committedKeyword" type="button" class="clear-keyword" @click="clearKeyword">清除</button>
         </div>
         <FilterDrawer v-model:filters="filters" />
+
+        <p v-if="searchIsGlobal" class="global-hint" role="status">
+            搜尋「{{ committedKeyword }}」時會跨全部城市，不受目前選的「{{ activeCity?.label }}」限制。
+        </p>
 
         <p v-if="!loading && !loadFailed && restaurants.length" class="scope" role="status">
             {{ scopeLabel }}：{{ restaurants.length }}{{ nextCursor ? '+' : '' }} 家
@@ -239,6 +251,15 @@ watch(committedKeyword, (value) => {
     background: #fff;
     color: #2f855a;
     border: 1px solid #cbd5e0;
+}
+
+.global-hint {
+    margin: 0.75rem 0 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    background: #f0fff4;
+    color: #2f855a;
+    font-size: 0.85rem;
 }
 
 .scope {

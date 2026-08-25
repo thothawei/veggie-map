@@ -178,3 +178,49 @@ describe('apiFilterParams', () => {
         expect(apiFilterParams({ venue_scope: 'all' })).toEqual({ venue_scope: 'all' });
     });
 });
+
+describe('useFilterQuery 價位與評分', () => {
+    it('讀得出網址上的價位與最低評分', async () => {
+        const h = await mountHarness('/restaurants?price_level=2&rating_min=4');
+
+        expect(h.filters.price_level).toBe(2);
+        expect(h.filters.rating_min).toBe(4);
+    });
+
+    it('超出後端允許範圍的值直接忽略，不是原封不動送出去', async () => {
+        // 網址是使用者隨手可改的。price_level=99 送到後端會回 422，整個列表變成
+        // 「載入失敗」——那是把一個無效參數變成整頁壞掉，忽略它才對。
+        expect((await mountHarness('/restaurants?price_level=99')).filters.price_level).toBeUndefined();
+        expect((await mountHarness('/restaurants?price_level=0')).filters.price_level).toBeUndefined();
+        expect((await mountHarness('/restaurants?price_level=abc')).filters.price_level).toBeUndefined();
+        expect((await mountHarness('/restaurants?rating_min=9')).filters.rating_min).toBeUndefined();
+        expect((await mountHarness('/restaurants?rating_min=-1')).filters.rating_min).toBeUndefined();
+    });
+
+    it('寫回網址時是數字字串，取消後參數消失', async () => {
+        const h = await mountHarness('/restaurants');
+
+        h.filters = { price_level: 3, rating_min: 4.5 };
+        await flushPromises();
+        expect(h.router.currentRoute.value.query.price_level).toBe('3');
+        expect(h.router.currentRoute.value.query.rating_min).toBe('4.5');
+
+        h.filters = {};
+        await flushPromises();
+        expect(h.router.currentRoute.value.query.price_level).toBeUndefined();
+        expect(h.router.currentRoute.value.query.rating_min).toBeUndefined();
+    });
+
+    it('送給 API 的是數字，不是字串', async () => {
+        // 後端驗證 price_level 是 integer、rating_min 是 numeric。
+        expect(apiFilterParams({ price_level: 2, rating_min: 4 })).toMatchObject({
+            price_level: 2,
+            rating_min: 4,
+        });
+    });
+
+    it('價位與評分會進查詢 key，改了要能觸發重查', () => {
+        expect(filterQueryKey({ price_level: 2 })).not.toBe(filterQueryKey({ price_level: 3 }));
+        expect(filterQueryKey({ rating_min: 4 })).not.toBe(filterQueryKey({}));
+    });
+});

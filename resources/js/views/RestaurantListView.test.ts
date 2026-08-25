@@ -139,7 +139,9 @@ describe('RestaurantListView 城市切換', () => {
         expect(wrapper.find('.scope').text()).toContain('全部城市');
     });
 
-    it('搜尋關鍵字時保留目前城市範圍', async () => {
+    it('搜尋關鍵字時跨全部城市，不受目前城市限制', async () => {
+        // 2026-08-25 決定：城市切換是「瀏覽某個地區」，關鍵字搜尋是「我知道要找什麼」，
+        // 不該被地區綁住——否則搜「Loving Hut」只看到台北那幾家，會以為別的城市沒有。
         const { wrapper } = await mountList('/restaurants?city=taichung');
 
         await wrapper.find('input[type="search"]').setValue('素食');
@@ -147,7 +149,25 @@ describe('RestaurantListView 城市切換', () => {
         await flushPromises();
 
         expect(lastRestaurantCall().keyword).toBe('素食');
+        expect(lastRestaurantCall().bbox).toBeUndefined();
+    });
+
+    it('跨城市搜尋時畫面要講清楚，不能讓人以為還在該城市內找', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taichung&keyword=素食');
+
+        expect(wrapper.find('.global-hint').text()).toContain('跨全部城市');
+        expect(wrapper.find('.global-hint').text()).toContain('台中');
+    });
+
+    it('清掉關鍵字後城市限制回來', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taichung&keyword=素食');
+        expect(lastRestaurantCall().bbox).toBeUndefined();
+
+        await wrapper.find('.clear-keyword').trigger('click');
+        await flushPromises();
+
         expect(lastRestaurantCall().bbox).toBe('23.9500,120.4300,24.4500,121.4700');
+        expect(wrapper.find('.global-hint').exists()).toBe(false);
     });
 
     it('查無結果時的說明會指出目前限定在哪個城市', async () => {
@@ -239,11 +259,11 @@ describe('RestaurantListView 關鍵字進網址', () => {
         expect(router.currentRoute.value.query.keyword).toBe('拉麵');
     });
 
-    it('關鍵字與城市同時存在於網址，兩者都套用', async () => {
+    it('關鍵字與城市同時存在時，關鍵字優先——搜尋跨全部城市', async () => {
         await mountList('/restaurants?city=tokyo&keyword=ramen');
 
         expect(lastRestaurantCall().keyword).toBe('ramen');
-        expect(lastRestaurantCall().bbox).toBe('35.5300,139.5600,35.8200,139.9200');
+        expect(lastRestaurantCall().bbox).toBeUndefined();
     });
 
     it('換城市時保留關鍵字', async () => {
@@ -255,7 +275,8 @@ describe('RestaurantListView 關鍵字進網址', () => {
 
         expect(router.currentRoute.value.query.keyword).toBe('素食');
         expect(lastRestaurantCall().keyword).toBe('素食');
-        expect(lastRestaurantCall().bbox).toBe('35.5300,139.5600,35.8200,139.9200');
+        // 有關鍵字時一律跨城市，所以換城市不會改變查詢範圍。
+        expect(lastRestaurantCall().bbox).toBeUndefined();
     });
 
     it('清除關鍵字會把它從網址移除，城市留著', async () => {
@@ -309,7 +330,8 @@ describe('RestaurantListView 關鍵字進網址', () => {
         const text = wrapper.find('.notice').text();
         expect(text).toContain('不存在的店');
         expect(text).toContain('換個關鍵字');
-        expect(text).toContain('切換到其他城市');
+        // 已經是跨全部城市搜尋了，再叫人「切換到其他城市」沒有意義。
+        expect(text).not.toContain('切換到其他城市');
     });
 
     it('沒下關鍵字時不會建議「換個關鍵字」', async () => {
@@ -379,7 +401,7 @@ describe('RestaurantListView 篩選進網址', () => {
         await mountList('/restaurants?city=tokyo&keyword=ramen&diet=vegan');
 
         const call = lastRestaurantCall();
-        expect(call.bbox).toBe('35.5300,139.5600,35.8200,139.9200');
+        expect(call.bbox).toBeUndefined();
         expect(call.keyword).toBe('ramen');
         expect(call.diet).toBe('vegan');
     });

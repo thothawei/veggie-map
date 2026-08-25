@@ -14,6 +14,11 @@ export default defineConfig({
     },
     plugins: [vue()],
     test: {
+        // 只掃自己的前端原始碼。composer 套件會夾帶自己的 .test.ts（例如
+        // vendor/standard-webhooks 就有一支，還 import 了我們沒安裝的 @stablelib/utf8），
+        // 沒有限定範圍的話 vitest 會把它撿起來跑，整個前端測試套件因此紅掉——
+        // 那不是我們的程式碼，也不該由我們的 CI 負責。
+        include: ['resources/js/**/*.{test,spec}.{ts,tsx}'],
         // 元件測試需要 DOM；geo.test.ts 那種純函式測試在 jsdom 下一樣跑得動，
         // 不用為了兩種測試分兩套環境。
         environment: 'jsdom',
