@@ -1840,3 +1840,31 @@ Phase 12 導入 CI 要抓的那類問題**。本機實跑 `--filter=HealthTest` 
 
 **環境注意**：另一個 session 正在同一個工作目錄寫 AI Office Phase 2（16 張未追蹤 migration、
 controllers、models）。本次一樣逐一列出檔案提交，沒有用 `git add -A`。
+
+### 更正：上一則把 CI 紅的原因寫錯了
+
+上一則說「根因：CI 沒有 Redis service」——**那個判斷不完整**。補上 redis service 後
+CI 仍然 503，再補 ext-redis 擴充（`setup-php` 的 extensions 沒有 redis、composer 也沒裝
+predis）之後**還是** 503。
+
+兩次都在設定層猜測、沒有拿到真正的失敗細節。第三次改變作法：把 CI log 完整撈出來確認
+redis service 有正常啟動（`Ready to accept connections`）、ext-redis 有 `✓ Enabled`，
+逐一排除後回頭讀 health 的四個檢查，才發現真因在 **workspace**：
+
+`.env.example` 寫的是 `AI_OFFICE_WORKSPACE_ROOT=`，那是「已定義的空字串」，
+`env('AI_OFFICE_WORKSPACE_ROOT', base_path('workspace'))` 的第二參數不會生效，
+`workspace_root` 變成 `''`、`is_dir('')` 為 false → 檢查失敗 → 固定 503。
+CI 是 `cp .env.example .env` 所以一定踩到；本機 `.env` 沒有這一行，走預設值，永遠是綠的。
+
+實測驗證機制（不是讀程式碼推論）：`docker compose exec -e AI_OFFICE_WORKSPACE_ROOT= `
+跑 config 解析，修前 `workspace_root=''`／`is_dir=false`，修後
+`/var/www/html/workspace`／`is_dir=true`。
+
+**這是同一個坑的第二次**——`EXTERNAL_API_OVERPASS_USER_AGENT=` 那次一模一樣。已在
+`config/ai_office.php` 註解與新測試裡寫明，並改用 `?:`。
+
+前兩個 CI commit 不是白做的：health 真的會 `Redis::ping()`，workspace 修好之後
+若沒有 redis service 與 ext-redis，換成 redis 那項失敗。三個修正缺一不可，
+只是我應該先拿到完整失敗資訊再動手，而不是連猜兩次。
+
+CI 現況：`32819998158` 兩個 job 都綠，main 從 `6043905` 紅到 `c87e8e3` 為止。
