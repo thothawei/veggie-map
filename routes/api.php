@@ -1,5 +1,6 @@
 <?php
 
+use App\AiOffice\Http\Controllers\HealthController as AiOfficeHealthController;
 use App\Http\Controllers\Api\Admin\MenuItemController as AdminMenuItemController;
 use App\Http\Controllers\Api\Admin\RestaurantReportController as AdminRestaurantReportController;
 use App\Http\Controllers\Api\Admin\RestaurantVerificationController as AdminRestaurantVerificationController;
@@ -43,6 +44,13 @@ Route::middleware('throttle:api')->group(function () {
 
         Route::post('/restaurants/{restaurant}/reviews', [ReviewController::class, 'store']);
         Route::post('/restaurants/{restaurant}/reports', [RestaurantReportController::class, 'store']);
+
+        // AI Office 子系統（見 docs/implementation-plan.md）。整段掛 `ai-office` 中介層，
+        // 只有 admin／manager／developer／viewer 進得來——一般消費者角色 `user`
+        // 註冊過也看不到，這是預設拒絕不是事後補檢查。
+        Route::prefix('ai-office')->middleware('ai-office')->group(function () {
+            Route::get('/health', [AiOfficeHealthController::class, 'show']);
+        });
 
         Route::prefix('admin')->group(function () {
             Route::get('/reports', [AdminRestaurantReportController::class, 'index']);

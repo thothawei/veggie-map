@@ -6,6 +6,25 @@
 > 2026-08-25 重新對照總 Prompt 後：Phase 0～13 主線已完成。
 > **P0 葷素混合店 Phase A／B／C 已完成**；其餘未閉環項目在「剩餘：規劃明寫但還沒閉環」。
 
+
+## AI Office 子系統（新主線，2026-08-25 起）
+
+多 Agent 開發平台，與餐廳領域並行推進。完整規劃、規格衝突裁決與 12 個 Phase 的內容見
+[implementation-plan.md](implementation-plan.md)，這裡只追進度：
+
+- [x] Phase 1 — 基礎設施驗證 + `config/ai_office.php` + RBAC 四角色 + readiness 端點（7 個測試）
+- [ ] Phase 2 — 17 張 migration + Model + Project/Agent/Task CRUD + TaskDependency（含環偵測）
+- [ ] Phase 3 — LlmProvider / ClaudeProvider / MockProvider / AgentRuntime
+- [ ] Phase 4 — AgentOrchestrator / CeoPlanner / AgentSelector / Queue / Retry
+- [ ] Phase 5 — 五個 Tool + PermissionGate + WorkspaceGuard + CommandAllowlist
+- [ ] Phase 6 — Approval / RiskLevel / human-in-the-loop
+- [ ] Phase 7 — Activity + SSE
+- [ ] Phase 8 — Vue Dashboard
+- [ ] Phase 9 — Pixel Office
+- [ ] Phase 10 — TokenUsage / Cost / AgentMemory / Agent 效能
+- [ ] Phase 11 — Docker Sandbox / GitHub Actions
+- [ ] Phase 12 — 完整 Demo
+
 ## Phase 8.5 — 地址搜尋（Geocoding，優先）✅ 已完成 2026-08-24
 
 回應「輸入提示字找到素食地圖」需求：目前 `GET /api/v1/restaurants` 只吃數字座標，

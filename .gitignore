@@ -22,3 +22,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# AI Office 子系統的 workspace（每個 Project 一個子目錄），內容不進版控
+/workspace/*
+!/workspace/.gitkeep

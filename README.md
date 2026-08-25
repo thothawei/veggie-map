@@ -188,7 +188,7 @@ docker compose logs -f horizon   # 確認 queue worker 真的在跑、有沒有 
 docker compose exec app php artisan test
 ```
 
-79 個 Feature/Unit test、238 個 assertion，涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
+206 個 Feature/Unit test、608 個 assertion（2026-08-25 實測），涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
 Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:sync` 冪等性與去重、
 `RestaurantRepository` bounding box 純數學、`ReviewService` 真實併發競態、
 `RuleBasedRecommendationService` 加權排序、search/detail cache 命中與失效、rate limiting
@@ -303,6 +303,26 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 第一次真的跑在 GitHub Actions 上時抓到 3 個本機環境掩蓋掉的真 bug（mock fixture 從沒進
 版控、`/` 依賴的 Vite manifest 在全新 checkout 不存在、Vitest 誤吃到 `laravel-vite-plugin`
 的 CI 防呆機制），細節見 [docs/progress.md](docs/progress.md) Phase 12。
+
+## AI Office（多 Agent 開發平台子系統）
+
+同一個 repo 內另有一個進行中的子系統 **AI Office**：使用者對 AI CEO 提需求，由 CEO 拆解
+任務、建立相依圖、指派給不同角色的 Agent，透過 Redis Queue 執行、呼叫工具、QA 驗證、
+高風險操作走人工核准。定位是 Multi-Agent AI Software Development Platform，不是聊天機器人。
+
+- 完整規劃、與本 repo 既有技術棧的衝突裁決、12 個 Phase 的路線圖：
+  [docs/implementation-plan.md](docs/implementation-plan.md)
+- 隔離方式：命名空間 `App\AiOffice\*`、資料表前綴 `ai_office_`、路由前綴
+  `/api/v1/ai-office/*`、前端 `resources/js/ai-office/*`，不與餐廳領域混在一起。
+- 刻意偏離原始規格之處（規格假設是全新專案）：沿用 MySQL 而非 PostgreSQL（餐廳查詢
+  建立在 MySQL 空間函式上）、沿用 Vue 3 + Pinia 而非 React + Zustand、沿用 PHPUnit
+  而非 Pest。理由逐條寫在 implementation-plan 的「Conflicts with the Spec」。
+- 設定集中在 [config/ai_office.php](config/ai_office.php)：workspace 邊界、LLM provider
+  （預設 `mock`，不會不小心打真的 API）、Agent loop 硬上限、沙箱參數。
+- Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
+  資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
+
+目前進度：**Phase 1 完成**（基礎設施驗證、設定骨架、RBAC 四角色、readiness 端點）。
 
 ## Future Roadmap
 
