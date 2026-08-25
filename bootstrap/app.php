@@ -2,6 +2,7 @@
 
 use App\AiOffice\Http\Middleware\EnsureAiOfficeRole;
 use App\Exceptions\ApiExceptionRenderer;
+use App\Http\Middleware\LogSlowApiRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,6 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // 蓋掉原本該回的 401。這裡強制永遠不重導，讓 unauthenticated() 正常拋
         // AuthenticationException，交給 ApiExceptionRenderer 統一處理。
         $middleware->redirectGuestsTo(fn () => null);
+
+        // 每個 API 請求都量 response time（規格第三十五節）。慢的寫 log，
+        // 全部都帶 X-Response-Time-Ms 標頭。
+        $middleware->api(prepend: [LogSlowApiRequests::class]);
 
         $middleware->alias([
             'ai-office' => EnsureAiOfficeRole::class,

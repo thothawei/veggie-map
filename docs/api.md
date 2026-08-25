@@ -234,9 +234,26 @@ GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.
 
 ## Validation / Authorization
 
-每個會寫入的端點對應一個 FormRequest（`SearchRestaurantRequest`、`CreateReviewRequest`、
-`CreateRestaurantReportRequest`…）與一個 Policy（`ReviewPolicy`、`RestaurantPolicy`、`ReportPolicy`、
-`FavoritePolicy`）。Controller 只做「呼叫 Service／回傳 Resource」，不做欄位驗證與授權判斷。
+每個會寫入的端點對應一個 FormRequest（`SearchRestaurantRequest`、`SuggestRestaurantRequest`、
+`CreateReviewRequest`、`CreateRestaurantReportRequest`、`ResolveDuplicateRestaurantRequest`…）。
+Controller 只做「呼叫 Service／回傳 Resource」，不做欄位驗證與授權判斷。
+
+實際存在的 Policy 是這五個（`app/Policies/`）：
+
+| Policy | 管什麼 |
+|---|---|
+| `ReviewPolicy` | 評論的建立與 admin 隱藏 |
+| `RestaurantReportPolicy` | 回報的建立與 admin 審核 |
+| `RestaurantVerificationPolicy` | admin 手動寫入驗證 |
+| `MenuItemPolicy` | admin 新增菜單 |
+| `RestaurantPolicy` | admin 審核重複標記 |
+
+收藏刻意沒有 Policy（只判斷是否登入，沒有「別人的收藏」這種概念）。
+這段先前列了 `FavoritePolicy`／`ReportPolicy` 兩個不存在的名字，已更正。
+
+所有 email 欄位另外掛 `App\Rules\SafeEmail`：Laravel 11 預設的 `email` 規則會放行
+`"user\r\n"@example.com` 這種帶引號 local part 的 CRLF 值（CVE-2026-48019，
+修補版本是 12.61.1+，屬 major upgrade）。這是緩解不是根治，見 [deployment.md](deployment.md)。
 
 ## Caching（`RestaurantRepository`）
 

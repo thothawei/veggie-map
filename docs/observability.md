@@ -16,26 +16,33 @@ Phase 11 產出。這份文件記錄「目前實際有什麼」跟「刻意還�
 
 ## API Response Time
 
-**沒有**針對一般 API 端點（`/restaurants`、`/auth/*` 等）記錄逐次請求的 response time——
-Laravel 沒有內建這個功能，這個專案也沒有另外接 middleware 或 APM 工具去做。唯一有記錄
-response time 的是外部 API 呼叫（見下方 External API Failures），不要誤會成「全站請求
-都有 response time 追蹤」。
+**已實作**（2026-08-26）：`App\Http\Middleware\LogSlowApiRequests` 掛在整個 `api`
+middleware group 的最前面。
 
-如果之後要加，合理的做法是一個輕量 middleware（`microtime()` 前後差）寫進獨立的
-`api_request_logs` 表或轉發到 APM（例如 Laravel Pulse／New Relic），不是本次 Phase 範圍。
+- 每一筆回應都帶 `X-Response-Time-Ms` 標頭——不管快慢都量得到，壓測與手動排查
+  不必先去翻 log。
+- **只有超過門檻的才寫 log**（`config/veggiemap.php` 的
+  `observability.slow_request_ms`，預設 1000ms）。每一筆都寫等於自製一個成本很高
+  又沒人看的 APM，而這個專案沒有 log 聚合服務去消化它；門檻以上才記，log 裡出現
+  的東西就都值得看。
+- log 記的是 **route 樣板**（`api/v1/restaurants/{restaurant}`）而不是完整網址：
+  逐筆 id 會變成幾千個獨一無二的字串，聚合不起來。**不記 query string**——那裡面
+  有使用者搜尋的關鍵字與座標，屬於個人資料。
+- 刻意不寫進資料表：那需要一張會無限成長的表與清理排程。要接 Laravel Pulse／APM
+  也是換這一層。
 
 ## Queue Failures
 
 `failed_jobs` 表存在（Laravel 11 預設骨架的 `0001_01_01_000002_create_jobs_table.php` 一併
 建立），`QUEUE_CONNECTION=redis`（`.env.example`）。
 
-**但目前這張表實務上不會有資料**——`CalculateRestaurantScoreJob`／`RecalculateRestaurantRatingJob`
-雖然都實作 `ShouldQueue`，呼叫端全部用 `dispatchSync()` 同步執行（見
-[docs/progress.md](progress.md) Phase 6 的決定：這個專案還沒有跑 queue worker，真的
-`dispatch()` 進 Redis 佇列會因為沒有 worker 消化而卡住）。同步執行的例外會直接冒泡到
-呼叫端（例如 `ReviewService::submit()` 內），不會進 `failed_jobs`。等 Horizon／queue worker
-真的架起來、呼叫端改回 `dispatch()` 之後，`failed_jobs` 才會是有意義的失敗記錄來源
-（見 [docs/todo.md](todo.md) 的已知技術債）。
+**2026-08-25 起這張表是有意義的**：Laravel Horizon 已安裝、`docker-compose.yml` 有
+`horizon` service，`CalculateRestaurantScoreJob`／`RecalculateRestaurantRatingJob`
+都改回 `dispatch()` 進 Redis 佇列（先前是 `dispatchSync()`，那時例外會直接冒泡到
+呼叫端、永遠不會進 `failed_jobs`——這段文件一度停在那個舊狀態）。
+
+Horizon 儀表板在 `/horizon`；`config/horizon.php` 的 gate 白名單目前是空陣列，
+所以 production 沒有人看得到，要開就填 admin email。
 
 ## External API Failures
 
@@ -99,8 +106,9 @@ Laravel 11 內建的 `/up` 路由（`bootstrap/app.php` 的 `health: '/up'`）�
 |---|---|
 | 例外統一格式化＋記錄到 `storage/logs/laravel.log` | ✅ 已實作 |
 | 外部 API 呼叫記錄（provider/status/response_time/success） | ✅ 已實作，`external_api_logs` |
-| Queue 失敗記錄（`failed_jobs`） | ⚠️ 表存在，但目前 `dispatchSync` 讓它實務上不會有資料 |
-| 一般 API 端點的 response time 追蹤 | ❌ 未實作 |
+| Queue 失敗記錄（`failed_jobs`） | ✅ Horizon＋`dispatch()`（2026-08-25 起），失敗的 Job 會真的落到 `failed_jobs` |
+| 一般 API 端點的 response time 追蹤 | ✅ 已實作（`X-Response-Time-Ms` 標頭＋慢請求 log） |
+| 外部 API 斷路器狀態 | ✅ 開路期間的每次短路都寫一筆 `error_code = CIRCUIT_OPEN` 的 `external_api_logs` |
 | Cache hit/miss 追蹤 | ❌ 未實作 |
 | DB 慢查詢記錄 | ❌ 未實作，僅 Phase 3 手動 `EXPLAIN` 過一次 |
 | Health check endpoint | ✅ Laravel 內建 `/up` |

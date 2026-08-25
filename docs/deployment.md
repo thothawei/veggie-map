@@ -10,11 +10,15 @@ credentials，也沒有使用者確認要真的花錢起 infra，依照總 promp
 
 | 缺口 | 影響 | 部署前要不要處理 |
 |---|---|---|
-| 沒有 Laravel Horizon／queue worker，所有 Job 用 `dispatchSync()` | Rating／confidence score 重算會拖長 request 時間（目前資料量小，感覺不出來；資料量大之後會變慢） | 建議處理，見下方「Queue Worker」 |
-| 沒有 `users:promote` 指令 | 上線後沒有 UI／指令可以把某帳號設成 admin，只能連進 DB 手動改 | 至少要能連 production DB 執行一次 SQL |
-| 沒有排程自動跑 `restaurants:sync`／批次計算 Job | 資料不會自動更新，需要人工執行 artisan 指令 | 視是否要自動化決定，見下方「排程」 |
-| `composer audit` 的 `CVE-2026-48019`（email 驗證 CRLF injection） | Laravel 11.x 已知安全公告 | **部署前必須處理**，見下方「安全性」 |
+| `composer audit` 仍報 `CVE-2026-48019` 等三則 laravel/framework 公告 | 修補版本是 12.61.1+／13.12+，本專案在 11.56，屬於 major upgrade | **已緩解、未根治**：所有吃 email 的 FormRequest 都掛 `App\Rules\SafeEmail` 擋控制字元（實測過預設 `email` 規則會放行 `"user\r\n"@example.com` 這種 quoted local part）。要真的清掉 audit 就得升 major，那是獨立的工作 |
 | Nominatim 商業使用政策偏保留（見 [external-apis.md](external-apis.md)） | 公開營運的地址搜尋流量可能違反 Nominatim 使用政策 | 真的要公開營運，評估換付費 Geocoding 服務 |
+| Horizon／Telescope 的 production gate 白名單是空陣列 | production 沒有人能看儀表板 | 要看就填 admin email，見 `config/horizon.php`／`config/telescope.php` |
+| Sanctum token 永不過期 | MVP 可接受，正式營運要 expiry／refresh | 依營運需求決定 |
+| Cache hit/miss 與 DB 慢查詢沒有追蹤 | 效能問題只能靠使用者回報 | 非阻塞；API response time 已有（見 [observability.md](observability.md)） |
+
+**已經不是缺口的（2026-08-25／26 補完，這張表先前寫的是舊狀況）**：Laravel Horizon
+與 queue worker 已安裝、Job 都走 `dispatch()`；`users:promote` 指令已有；
+`restaurants:sync` 與批次計算已排程（`routes/console.php`）。
 
 ## 架構選擇
 
@@ -120,34 +124,24 @@ nginx + Let's Encrypt（`certbot`）。這份文件不展開逐步操作，因�
 
 ### 7. 建立第一個 Admin 帳號
 
-目前沒有 `users:promote` 指令（見上方缺口清單），部署後第一次要手動：
+先透過 `POST /api/v1/auth/register` 註冊一個帳號，再用指令升級：
 
 ```bash
-docker compose exec app php artisan tinker --execute="
-App\Models\User::where('email', 'you@example.com')->update(['role' => 'admin']);
-"
+docker compose exec app php artisan users:promote you@example.com
 ```
 
-先透過 `POST /api/v1/auth/register` 註冊一個帳號，再執行上面指令升級。
+### 8. Queue Worker
 
-### 8. Queue Worker（建議處理，非必要）
+Laravel Horizon 已安裝，Job 都走 `dispatch()` 進 Redis 佇列。production 需要一個
+supervisor 管理的 `php artisan horizon` process（`docker-compose.yml` 裡已有 `horizon`
+service 可以參考）。`config/horizon.php` 的 gate 白名單目前是空的——要在 production
+開儀表板就把 admin email 填進去。
 
-現況：`CalculateRestaurantScoreJob`／`RecalculateRestaurantRatingJob` 用 `dispatchSync()`
-同步跑（見 [docs/progress.md](progress.md) Phase 6 的決定）。部署到 production 前建議
-評估是否要：
+### 9. 排程
 
-1. 安裝 Laravel Horizon，起一個 supervisor 管理的 `php artisan horizon` process
-2. 把 `dispatchSync()` 改回 `dispatch()`
-
-如果流量小（Portfolio Demo 等級），維持 `dispatchSync()` 也能正常運作，只是每次
-送出評論／匯入資料時 request 會多花一點時間，不是錯誤，是已知的效能取捨。
-
-### 9. 排程（選用）
-
-`restaurants:sync`／`restaurants:recalculate-ratings`／`restaurants:calculate-scores`
-目前都要手動執行。如果要自動化，在 EC2 上用系統 `cron` 呼叫（不是 Laravel 的
-`routes/console.php` schedule，因為那需要 `php artisan schedule:run` 本身被排程，
-兩者最終都要落到系統層級的 cron）：
+`restaurants:sync`（依 `EXTERNAL_API_SYNC_BBOXES` 逐城市）、
+`restaurants:recalculate-ratings`、`restaurants:calculate-scores` 都已經寫在
+`routes/console.php` 的 schedule 裡。production 只差把 `schedule:run` 掛上系統 cron：
 
 ```cron
 0 3 * * * cd /path/to/veggie-map && docker compose exec -T app php artisan restaurants:calculate-scores

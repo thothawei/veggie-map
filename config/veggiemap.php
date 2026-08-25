@@ -24,6 +24,21 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | 可觀測性
+    |--------------------------------------------------------------------------
+    |
+    | slow_request_ms：超過這個毫秒數的 API 請求會寫一筆 warning log。
+    | 每一筆都記等於自製一個沒人看的 APM，所以只記慢的；每一筆仍然會在回應帶
+    | X-Response-Time-Ms 標頭。
+    |
+    */
+
+    'observability' => [
+        'slow_request_ms' => env('VEGGIEMAP_SLOW_REQUEST_MS', 1000),
+    ],
+
     'search' => [
         'keyword_max_terms' => 5,
         'keyword_min_length' => 2,

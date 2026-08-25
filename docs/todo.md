@@ -602,18 +602,18 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 ### P1 — 安全／可觀測性（規劃「至少」）
 
-- [ ] **`CVE-2026-48019`（第四十二節、`docs/deployment.md` 標「部署前必須」）**
-      Laravel 11.x 預設 email 驗證規則的 CRLF injection。修法是升到 12.60+／13.10+，
-      或在 FormRequest 額外擋。`composer audit` 還會報。沒部署前可以繼續放，但不要
-      假裝 Security 章節已經處理完。
+- [x] **`CVE-2026-48019`（第四十二節）— 已緩解，未根治 ✅ 2026-08-26**
+      `App\Rules\SafeEmail` 掛在所有吃 email 的 FormRequest 上，擋掉控制字元。
+      **payload 是實測出來的**：`user@example.com\r\n...` 那種形狀預設規則本來就會擋
+      （用它當測試等於假保護），真正會通過的是帶引號的 local part
+      `"user\r\n"@example.com`。`composer audit` 仍會報三則——那要升 major
+      （12.61.1+／13.12+），是獨立的工作，不要因為擋住了就說已修補。
 
-- [ ] **Observability 三缺（第三十五節）**
-      `docs/observability.md` 已誠實記錄未做：
-      - 一般 API 的 response time（只有外部呼叫有 `response_time_ms`）
-      - Cache hit／miss 分 key 追蹤（Redis `INFO stats` 是全域，應用層沒記）
-      - DB 慢查詢（沒有 `DB::listen`、也沒開 MySQL slow query log）
-      Telescope 只在 local。若要履歷上的「Logging / Monitoring」站得住，至少做一個
-      輕量 request timing middleware，或上 Laravel Pulse；不要為了表格好看接一堆 APM。
+- [~] **Observability 三缺（第三十五節）— 做了一項 ✅ 2026-08-26**
+      - [x] 一般 API 的 response time：`LogSlowApiRequests` middleware，每筆回應帶
+            `X-Response-Time-Ms`，超過門檻才寫 log（route 樣板、不記 query string）
+      - [ ] Cache hit／miss 分 key 追蹤（Redis `INFO stats` 是全域，應用層沒記）
+      - [ ] DB 慢查詢（沒有 `DB::listen`、也沒開 MySQL slow query log）
 
 - [x] **列表 API 仍是整列撈出（第三十二節）✅ 2026-08-26**
       `LIST_COLUMNS` 明列欄位，排除 `description`／`source_id`／`opening_hours`／
@@ -630,15 +630,13 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 這些不是缺功能，是文件還停在舊決定，面試官對照會以為沒做或做了其實沒有。
 
-- [ ] **`docs/deployment.md` 開頭缺口表過時**
-      仍寫「沒有 Horizon／沒有 `users:promote`／沒有排程」。三項都已做完。應改成反映
-      現況，並把還真的沒做的（CVE、Nominatim 商業政策、本文件的 P1）留下來。
+- [x] **`docs/deployment.md` 開頭缺口表過時** ✅ 2026-08-26（連 admin 帳號、queue、排程三段內文一起改）
 
-- [ ] **`docs/observability.md` Queue 段落過時**
-      仍寫 Job 用 `dispatchSync()`、`failed_jobs` 實務上不會有資料。Horizon 之後已改
-      `dispatch()`，這段會誤導。
+- [x] **`docs/observability.md` Queue 段落過時** ✅ 2026-08-26
 
-- [ ] **`docs/api.md` 寫了不存在的 Policy**
+- [x] **`docs/api.md` 寫了不存在的 Policy** ✅ 2026-08-26（改成實際存在的五個，並說明收藏刻意沒有 Policy）
+
+~~原始說明~~：
       寫 `RestaurantPolicy`、`FavoritePolicy`、`ReportPolicy`。實際只有
       `ReviewPolicy`、`RestaurantReportPolicy`。收藏刻意不做 Policy（只判斷已登入），
       餐廳沒有寫入端點所以沒有 RestaurantPolicy。把文件改成現況，或真的補檔——不要

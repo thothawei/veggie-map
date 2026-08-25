@@ -2762,3 +2762,55 @@ pending 餐廳加的）。這個清單本來就會包含已下架的重複筆，
 
 後端 477 → **479 個測試全綠 ＋ 4 skipped**，前端 250 → **253 個測試全綠**。
 `npm run build` 通過，並在瀏覽器重新驗證過修正結果。
+
+---
+
+## 2026-08-26 — API response time、CVE 緩解，與一批過時文件
+
+### API response time（第三十五節的「至少」清單）
+
+`LogSlowApiRequests` middleware 掛在整個 `api` group 最前面。
+
+三個刻意的取捨：
+
+1. **只有慢的才寫 log**（預設 1000ms，config 可調）。每一筆都寫，在有流量時等於
+   自製一個成本很高又沒人看的 APM，而這個專案沒有 log 聚合服務去消化它。
+2. **每一筆都帶 `X-Response-Time-Ms` 標頭**。這樣「量得到」與「記下來」分開：
+   壓測與手動排查不必先去翻 log。
+3. **log 記 route 樣板、不記 query string**。逐筆 id 會變成幾千個獨一無二的字串，
+   聚合不起來；而 query string 裡有使用者搜尋的關鍵字與座標，屬於個人資料。
+
+不寫進資料表：那需要一張會無限成長的表與清理排程。
+
+### CVE-2026-48019：這次差點寫出一組假保護
+
+`App\Rules\SafeEmail` 掛在所有吃 email 的 FormRequest 上，擋掉控制字元。
+
+**第一版測試是假的**。我用的 payload 是 `user@example.com\r\nBcc: victim@...`，
+測試綠——但**把規則整個拿掉，測試照樣綠**，因為那個字串 Laravel 11.56 的預設
+`email` 規則本來就會擋。反向驗證當場抓到。
+
+實際去問驗證器才找到真正會通過的形狀：**帶引號的 local part**
+`"user\r\n"@example.com`（RFC 5321 的 quoted-string 允許裡面出現這些字元）。
+換成它之後，拿掉規則會紅。
+
+第二個假保護在同一組測試裡：登入的測試只斷言 422，但**登入失敗本來就回 422**
+（「帳密不正確」也是丟 `ValidationException`），所以那條測試對規則在不在完全不敏感。
+改成同時斷言回應裡沒有「credentials are incorrect」——證明它是在驗證階段被擋下，
+而不是走到比對密碼那一步。修完之後拿掉規則會紅 2 條。
+
+**這是緩解不是根治**：`composer audit` 仍會報三則 laravel/framework 公告，修補版本
+是 12.61.1+／13.12+，屬於 major upgrade，是獨立的工作。文件寫成「已緩解、未根治」，
+不寫成已修補。
+
+### 過時文件
+
+`deployment.md` 的缺口表還在說「沒有 Horizon／沒有 `users:promote`／沒有排程」——
+三項都在 8/25 做完了；內文的 admin 帳號那段還教人用 `tinker` 手動改 DB。
+`observability.md` 的 Queue 段落還停在 `dispatchSync()` 的年代。
+`api.md` 列了 `FavoritePolicy`／`ReportPolicy` 兩個不存在的檔案。三份都對齊現況。
+
+### 驗證
+
+後端 479 → **485 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
+**反向驗證**：拿掉 `SafeEmail` 的判斷 → 2 條紅（修正 payload 與斷言之後才有的結果）。
