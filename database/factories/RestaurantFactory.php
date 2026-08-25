@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Restaurant;
+use App\Services\OpeningHoursService;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -52,6 +53,18 @@ class RestaurantFactory extends Factory
             'source_id' => null,
             'status' => 'active',
             'is_possible_duplicate' => false,
+            'opening_hours' => null,
+            'timezone' => 'Asia/Taipei',
         ];
+    }
+
+    /**
+     * 帶營業時間的餐廳。字串走跟正式匯入完全一樣的解析路徑（OpeningHoursService），
+     * 測試才不會因為 factory 自己塞了一組「理想」的時段列而測不到解析器。
+     */
+    public function withOpeningHours(string $raw, string $timezone = 'Asia/Taipei'): static
+    {
+        return $this->state(fn () => ['opening_hours' => $raw, 'timezone' => $timezone])
+            ->afterCreating(fn (Restaurant $restaurant) => app(OpeningHoursService::class)->sync($restaurant));
     }
 }

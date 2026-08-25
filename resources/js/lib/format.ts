@@ -62,3 +62,31 @@ export function formatCuisines(cuisines?: Cuisine[] | null): string | null {
 
     return cuisines.map((item) => item.label).join('、');
 }
+
+/**
+ * 營業狀態的畫面文字。
+ *
+ * 回傳 null 代表「這家店的營業時間我們沒有資料」——刻意不顯示任何東西，而不是
+ * 顯示「已打烊」。OSM 多數餐廳沒有 opening_hours 標籤，把未知說成打烊會誤導。
+ */
+export function formatOpenStatus(restaurant: {
+    open_status?: 'open' | 'closed' | 'unknown';
+    closes_at?: string;
+    next_opens_at?: string;
+}): { text: string; state: 'open' | 'closed' } | null {
+    if (restaurant.open_status === 'open') {
+        return {
+            state: 'open',
+            text: restaurant.closes_at ? `營業中・${restaurant.closes_at} 打烊` : '營業中',
+        };
+    }
+
+    if (restaurant.open_status === 'closed') {
+        return {
+            state: 'closed',
+            text: restaurant.next_opens_at ? `休息中・${restaurant.next_opens_at} 開始營業` : '休息中',
+        };
+    }
+
+    return null;
+}

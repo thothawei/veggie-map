@@ -166,6 +166,7 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
                 district: $tags['addr:district'] ?? null,
                 phone: $tags['phone'] ?? $tags['contact:phone'] ?? null,
                 website: $tags['website'] ?? $tags['contact:website'] ?? null,
+                openingHours: isset($tags['opening_hours']) ? (string) $tags['opening_hours'] : null,
                 dietCodes: $dietCodes,
                 featureCodes: $this->featureCodes($tags),
                 cuisineCodes: CuisineCatalog::mapOsmCuisine(

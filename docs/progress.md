@@ -2376,3 +2376,76 @@ PHPStan 過程中還擋下一個我自己寫錯的東西：它說 `$task->agent?
 
 **仍未做的：** 這個指令還沒有在開發資料庫上真的跑過（會寫 DB 與 workspace 檔案，要先得到
 同意）。目前的證據是測試資料庫上的端到端驗證。
+
+---
+
+## 2026-08-26 — 營業時間與 `open_now`（搜尋強化第一項）
+
+依使用者指示重新對照兩份總 Prompt 後，把「跟搜尋有關的缺口」排到最前面（會員／評分
+評論相關的待辦依指示全部剔除，不做也不擴充）。第一項是 `open_now`——總 Prompt 第八、
+二十八節都明寫，schema 卻完全沒有營業時間，`docs/api.md` 一直列著一個不存在的參數。
+
+### 為什麼是獨立資料表而不是一個字串欄位
+
+`open_now` 是**搜尋條件**。把 OSM 的 `opening_hours` 字串存進 `restaurants` 再撈出來
+用 PHP 逐筆判斷，就是總 Prompt 第九節明講禁止的「全部撈出來再算」，而且分頁會壞掉
+（先分頁再過濾＝每頁筆數不一）。所以解析在**寫入端**做一次，存成
+`restaurant_opening_hours(day_of_week, opens_at, closes_at)`，查詢端只剩
+`day = ? AND opens_at <= ? AND closes_at > ?` 這種吃得到複合索引的整數比較。
+
+跨午夜也在寫入端切好：`Sa 17:00-02:00` → 「週六 1020–1440」＋「週日 0–120」兩列。
+查詢端因此完全不需要處理跨日比較。
+
+### 解析器刻意只做子集
+
+`App\Support\OpeningHours` 只認 `24/7`、`Mo-Fr 11:00-14:00,17:00-21:00`、時間單獨一段
+（＝每天）、`Su off` 覆蓋、跨午夜、`PH off`（節慶規則跳過不套用）。月份區間、週序
+`Mo[1]`、`sunrise-sunset`、`09:00+`、自由文字一律回 `null`。
+
+理由：完整的 opening_hours 是一套獨立的小語言，為了一個篩選去實作整套不划算，而
+**錯解比不解更糟**——會把打烊的店標成營業中。回 null 代表「沒有可信資料」，一路
+誠實傳到 UI（`open_status: unknown`，前端不顯示任何狀態文字）。
+
+### 三態而不是布林
+
+API 回 `open_status: open|closed|unknown`。OSM 多數餐廳根本沒有 `opening_hours` 標籤，
+把 unknown 壓成 `false` 會讓使用者以為整批店都關門了。同理 `open_now=1` **不會**把
+未知的店算進來——寧可漏掉，也不要把打烊的店推給使用者。這條在後端與前端各有一個
+測試守著。
+
+### 時區：台北與東京差一小時
+
+`restaurants.timezone` 在同步時依座標落在哪個 `config/cities.php` 的 bbox 決定
+（新增 `timezone` 欄位到城市設定）。`applyOpenNow()` 依時區分組，每組各自算出
+「當地現在是星期幾、第幾分鐘」再組成 OR 條件——一次 SQL 比完所有時區，不必分開查。
+`timezone` 為 NULL 的既有資料跟著 `config/veggiemap.php` 的預設時區走，不會整批從
+結果裡消失。
+
+`OpeningStatus::for()` 顯示端也用同一套當地時間，不是伺服器時間。
+
+### 重跑同步是覆寫不是累加
+
+`OpeningHoursService::sync()` 先刪光該餐廳的舊時段再寫入。累加的話，店家改成週日
+公休之後舊的週日時段會永遠留著，`open_now` 會在週日把它算成營業中。解析失敗時同樣
+清空——「沒有可信資料」要表現成查不到時段，不是留著上一版。這條有專門的測試
+（`test_resync_replaces_old_opening_hours_instead_of_accumulating`）。
+
+### 驗證
+
+後端 398 → **428 個測試全綠 ＋ 4 skipped**（22 個解析器單元測試、8 個 HTTP 測試、
+2 個同步測試）。Pint PASS、PHPStan 0 error。前端 220 → **225 個測試全綠**，
+vue-tsc／ESLint 乾淨。
+
+**反向驗證**：把 `applyOpenNow()` 的呼叫改成 `if (false)` → 8 條裡紅 4 條。
+
+HTTP 測試全部用 `CarbonImmutable::setTestNow()` 把時間釘死。不釘的話同一組斷言半夜
+跑會整批反過來，變成「有時綠有時紅」的假保護——這正是坑卡 `negative-assertion-wrong-path`
+那一類。
+
+**仍未做的：** 沒有真的重跑一次 OSM 同步把既有 138 筆餐廳的營業時間灌進開發資料庫
+（會寫真實資料，且要打 Overpass）。目前 `restaurant_opening_hours` 在開發庫是空的，
+證據是測試資料庫上的端到端驗證。要看實際效果需要跑 `php artisan restaurants:sync`。
+
+PHPStan 過程中擋下兩個我寫錯的東西：`$restaurant->openingHours` 是 Eloquent 關聯，
+永遠不會是 `null`（我多寫了 `=== null` 判斷），以及 `array_values()` 對已經是 list
+的陣列沒有作用。

@@ -5,7 +5,7 @@ import client from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { extractApiErrorMessage } from '@/lib/apiError';
 import { applyMenuItemDiets, menuItemDiets } from '@/lib/dietCatalog';
-import { formatAddress, formatCuisines } from '@/lib/format';
+import { formatAddress, formatCuisines, formatOpenStatus } from '@/lib/format';
 import { safeHttpUrl } from '@/lib/redirect';
 import type { AdminVerificationType, ApiSuccess, DietType, Feature, MenuItem, MenuItemDiet, Restaurant } from '@/types';
 
@@ -34,6 +34,7 @@ const verificationNotice = ref<string | null>(null);
 const websiteUrl = computed(() => safeHttpUrl(restaurant.value?.website));
 const displayAddress = computed(() => (restaurant.value ? formatAddress(restaurant.value) : null));
 const cuisineLine = computed(() => formatCuisines(restaurant.value?.cuisines));
+const openStatus = computed(() => (restaurant.value ? formatOpenStatus(restaurant.value) : null));
 
 const menuGroups = computed(() => {
     const items = restaurant.value?.menu_items ?? [];
@@ -189,6 +190,30 @@ watch(() => props.id, load, { immediate: true });
                     <dd>{{ restaurant.phone }}</dd>
                 </div>
             </dl>
+            <section class="hours">
+                <h2>營業時間</h2>
+                <p
+                    v-if="openStatus"
+                    class="open-status"
+                    :data-state="openStatus.state"
+                >{{ openStatus.text }}</p>
+                <table v-if="restaurant.opening_hours_week?.length">
+                    <tbody>
+                        <tr v-for="day in restaurant.opening_hours_week" :key="day.day">
+                            <th scope="row">{{ day.label }}</th>
+                            <td>{{ day.ranges.length ? day.ranges.join('、') : '公休' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <!--
+                    沒有可解析的營業時間就照實說。OSM 多數店家沒填 opening_hours，
+                    這裡不要留白讓人以為是載入失敗，也不要編一組時間。
+                -->
+                <p v-else class="unknown">
+                    尚未取得營業時間資料<span v-if="restaurant.opening_hours_raw">（原始標示：{{ restaurant.opening_hours_raw }}）</span>。
+                </p>
+            </section>
+
             <p v-if="websiteUrl">
                 <a :href="websiteUrl" target="_blank" rel="noopener noreferrer">官方網站</a>
             </p>
@@ -386,5 +411,35 @@ header {
     width: 100%;
     margin-top: 0.2rem;
     padding: 0.35rem;
+}
+
+.hours table {
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.hours th {
+    text-align: left;
+    font-weight: 500;
+    color: #4a5568;
+    padding: 0.15rem 1rem 0.15rem 0;
+}
+
+.hours td {
+    padding: 0.15rem 0;
+}
+
+.hours .unknown {
+    color: #718096;
+    font-size: 0.9rem;
+}
+
+.open-status[data-state='open'] {
+    color: #2f855a;
+    font-weight: 600;
+}
+
+.open-status[data-state='closed'] {
+    color: #718096;
 }
 </style>

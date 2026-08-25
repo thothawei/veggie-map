@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAddress, formatCuisines, formatDistance } from './format';
+import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from './format';
 
 describe('formatDistance', () => {
     it('一公里以內用公尺，取整到十位', () => {
@@ -66,5 +66,34 @@ describe('formatCuisines', () => {
     it('沒有菜系回 null，不要印空白或 undefined', () => {
         expect(formatCuisines([])).toBeNull();
         expect(formatCuisines(undefined)).toBeNull();
+    });
+});
+
+describe('formatOpenStatus', () => {
+    it('營業中會帶上打烊時間', () => {
+        expect(formatOpenStatus({ open_status: 'open', closes_at: '21:00' })).toEqual({
+            state: 'open',
+            text: '營業中・21:00 打烊',
+        });
+    });
+
+    it('營業中但後端沒給打烊時間就只寫營業中', () => {
+        expect(formatOpenStatus({ open_status: 'open' })).toEqual({ state: 'open', text: '營業中' });
+    });
+
+    it('休息中會帶上今天稍後的開店時間', () => {
+        expect(formatOpenStatus({ open_status: 'closed', next_opens_at: '17:00' })).toEqual({
+            state: 'closed',
+            text: '休息中・17:00 開始營業',
+        });
+    });
+
+    /**
+     * 這是整個營業時間功能最重要的一條：OSM 多數餐廳沒有 opening_hours，
+     * 把「不知道」顯示成「休息中」會讓使用者以為店家關門了。
+     */
+    it('未知營業時間回 null，畫面不顯示任何狀態', () => {
+        expect(formatOpenStatus({ open_status: 'unknown' })).toBeNull();
+        expect(formatOpenStatus({})).toBeNull();
     });
 });

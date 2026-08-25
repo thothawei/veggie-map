@@ -51,6 +51,8 @@ class Restaurant extends Model
         'source_id',
         'status',
         'is_possible_duplicate',
+        'opening_hours',
+        'timezone',
     ];
 
     protected function casts(): array
@@ -92,6 +94,17 @@ class Restaurant extends Model
     {
         return $this->belongsToMany(Feature::class, 'restaurant_features')
             ->withPivot('created_at');
+    }
+
+    /**
+     * 解析後的營業時段，`open_now` 篩選與詳情頁的一週時間表都讀這裡；
+     * `opening_hours` 欄位保留 OSM 原始字串供顯示與日後重新解析。
+     *
+     * @return HasMany<RestaurantOpeningHour, $this>
+     */
+    public function openingHours(): HasMany
+    {
+        return $this->hasMany(RestaurantOpeningHour::class);
     }
 
     /**

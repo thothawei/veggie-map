@@ -149,6 +149,19 @@ function togglePriceLevel(level: number) {
     });
 }
 
+/** 「營業中」不是店家屬性而是此刻的狀態，所以自成一組，不混在特色晶片裡。 */
+function toggleOpenNow() {
+    replaceFilters((next) => {
+        if (next.open_now) {
+            delete next.open_now;
+
+            return;
+        }
+
+        next.open_now = true;
+    });
+}
+
 function toggleFeature(code: string) {
     if (!isFeatureCode(code)) {
         return;
@@ -233,6 +246,19 @@ function clearAll() {
                     @click="togglePriceLevel(level)"
                 >
                     {{ '$'.repeat(level) }}
+                </button>
+            </div>
+
+            <div class="group">
+                <span class="label">時間</span>
+                <button
+                    type="button"
+                    class="chip"
+                    :class="{ active: Boolean(filters.open_now) }"
+                    :aria-pressed="Boolean(filters.open_now)"
+                    @click="toggleOpenNow"
+                >
+                    營業中
                 </button>
             </div>
 

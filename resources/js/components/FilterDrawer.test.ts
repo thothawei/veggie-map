@@ -269,4 +269,17 @@ describe('FilterDrawer 價位與評分', () => {
 
         expect(wrapper.find('.count').text()).toBe('1');
     });
+
+    it('營業中晶片切開切關，網址參數 open_now 跟著進出', async () => {
+        setViewportMatches(true);
+        const wrapper = await mountDrawer();
+
+        const chip = wrapper.findAll('.chip').find((c) => c.text() === '營業中')!;
+
+        await chip.trigger('click');
+        expect(wrapper.props('filters').open_now).toBe(true);
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '營業中')!.trigger('click');
+        expect('open_now' in wrapper.props('filters')).toBe(false);
+    });
 });

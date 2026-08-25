@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Models\Restaurant;
 use App\Support\CuisineCatalog;
 use App\Support\DietCatalog;
+use App\Support\OpeningStatus;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -24,6 +25,10 @@ class RestaurantResource extends JsonResource
         $presentation = $this->relationLoaded('dietTypes')
             ? DietCatalog::venuePresentation($this->dietTypes->pluck('code')->all())
             : null;
+
+        // 只有載入關聯時才算，避免列表 API 逐筆補查（N+1）。search()／findForDetail()
+        // 都有 eager load，沒載到就代表呼叫端刻意不要這段資料。
+        $opening = $this->relationLoaded('openingHours') ? OpeningStatus::for($this->resource) : null;
 
         return [
             'id' => $this->id,
@@ -65,6 +70,16 @@ class RestaurantResource extends JsonResource
                     is_array($presentation) ? $presentation['kind'] : null,
                     $this->source,
                 ),
+            ),
+            // 三態：open／closed／unknown。unknown 是 OSM 最常見的情況，不要壓成 closed。
+            'open_status' => $this->when($opening !== null, fn () => $opening['status']),
+            'open_now' => $this->when($opening !== null, fn () => $opening['open_now']),
+            'closes_at' => $this->when($opening !== null && $opening['closes_at'] !== null, fn () => $opening['closes_at']),
+            'next_opens_at' => $this->when($opening !== null && $opening['opens_at'] !== null, fn () => $opening['opens_at']),
+            'opening_hours_raw' => $this->when($opening !== null, fn () => $this->opening_hours),
+            'opening_hours_week' => $this->when(
+                $opening !== null && $this->openingHours->isNotEmpty(),
+                fn () => OpeningStatus::week($this->resource),
             ),
             'confidence_score' => $this->whenLoaded('confidenceScore', fn () => $this->confidenceScore?->score),
             'created_at' => $this->created_at,

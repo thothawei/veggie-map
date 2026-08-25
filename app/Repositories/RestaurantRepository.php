@@ -4,7 +4,9 @@ namespace App\Repositories;
 
 use App\Models\Feature;
 use App\Models\Restaurant;
+use App\Support\CityCatalog;
 use App\Support\DietCatalog;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -43,7 +45,7 @@ class RestaurantRepository
         return Cache::remember("restaurant:{$id}", 600, function () use ($id) {
             return Restaurant::query()
                 ->where('status', 'active')
-                ->with(['dietTypes', 'features', 'menuItems', 'confidenceScore'])
+                ->with(['dietTypes', 'features', 'menuItems', 'confidenceScore', 'openingHours'])
                 ->find($id);
         });
     }
@@ -107,7 +109,8 @@ class RestaurantRepository
 
             $this->applySort($query, $sort, $hasCoords);
 
-            $query->with(['dietTypes', 'features']);
+            // openingHours 一起載：卡片要顯示「營業中／已打烊」，逐筆補查就是 N+1。
+            $query->with(['dietTypes', 'features', 'openingHours']);
 
             return $query->cursorPaginate($perPage);
         });
@@ -139,6 +142,10 @@ class RestaurantRepository
 
         DietCatalog::applyVenueScope($query, $filters[DietCatalog::venueScopeParam()] ?? null);
 
+        if (! empty($filters['open_now'])) {
+            $this->applyOpenNow($query);
+        }
+
         if (isset($filters['price_level'])) {
             $query->where('price_level', $filters['price_level']);
         }
@@ -154,6 +161,49 @@ class RestaurantRepository
         }
 
         return $query;
+    }
+
+    /**
+     * 「現在營業中」。
+     *
+     * 兩件事決定了它的形狀：
+     * 1. 判斷必須用**該店所在地**的當地時間（台北與東京差一小時），所以依
+     *    restaurants.timezone 分組，每個時區各自算出「今天星期幾、現在第幾分鐘」。
+     * 2. 比較下在 SQL（restaurant_opening_hours 的複合索引）而不是撈出來用 PHP 算，
+     *    否則就是總 Prompt 第九節明講禁止的做法。
+     *
+     * 沒有解析出時段的餐廳（OSM 沒填、或寫法在解析子集之外）**不會**出現在
+     * open_now 結果裡。這是刻意的：「不知道」不等於「營業中」，寧可漏掉也不要把
+     * 打烊的店推給使用者。前端要標示「營業時間未知」，不要讓使用者以為是全部結果。
+     */
+    private function applyOpenNow(Builder $query): void
+    {
+        $now = CarbonImmutable::now();
+        $fallback = CityCatalog::fallbackTimezone();
+
+        $query->where(function (Builder $outer) use ($now, $fallback) {
+            foreach (CityCatalog::timezones() as $timezone) {
+                $local = $now->setTimezone($timezone);
+                $day = $local->dayOfWeekIso - 1; // 1=Mo…7=Su → 0=Mo…6=Su
+                $minutes = $local->hour * 60 + $local->minute;
+
+                $outer->orWhere(function (Builder $q) use ($timezone, $fallback, $day, $minutes) {
+                    $q->where(function (Builder $tz) use ($timezone, $fallback) {
+                        $tz->where('restaurants.timezone', $timezone);
+
+                        // timezone 是後來才加的欄位，既有資料可能是 NULL；讓它跟著
+                        // 預設時區走，而不是整批從 open_now 結果裡消失。
+                        if ($timezone === $fallback) {
+                            $tz->orWhereNull('restaurants.timezone');
+                        }
+                    })->whereHas('openingHours', function ($hours) use ($day, $minutes) {
+                        $hours->where('day_of_week', $day)
+                            ->where('opens_at', '<=', $minutes)
+                            ->where('closes_at', '>', $minutes);
+                    });
+                });
+            }
+        });
     }
 
     private function applySort(Builder $query, string $sort, bool $hasCoords): void

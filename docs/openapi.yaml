@@ -77,6 +77,13 @@ paths:
         - name: rating_min
           in: query
           schema: { type: number, minimum: 0, maximum: 5 }
+        - name: open_now
+          in: query
+          description: >
+            只留下此刻在該店當地時間營業中的餐廳（時區存在 restaurants.timezone，
+            依座標落在哪個 config/cities.php 的 bbox 決定）。沒有可解析營業時間的
+            餐廳不會出現在結果裡——「不知道」不等於「營業中」。傳 1／0 或 true／false。
+          schema: { type: boolean }
         - name: pet_friendly
           in: query
           description: 布林篩選，對應 features.code。傳 1／0 或 true／false。
@@ -964,6 +971,37 @@ components:
           type: string
           nullable: true
           description: 一句說明，文案來自 config/diet.php copy
+        open_status:
+          type: string
+          enum: [open, closed, unknown]
+          description: >
+            三態。unknown＝這家店沒有可解析的營業時間（OSM 最常見的情況），
+            前端不要顯示成「已打烊」。
+        open_now:
+          type: boolean
+          nullable: true
+          description: open_status 的布林形式；unknown 時為 null
+        closes_at:
+          type: string
+          description: 只有營業中才出現，"21:00"
+        next_opens_at:
+          type: string
+          description: 只有休息中且今天稍後還會營業才出現，"17:00"
+        opening_hours_raw:
+          type: string
+          nullable: true
+          description: OSM opening_hours 原始字串，供顯示與日後重新解析
+        opening_hours_week:
+          type: array
+          description: 一週營業時間，只有解析出時段才出現。ranges 空陣列＝當天公休
+          items:
+            type: object
+            properties:
+              day: { type: integer, minimum: 0, maximum: 6, description: 0=週一 … 6=週日 }
+              label: { type: string }
+              ranges:
+                type: array
+                items: { type: string, example: "11:00–14:00" }
         features:
           type: array
           items: { type: string }

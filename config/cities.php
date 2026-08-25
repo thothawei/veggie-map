@@ -13,6 +13,9 @@
 | 為什麼不直接沿用 sync_regions：那是 env 驅動的營運設定（可依環境調整涵蓋範圍），
 | 而顯示用的名稱、地圖初始中心點與 zoom 是產品內容，屬於程式碼而不是環境變數。
 |
+| timezone 用於「現在是否營業」：台北與東京差一小時，open_now 必須用該店所在地的
+| 當地時間判斷。匯入時依座標落在哪個城市 bbox 決定，寫進 restaurants.timezone。
+|
 | center 刻意用「市中心」而不是 bbox 幾何中心——台中 bbox 的幾何中心落在和平區山裡，
 | 高雄的落在那瑪夏，開場畫面會是一片山林而不是有餐廳的市區。
 |
@@ -24,6 +27,7 @@ return [
         'slug' => 'taipei',
         'label' => '台北',
         'country' => '台灣',
+        'timezone' => 'Asia/Taipei',
         'center' => [25.0330, 121.5654],
         'zoom' => 13,
         'bbox' => '24.9613,121.4570,25.2130,121.6663',
@@ -33,6 +37,7 @@ return [
         'slug' => 'taichung',
         'label' => '台中',
         'country' => '台灣',
+        'timezone' => 'Asia/Taipei',
         'center' => [24.1477, 120.6736],
         'zoom' => 13,
         'bbox' => '23.9500,120.4300,24.4500,121.4700',
@@ -42,6 +47,7 @@ return [
         'slug' => 'tainan',
         'label' => '台南',
         'country' => '台灣',
+        'timezone' => 'Asia/Taipei',
         'center' => [22.9997, 120.2270],
         'zoom' => 13,
         'bbox' => '22.8500,120.0000,23.4500,120.7000',
@@ -51,6 +57,7 @@ return [
         'slug' => 'kaohsiung',
         'label' => '高雄',
         'country' => '台灣',
+        'timezone' => 'Asia/Taipei',
         'center' => [22.6273, 120.3014],
         'zoom' => 13,
         'bbox' => '22.4500,120.1500,23.3000,121.0600',
@@ -60,6 +67,7 @@ return [
         'slug' => 'tokyo',
         'label' => '東京',
         'country' => '日本',
+        'timezone' => 'Asia/Tokyo',
         'center' => [35.6762, 139.6503],
         'zoom' => 12,
         'bbox' => '35.5300,139.5600,35.8200,139.9200',

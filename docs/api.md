@@ -61,7 +61,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 `keyword`, `latitude`, `longitude`, `radius`（公里，上限 50）, `bbox`, `city`, `district`, `diet`,
 `venue_scope`（`exclusive`／`friendly`／`all`，名稱與合法值見 `GET /diets` 的 `meta.venue_scope`；
 **省略＝不過濾**，前端預設會送 `exclusive`）, `price_level`,
-`rating_min`, 以及 `features.code` 對應的布林篩選（`pet_friendly`／`parking`／`delivery`／`takeout`／`reservation`／`wifi`／`outdoor_seating`／`family_friendly`；請傳 `1`／`0`，也接受 `true`／`false` 字串）, `open_now`, `sort`（distance/rating/popular/newest，
+`rating_min`, 以及 `features.code` 對應的布林篩選（`pet_friendly`／`parking`／`delivery`／`takeout`／`reservation`／`wifi`／`outdoor_seating`／`family_friendly`；請傳 `1`／`0`，也接受 `true`／`false` 字串）, `open_now`（只留此刻在該店**當地時間**營業中的餐廳；沒有可解析營業時間的店不會出現在結果裡）, `sort`（distance/rating/popular/newest，
 預設 `distance`；帶 `latitude`+`longitude` 才可用 `distance`）, `page`, `per_page`（預設 20，上限 100）。
 
 範例：
@@ -75,6 +75,19 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 列表與詳情在 eager load 過 `dietTypes` 時會帶 `venue_kind`／`venue_badge`／`venue_summary`
 （文案來自 `config/diet.php` 的 `copy`，不是前端寫死）。有任何 exclusive diet 就是
 純素食店；否則有 friendly diet 就是素食友善。
+
+### 營業時間
+
+列表與詳情都會帶 `open_status`（`open`／`closed`／`unknown` 三態）、`open_now`
+（unknown 時是 `null`）、`closes_at`／`next_opens_at`，詳情另外帶 `opening_hours_week`
+（一週時間表，`ranges` 空陣列＝當天公休）與 `opening_hours_raw`（OSM 原始字串）。
+
+`unknown` 是刻意保留的第三態：OSM 多數餐廳沒有 `opening_hours` 標籤，把未知壓成
+「已打烊」會誤導使用者。同理，`open_now=1` **不會**把未知的店算進來。
+
+解析只支援 OSM `opening_hours` 的常見子集（`24/7`、`Mo-Fr 11:00-14:00,17:00-21:00`、
+跨午夜、`PH off`）；月份區間、週序、日出日落等寫法一律視為無法解析，見
+`app/Support/OpeningHours.php`。
 
 `GET /diets` 每筆有 `kind`／`group_label`，`meta.venue_scope` 是篩選參數名、預設值與選項，
 `meta.menu_item_diets` 是菜單層 `diet_type` 的 code／label（詳情頁分組與寫入驗證都讀這份，

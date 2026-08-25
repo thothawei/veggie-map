@@ -8,6 +8,7 @@ use App\Models\Restaurant;
 use App\Services\External\BoundingBox;
 use App\Services\External\RestaurantData;
 use App\Services\External\RestaurantProviderInterface;
+use App\Support\CityCatalog;
 use App\Support\DietCatalog;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,7 @@ class RestaurantSyncService
     public function __construct(
         private readonly RestaurantProviderInterface $provider,
         private readonly VerificationService $verifications,
+        private readonly OpeningHoursService $openingHours,
     ) {}
 
     /**
@@ -38,6 +40,9 @@ class RestaurantSyncService
 
             [$restaurant, $wasRecentlyCreated] = $this->upsert($data);
             $stats[$wasRecentlyCreated ? 'created' : 'updated']++;
+
+            // 解析在寫入端做一次，查詢端才能用 SQL 篩 open_now（見 OpeningHoursService）。
+            $this->openingHours->sync($restaurant);
 
             $this->syncDietTypes($restaurant, $data->dietCodes, $dietTypeIds);
             $this->syncFeatures($restaurant, [...$data->featureCodes, ...$data->cuisineCodes], $featureIds);
@@ -79,6 +84,10 @@ class RestaurantSyncService
             'location' => DB::raw("ST_SRID(POINT({$data->longitude}, {$data->latitude}), 4326)"),
             'phone' => $data->phone,
             'website' => $data->website,
+            'opening_hours' => $data->openingHours,
+            // 時區依座標落在哪個城市 bbox 決定（config/cities.php）。open_now 要用
+            // 該店的當地時間比對，台北與東京差一小時。
+            'timezone' => CityCatalog::timezoneFor($data->latitude, $data->longitude),
             'source' => $this->provider->sourceName(),
             'source_id' => $data->sourceId,
             'status' => 'active',

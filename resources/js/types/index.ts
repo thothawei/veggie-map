@@ -60,6 +60,13 @@ export interface Cuisine {
     label: string;
 }
 
+/** 詳情頁的一週營業時間。ranges 空陣列＝當天公休。 */
+export interface OpeningHoursDay {
+    day: number;
+    label: string;
+    ranges: string[];
+}
+
 export interface Restaurant {
     id: number;
     name: string;
@@ -87,6 +94,18 @@ export interface Restaurant {
     menu_items?: MenuItem[];
     menu_empty_message?: string | null;
     confidence_score?: number | null;
+    /**
+     * 三態：open／closed／unknown。unknown 是 OSM 最常見的情況（多數店家沒填
+     * opening_hours），不要在畫面上把它顯示成「已打烊」。
+     */
+    open_status?: 'open' | 'closed' | 'unknown';
+    open_now?: boolean | null;
+    /** 營業中才有：今天幾點打烊，"21:00"。 */
+    closes_at?: string;
+    /** 已打烊且今天稍後還會開才有："17:00"。 */
+    next_opens_at?: string;
+    opening_hours_raw?: string | null;
+    opening_hours_week?: OpeningHoursDay[];
     created_at: string;
     updated_at: string;
 }
@@ -130,6 +149,8 @@ export interface RestaurantSearchParams {
     venue_scope?: string;
     price_level?: number;
     rating_min?: number;
+    /** 只留下此刻在該店當地時間營業中的餐廳。 */
+    open_now?: boolean;
     pet_friendly?: boolean;
     parking?: boolean;
     delivery?: boolean;

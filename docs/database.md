@@ -5,7 +5,7 @@ Phase 0 產出，正式 migration 在 Phase 2 實作。這份文件是設計依�
 
 ## ERD
 
-直接對照 `database/migrations/` 實際欄位與外鍵畫的（不是憑當初設計草稿），13 張核心表，
+直接對照 `database/migrations/` 實際欄位與外鍵畫的（不是憑當初設計草稿），14 張核心表，
 不含 Laravel 框架自帶的 `personal_access_tokens`／`cache`／`jobs`／`sessions`／
 `telescope_entries` 等基礎設施表。
 
@@ -16,6 +16,7 @@ erDiagram
     RESTAURANTS ||--o{ RESTAURANT_FEATURES : has
     FEATURES ||--o{ RESTAURANT_FEATURES : has
     RESTAURANTS ||--o{ MENU_ITEMS : has
+    RESTAURANTS ||--o{ RESTAURANT_OPENING_HOURS : "opens during"
     RESTAURANTS ||--o{ RESTAURANT_VERIFICATIONS : has
     USERS ||--o{ RESTAURANT_VERIFICATIONS : verifies
     RESTAURANTS ||--|| RESTAURANT_CONFIDENCE_SCORES : has
@@ -39,6 +40,8 @@ erDiagram
         point location "SRID 4326 - spatial index"
         string phone
         string website
+        string opening_hours "OSM 原始字串"
+        string timezone "當地時區，open_now 用"
         tinyint price_level
         decimal rating "cache - RecalculateRestaurantRatingJob 更新"
         int rating_count
@@ -46,6 +49,13 @@ erDiagram
         string source_id
         enum status "active/inactive/pending"
         boolean is_possible_duplicate
+    }
+    RESTAURANT_OPENING_HOURS {
+        bigint id PK
+        bigint restaurant_id FK
+        tinyint day_of_week "0=週一 … 6=週日"
+        smallint opens_at "距 00:00 的分鐘數"
+        smallint closes_at "上限 1440"
     }
     DIET_TYPES {
         bigint id PK
@@ -152,6 +162,8 @@ erDiagram
 | location | `POINT SRID 4326` | 空間查詢欄位，由 latitude/longitude 產生，寫入時同步更新 |
 | phone | varchar(50), nullable | |
 | website | varchar(255), nullable | |
+| opening_hours | varchar(255), nullable | OSM `opening_hours` 原始字串。保留原文才能在解析器改進後重新解析，不必重打 Overpass |
+| timezone | varchar(40), nullable | 該店所在地時區，依座標落在哪個 `config/cities.php` bbox 決定。`open_now` 要用當地時間判斷（台北與東京差一小時） |
 | price_level | tinyint unsigned, nullable | 1~4 |
 | rating | decimal(3,2), default 0 | 快取欄位，由 `RecalculateRestaurantRatingJob` 更新，不即時計算 |
 | rating_count | int unsigned, default 0 | 同上 |
@@ -184,6 +196,36 @@ erDiagram
 `database/factories/RestaurantFactory.php` 的實作。如果改成直接
 `ST_GeomFromText("POINT($lng $lat)", 4326)`，順序在小範圍座標下不會報錯，只會安靜地把
 地圖左右鏡射，很難發現——Phase 3 寫 Repository 時不要重新發明這段。
+
+### restaurant_opening_hours
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| id | bigint unsigned, PK | |
+| restaurant_id | FK → restaurants, cascade delete | |
+| day_of_week | tinyint unsigned | 0=週一 … 6=週日 |
+| opens_at | smallint unsigned | 距離該日 00:00 的分鐘數 |
+| closes_at | smallint unsigned | 同上，上限 1440（＝24:00） |
+| created_at / updated_at | timestamp | |
+
+**Index：**
+
+| Index | 欄位 | 用途 |
+|---|---|---|
+| `roh_day_time_index` | `(day_of_week, opens_at, closes_at)` | `open_now` 查詢的形狀：先鎖星期，再用當前分鐘夾出區間 |
+| `roh_restaurant_day_index` | `(restaurant_id, day_of_week)` | 詳情頁的一週時間表 |
+
+**為什麼是獨立資料表**：`open_now` 是搜尋條件，必須能下在 SQL 裡。把
+`opening_hours` 字串撈出來在 PHP 逐筆解析，就是總 Prompt 第九節明講禁止的
+「全部撈出來再算」。所以解析（`App\Support\OpeningHours`）在寫入端做一次，
+查詢端只剩整數比較。
+
+**跨午夜在寫入端就切好**：`Sa 17:00-02:00` 存成「週六 1020–1440」與「週日 0–120」
+兩列，查詢端因此不必處理跨日比較，索引行為也單純。
+
+**重跑同步是覆寫不是累加**（`OpeningHoursService::sync`）：來源字串是完整敘述，
+舊列必須整批換掉——否則店家改成週日公休後，舊的週日時段會留著，`open_now`
+會在週日把它算成營業中。解析失敗時同樣清空：「沒有可信資料」要表現成查不到時段。
 
 ### diet_types / restaurant_diet_types（Many-to-Many）
 

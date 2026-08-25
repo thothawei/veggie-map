@@ -6,7 +6,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { ALL_CITIES, useCities } from '@/composables/useCities';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
-import { formatAddress, formatCuisines } from '@/lib/format';
+import { formatAddress, formatCuisines, formatOpenStatus } from '@/lib/format';
 import type { ApiSuccess, Restaurant } from '@/types';
 
 const router = useRouter();
@@ -201,6 +201,11 @@ watch(committedKeyword, (value) => {
                     >{{ restaurant.venue_badge }}</span>
                     <span v-if="formatCuisines(restaurant.cuisines)" class="cuisines">{{ formatCuisines(restaurant.cuisines) }}</span>
                     <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
+                    <span
+                        v-if="formatOpenStatus(restaurant)"
+                        class="open-status"
+                        :data-state="formatOpenStatus(restaurant)?.state"
+                    >{{ formatOpenStatus(restaurant)?.text }}</span>
                     <span class="address">{{ formatAddress(restaurant) ?? '地址未提供' }}</span>
                 </button>
             </li>
@@ -343,5 +348,14 @@ li button:hover {
 .more:disabled {
     opacity: 0.6;
     cursor: default;
+}
+
+.open-status[data-state='open'] {
+    color: #2f855a;
+    font-weight: 600;
+}
+
+.open-status[data-state='closed'] {
+    color: #718096;
 }
 </style>

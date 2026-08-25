@@ -32,6 +32,9 @@ class SearchRestaurantRequest extends FormRequest
             'diet' => ['nullable', 'string', 'exists:diet_types,code'],
             'price_level' => ['nullable', 'integer', 'between:1,4'],
             'rating_min' => ['nullable', 'numeric', 'between:0,5'],
+            // 只留下「此刻在該店當地時間營業中」的餐廳。沒有可解析營業時間的店
+            // 不會被算成營業中（見 RestaurantRepository::applyOpenNow）。
+            'open_now' => ['nullable', 'boolean'],
             'sort' => ['nullable', Rule::in(['distance', 'rating', 'popular', 'newest'])],
             'per_page' => ['nullable', 'integer', 'between:1,100'],
             'cursor' => ['nullable', 'string'],
@@ -50,7 +53,17 @@ class SearchRestaurantRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
-        $normalized = Feature::normalizeBooleanInputs($this->all());
+        $input = $this->all();
+        $normalized = Feature::normalizeBooleanInputs($input);
+
+        // open_now 不是 features.code，但走同一條 querystring 約定，同樣要收 "true"/"false"。
+        if (array_key_exists('open_now', $input)) {
+            if ($input['open_now'] === 'true') {
+                $normalized['open_now'] = '1';
+            } elseif ($input['open_now'] === 'false') {
+                $normalized['open_now'] = '0';
+            }
+        }
 
         if ($normalized !== []) {
             $this->merge($normalized);

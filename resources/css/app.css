@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * 地圖 popup 的內容是字串拼接後由 Leaflet 插進 DOM，元件的 scoped style 套不到，
+ * 所以這兩條放全域。營業中用綠色、休息中用灰色；「未知」不會產生節點（見
+ * lib/format.ts 的 formatOpenStatus），所以這裡沒有第三種顏色。
+ */
+.leaflet-popup-content .open-status[data-state='open'] {
+    color: #2f855a;
+    font-weight: 600;
+}
+
+.leaflet-popup-content .open-status[data-state='closed'] {
+    color: #718096;
+}

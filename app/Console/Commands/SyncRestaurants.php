@@ -6,6 +6,7 @@ use App\Services\External\BoundingBox;
 use App\Services\External\MockRestaurantProvider;
 use App\Services\External\OsmRestaurantProvider;
 use App\Services\External\RestaurantProviderInterface;
+use App\Services\OpeningHoursService;
 use App\Services\RestaurantSyncService;
 use App\Services\VerificationService;
 use Illuminate\Console\Command;
@@ -46,7 +47,7 @@ class SyncRestaurants extends Command
             return self::FAILURE;
         }
 
-        $service = new RestaurantSyncService($provider, app(VerificationService::class));
+        $service = new RestaurantSyncService($provider, app(VerificationService::class), app(OpeningHoursService::class));
 
         $this->info("Syncing restaurants via [{$provider->sourceName()}] provider (".class_basename($provider).')...');
         $this->line("收錄規則：diet={$this->option('diet')}");

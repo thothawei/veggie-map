@@ -2,7 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet.markercluster';
-import { formatAddress, formatCuisines, formatDistance } from '@/lib/format';
+import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
 import { haversineKm } from '@/lib/geo';
 import { escapeHtml } from '@/lib/html';
 import type { Restaurant } from '@/types';
@@ -46,6 +46,7 @@ function renderMarkers() {
         const address = formatAddress(restaurant) ?? '地址未提供';
         const cuisines = formatCuisines(restaurant.cuisines);
         const distance = formatDistance(restaurant.distance_meters);
+        const openStatus = formatOpenStatus(restaurant);
         marker.bindPopup(
             `<strong>${escapeHtml(restaurant.name)}</strong>` +
                 (restaurant.venue_badge
@@ -54,7 +55,10 @@ function renderMarkers() {
                 (cuisines ? `<br>${escapeHtml(cuisines)}` : '') +
                 (restaurant.venue_summary ? `<br>${escapeHtml(restaurant.venue_summary)}` : '') +
                 `<br>${escapeHtml(address)}` +
-                (distance ? `<br>${escapeHtml(distance)}` : ''),
+                (distance ? `<br>${escapeHtml(distance)}` : '') +
+                (openStatus
+                    ? `<br><span class="open-status" data-state="${openStatus.state}">${escapeHtml(openStatus.text)}</span>`
+                    : ''),
         );
         marker.on('click', () => emit('select', restaurant));
         clusterGroup.addLayer(marker);

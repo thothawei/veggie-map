@@ -24,6 +24,8 @@ final class RestaurantData
         public readonly ?string $district = null,
         public readonly ?string $phone = null,
         public readonly ?string $website = null,
+        /** OSM `opening_hours` 原始字串，解析交給 App\Support\OpeningHours，provider 不解讀。 */
+        public readonly ?string $openingHours = null,
         public readonly array $dietCodes = [],
         public readonly array $featureCodes = [],
         public readonly array $cuisineCodes = [],

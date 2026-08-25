@@ -9,6 +9,7 @@ use App\Models\RestaurantVerification;
 use App\Services\External\BoundingBox;
 use App\Services\External\RestaurantData;
 use App\Services\External\RestaurantProviderInterface;
+use App\Services\OpeningHoursService;
 use App\Services\RestaurantSyncService;
 use App\Services\VerificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -38,7 +39,70 @@ class RestaurantSyncServiceTest extends TestCase
 
     private function service(RestaurantProviderInterface $provider): RestaurantSyncService
     {
-        return new RestaurantSyncService($provider, app(VerificationService::class));
+        return new RestaurantSyncService($provider, app(VerificationService::class), app(OpeningHoursService::class));
+    }
+
+    public function test_sync_parses_opening_hours_and_derives_the_timezone(): void
+    {
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-hours',
+                name: '有營業時間的店',
+                latitude: 25.03,          // 台北 bbox 內
+                longitude: 121.55,
+                openingHours: 'Mo-Fr 11:00-14:00',
+            ),
+            new RestaurantData(
+                sourceId: 'node-tokyo',
+                name: '東京の店',
+                latitude: 35.68,          // 東京 bbox 內
+                longitude: 139.76,
+                openingHours: '24/7',
+            ),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $taipei = Restaurant::where('source_id', 'node-hours')->firstOrFail();
+        $this->assertSame('Asia/Taipei', $taipei->timezone);
+        $this->assertSame('Mo-Fr 11:00-14:00', $taipei->opening_hours);
+        $this->assertSame(5, $taipei->openingHours()->count());
+
+        $tokyo = Restaurant::where('source_id', 'node-tokyo')->firstOrFail();
+        $this->assertSame('Asia/Tokyo', $tokyo->timezone, '時區依座標落在哪個城市 bbox 決定');
+        $this->assertSame(7, $tokyo->openingHours()->count());
+    }
+
+    public function test_resync_replaces_old_opening_hours_instead_of_accumulating(): void
+    {
+        $before = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-hours',
+                name: '改時間的店',
+                latitude: 25.03,
+                longitude: 121.55,
+                openingHours: 'Mo-Su 09:00-21:00',
+            ),
+        ]);
+        $this->service($before)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $after = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-hours',
+                name: '改時間的店',
+                latitude: 25.03,
+                longitude: 121.55,
+                openingHours: 'Mo-Fr 09:00-21:00',
+            ),
+        ]);
+        $this->service($after)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-hours')->firstOrFail();
+
+        // 舊的週六／週日時段必須整批換掉，否則店家改成週末公休之後，open_now
+        // 仍然會在週日把它算成營業中。
+        $this->assertSame(5, $restaurant->openingHours()->count());
+        $this->assertSame(0, $restaurant->openingHours()->where('day_of_week', 6)->count());
     }
 
     public function test_sync_creates_restaurant_with_diet_types_and_verification(): void

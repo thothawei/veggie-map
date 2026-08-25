@@ -374,8 +374,17 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 「寫進規格、後來擱置或只做半套」的項目。下面依「規劃有沒有明寫」整理，不是憑空加功能。
 完成一項就打勾＋更新 [progress.md](progress.md)，不要一次全做。
 
-**下一批產品工作**：P1 閉環（重複審核、`open_now`／營業時間、回報 `closed` 核准後要不要
-下架）。P0 Phase A／B／C 與可信度寫入路徑已完成。
+**下一批產品工作**：P1 閉環（重複審核、回報 `closed` 核准後要不要下架）。P0 Phase A／B／C、
+可信度寫入路徑、`open_now`／營業時間已完成。
+
+## 2026-08-26 搜尋強化批次（依使用者指示：不做會員／評分評論，集中在搜尋）
+
+- [x] 營業時間／`open_now`（見下方 P1 該項）
+- [ ] 關鍵字搜尋強化（多詞、料理種類／菜色、相關性排序）
+- [ ] 列表 API `select()` 收欄位
+- [ ] External API circuit breaker
+- [ ] `possible_duplicate` Admin 審核入口
+- [ ] 詳情頁走 slug
 
 ---
 
@@ -539,11 +548,13 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       需要：`GET /admin/duplicates`（或既有 admin 加一個分頁）＋明確的「保留／忽略」
       動作（不要做成自動合併）。
 
-- [ ] **`open_now`／營業時間（第八、二十八節）**
-      搜尋參數與首頁 UI 都寫了「營業中」。schema 沒有 `opening_hours`，Phase 3 決議擱置、
-      `docs/api.md` 參數列表卻還留著——文件超前於實作。要做的話：OSM 有 `opening_hours`
-      標籤可同步、存成欄位或獨立表，再做 `open_now` 篩選；不做就把參數從 api.md／
-      OpenAPI 拿掉，不要留一個永遠 422 或被忽略的參數。
+- [x] **`open_now`／營業時間（第八、二十八節）✅ 2026-08-26**
+      `restaurants.opening_hours`（OSM 原始字串）＋`restaurants.timezone`（依座標落在哪個
+      city bbox 決定）＋`restaurant_opening_hours`（解析後的時段，跨午夜在寫入端切好）。
+      解析器 `App\Support\OpeningHours` 只吃 OSM 語法的常見子集，其餘一律回 null＝
+      「營業時間未知」，不猜。`open_now=1` 用 SQL 篩（依時區分組），未知的店**不會**
+      被算成營業中。API 回三態 `open_status`，前端 FilterDrawer 有「營業中」晶片、
+      卡片／popup／詳情顯示狀態與一週時間表。
 
 - [ ] **回報核准後要不要動餐廳（第十二、十八節）**
       `not_vegetarian`／`menu_changed` 已由 **P0 Phase C** 接到
@@ -624,8 +635,7 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       餐廳沒有寫入端點所以沒有 RestaurantPolicy。把文件改成現況，或真的補檔——不要
       文件列四個、repo 只有兩個。
 
-- [ ] **`docs/api.md` 仍列 `open_now`**
-      跟上面 P1 同一件事：要嘛實作，要嘛從參數列表與 OpenAPI 刪掉。
+- [x] ~~**`docs/api.md` 仍列 `open_now`**~~ 已實作，api.md／OpenAPI 補上完整說明。
 
 ### P2 — 測試缺口（已判定過 ROI，仍列出來備查）
 
