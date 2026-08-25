@@ -33,7 +33,8 @@ class RestaurantController extends Controller
     }
 
     /**
-     * 首頁「推薦餐廳」用（見總體規劃第三十節）：候選集是同一套半徑搜尋，
+     * 首頁「推薦餐廳」用（見總體規劃第三十節）：候選集是同一套 search()
+     * （半徑或 bbox），
      * RuleBasedRecommendationService 依 distance/rating/vegetarian_confidence/
      * feature_match/popularity/freshness 加權排序，不是單純依 rating 排序。
      */

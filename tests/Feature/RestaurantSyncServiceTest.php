@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\DietType;
 use App\Models\Feature;
 use App\Models\Restaurant;
+use App\Models\RestaurantVerification;
 use App\Services\External\BoundingBox;
 use App\Services\External\RestaurantData;
 use App\Services\External\RestaurantProviderInterface;
@@ -85,6 +86,7 @@ class RestaurantSyncServiceTest extends TestCase
         $this->assertSame(1, $stats['updated']);
         $this->assertSame(0, $stats['created']);
         $this->assertSame(1, Restaurant::where('source_id', 'node-2')->count());
+        $this->assertSame(1, RestaurantVerification::where('verification_type', 'external_source')->count());
     }
 
     public function test_sync_flags_same_name_nearby_restaurants_as_possible_duplicates(): void

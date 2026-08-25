@@ -50,7 +50,10 @@ class RestaurantSyncService
                 $stats['duplicates_flagged']++;
             }
 
-            $this->verifications->record($restaurant, 'external_source');
+            // 已有 external_source 就不要每天再插一筆——否則分數加總會把可信度灌滿。
+            if (! $restaurant->verifications()->where('verification_type', 'external_source')->exists()) {
+                $this->verifications->record($restaurant, 'external_source');
+            }
 
             CalculateRestaurantScoreJob::dispatch($restaurant->id);
         }

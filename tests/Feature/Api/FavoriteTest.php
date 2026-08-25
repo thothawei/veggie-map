@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\Favorite;
 use App\Models\Restaurant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,5 +69,36 @@ class FavoriteTest extends TestCase
         $this->withHeaders($this->authHeaders($user))
             ->deleteJson("/api/v1/restaurants/{$restaurant->id}/favorite")
             ->assertOk();
+    }
+
+    public function test_cannot_favorite_an_inactive_restaurant(): void
+    {
+        $user = User::factory()->create();
+        $restaurant = Restaurant::factory()->create(['status' => 'pending']);
+
+        $this->withHeaders($this->authHeaders($user))
+            ->postJson("/api/v1/restaurants/{$restaurant->id}/favorite")
+            ->assertStatus(404);
+    }
+
+    public function test_favorites_list_excludes_inactive_restaurants(): void
+    {
+        $user = User::factory()->create();
+        $active = Restaurant::factory()->create(['status' => 'active']);
+        $inactive = Restaurant::factory()->create(['status' => 'pending']);
+        $headers = $this->authHeaders($user);
+
+        $this->withHeaders($headers)->postJson("/api/v1/restaurants/{$active->id}/favorite")->assertStatus(201);
+
+        Favorite::create([
+            'user_id' => $user->id,
+            'restaurant_id' => $inactive->id,
+        ]);
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/me/favorites')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $active->id);
     }
 }

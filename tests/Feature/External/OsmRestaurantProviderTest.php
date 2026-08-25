@@ -152,6 +152,29 @@ class OsmRestaurantProviderTest extends TestCase
         $this->assertEqualsCanonicalizing(['vegetarian', 'vegan'], $results[0]->dietCodes);
     }
 
+    public function test_address_falls_back_to_addr_full_when_street_is_missing(): void
+    {
+        Http::fake([
+            '*' => Http::response(['elements' => [
+                [
+                    'id' => 333,
+                    'lat' => 24.14,
+                    'lon' => 120.67,
+                    'tags' => [
+                        'name' => '只有完整地址的店',
+                        'diet:vegetarian' => 'only',
+                        'addr:full' => '台中市西區公益路 100 號',
+                    ],
+                ],
+            ]]),
+        ]);
+
+        $results = (new OsmRestaurantProvider)->fetch($this->bbox());
+
+        $this->assertCount(1, $results);
+        $this->assertSame('台中市西區公益路 100 號', $results[0]->address);
+    }
+
     public function test_failed_response_is_logged_and_returns_empty(): void
     {
         Http::fake([

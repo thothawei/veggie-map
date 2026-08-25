@@ -9,7 +9,8 @@ return [
     |
     | restaurant_verifications.score 寫入時的權重來源（見 docs/database.md）。
     | 每種驗證類型貢獻的分數不寫死在程式碼裡，方便未來調整而不用改 migration／程式邏輯。
-    | CalculateRestaurantScoreJob 把一家餐廳所有未過期驗證的 score 加總，
+    | CalculateRestaurantScoreJob 把一家餐廳「每種驗證類型各取最高分」再加總，
+    | 同一類型多筆（例如每日 sync 重複寫入的 external_source）只算一次，
     | 上限封頂在 100（對應 restaurant_confidence_scores.score 的定義）。
     |
     */

@@ -66,6 +66,17 @@ class Restaurant extends Model
     }
 
     /**
+     * 列表／詳情只出 active。評論、收藏、回報走 implicit binding，若不擋 pending
+     * 會寫得進去、點進去卻 404。
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where('status', 'active')
+            ->where($field ?? $this->getRouteKeyName(), $value)
+            ->firstOrFail();
+    }
+
+    /**
      * @return BelongsToMany<DietType, $this>
      */
     public function dietTypes(): BelongsToMany

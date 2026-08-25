@@ -10,6 +10,8 @@ interface GeocodingProviderInterface
 {
     /**
      * @return GeocodedPlace[]
+     *
+     * @throws GeocodingUnavailableException 上游失敗時丟例外，讓呼叫端不要把失敗結果快取一天。
      */
     public function search(string $query): array;
 }

@@ -8,13 +8,16 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { rememberCity, useCities } from '@/composables/useCities';
 import { apiFilterParams, useFilterQuery } from '@/composables/useFilterQuery';
-import { haversineKm } from '@/lib/geo';
+import { formatBbox } from '@/lib/geo';
 import type { ApiSuccess, GeocodedPlace, Restaurant } from '@/types';
 
 const router = useRouter();
 
 // 地圖一定得看著某個地方，所以退回清單第一個城市，並記住上次選的。
-const { cities, loading: citiesLoading, activeCity, selectCity } = useCities({ fallback: 'first', remember: true });
+const { cities, loading: citiesLoading, loadFailed: citiesLoadFailed, activeCity, selectCity } = useCities({
+    fallback: 'first',
+    remember: true,
+});
 
 const restaurants = ref<Restaurant[]>([]);
 const recommended = ref<Restaurant[]>([]);
@@ -24,6 +27,7 @@ const hasMore = ref(false);
 // 篩選條件跟 city 一樣以網址為真相來源，重新整理與分享連結才留得住。
 const filters = useFilterQuery();
 const mapRef = ref<InstanceType<typeof RestaurantMap> | null>(null);
+const locateError = ref<string | null>(null);
 
 let currentBounds: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null = null;
 
@@ -43,20 +47,20 @@ async function loadByBounds() {
     try {
         const midLat = (currentBounds.minLat + currentBounds.maxLat) / 2;
         const midLng = (currentBounds.minLng + currentBounds.maxLng) / 2;
-        // 地圖首頁依 bounds 撈餐廳，不是撈全部——用 bounds 中心點 + 對角線距離當半徑，
-        // 交給後端既有的半徑搜尋（見 docs/database.md 的兩段式查詢），不用另開一支 API。
-        const radiusKm = haversineKm(currentBounds.minLat, currentBounds.minLng, currentBounds.maxLat, currentBounds.maxLng) / 2;
-        const radius = Math.max(radiusKm, 0.5);
+        // 用地圖目前看到的矩形，不是中心點＋半徑。radius 上限 50km，台中市區半對角線
+        // 就超過，一拉遠兩支 API 一起 422，畫面變成「載入失敗」還叫人再拉遠。
+        const bbox = formatBbox(currentBounds);
+        const filterParams = apiFilterParams(filters.value);
 
-        const [restaurantsRes, recommendedRes] = await Promise.all([
+        const [restaurantsResult, recommendedResult] = await Promise.allSettled([
             client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
                 params: {
+                    bbox,
                     latitude: midLat,
                     longitude: midLng,
-                    radius,
                     sort: 'distance',
                     per_page: 100,
-                    ...apiFilterParams(filters.value),
+                    ...filterParams,
                 },
             }),
             // 後端 RuleBasedRecommendationService 依 distance/rating/vegetarian_confidence/
@@ -64,22 +68,29 @@ async function loadByBounds() {
             // 依評分排序，所以是獨立一支 API，不是從上面那批結果在前端隨便切幾筆。
             client.get<ApiSuccess<Restaurant[]>>('/restaurants/recommended', {
                 params: {
+                    bbox,
                     latitude: midLat,
                     longitude: midLng,
-                    radius,
                     limit: 6,
-                    ...apiFilterParams(filters.value),
+                    ...filterParams,
                 },
             }),
         ]);
 
         if (seq !== requestSeq) return;
 
-        restaurants.value = restaurantsRes.data.data;
-        recommended.value = recommendedRes.data.data;
-        // 後端是 cursor 分頁、不回總數，per_page=100 是上限。next_cursor 還在就代表這個
-        // 範圍不只 100 家——要顯示成「100+」，不能把被截斷的數字當成總數講。
-        hasMore.value = Boolean(restaurantsRes.data.meta?.next_cursor);
+        if (restaurantsResult.status === 'fulfilled') {
+            restaurants.value = restaurantsResult.value.data.data;
+            hasMore.value = Boolean(restaurantsResult.value.data.meta?.next_cursor);
+            loadFailed.value = false;
+        } else {
+            loadFailed.value = true;
+            restaurants.value = [];
+            hasMore.value = false;
+        }
+
+        recommended.value =
+            recommendedResult.status === 'fulfilled' ? recommendedResult.value.data.data : [];
     } catch {
         if (seq !== requestSeq) return;
 
@@ -104,7 +115,12 @@ function handlePlaceSelected(place: GeocodedPlace) {
 }
 
 function handleLocate() {
+    locateError.value = null;
     mapRef.value?.locateUser();
+}
+
+function handleLocateFailed() {
+    locateError.value = '無法取得目前位置，請檢查定位權限後再試。';
 }
 
 function goToDetail(restaurant: Restaurant) {
@@ -150,6 +166,7 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                 <SearchBox @place-selected="handlePlaceSelected" />
                 <button type="button" class="locate-button" @click="handleLocate">📍 使用目前位置</button>
             </div>
+            <p v-if="locateError" class="locate-error" role="alert">{{ locateError }}</p>
             <FilterDrawer v-model:filters="filters" />
         </section>
 
@@ -162,9 +179,11 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                 :zoom="activeCity.zoom"
                 @bounds-changed="handleBoundsChanged"
                 @select="goToDetail"
+                @locate-failed="handleLocateFailed"
             />
             <div v-else class="map-placeholder">
                 <span v-if="citiesLoading">地圖準備中…</span>
+                <span v-else-if="citiesLoadFailed">城市清單載入失敗，請重新整理。</span>
                 <span v-else>目前沒有可顯示的城市。</span>
             </div>
 
@@ -242,6 +261,12 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     background: #fff;
     cursor: pointer;
     white-space: nowrap;
+}
+
+.locate-error {
+    margin: 0.5rem 0 0;
+    color: #c53030;
+    font-size: 0.9rem;
 }
 
 .map-section {

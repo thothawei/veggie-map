@@ -16,6 +16,7 @@ const emit = defineEmits<{
     (e: 'bounds-changed', bounds: { minLat: number; minLng: number; maxLat: number; maxLng: number; center: [number, number] }): void;
     (e: 'select', restaurant: Restaurant): void;
     (e: 'locate', coords: [number, number]): void;
+    (e: 'locate-failed'): void;
 }>();
 
 let map: L.Map | null = null;
@@ -79,7 +80,11 @@ defineExpose({
         map?.setView([lat, lng], zoom);
     },
     locateUser() {
-        if (!navigator.geolocation) return;
+        if (!navigator.geolocation) {
+            emit('locate-failed');
+
+            return;
+        }
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const coords: [number, number] = [position.coords.latitude, position.coords.longitude];
@@ -87,7 +92,7 @@ defineExpose({
                 emit('locate', coords);
             },
             () => {
-                // 使用者拒絕定位權限或裝置沒有 GPS，靜默失敗，保留地圖原本位置。
+                emit('locate-failed');
             },
             { timeout: 8000 },
         );

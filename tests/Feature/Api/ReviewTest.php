@@ -70,4 +70,14 @@ class ReviewTest extends TestCase
         $this->assertCount(1, $response['data']);
         $this->assertSame('second', $response['data'][0]['comment']);
     }
+
+    public function test_cannot_review_an_inactive_restaurant(): void
+    {
+        $restaurant = Restaurant::factory()->create(['status' => 'pending']);
+        $user = User::factory()->create();
+
+        $this->withHeaders($this->authHeaders($user))
+            ->postJson("/api/v1/restaurants/{$restaurant->id}/reviews", ['rating' => 5])
+            ->assertStatus(404);
+    }
 }

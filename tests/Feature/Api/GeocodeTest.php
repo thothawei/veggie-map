@@ -76,4 +76,25 @@ class GeocodeTest extends TestCase
         Http::assertSentCount(1);
         $this->assertSame(1, ExternalApiLog::count());
     }
+
+    public function test_failed_nominatim_response_is_not_cached(): void
+    {
+        Http::fake([
+            '*nominatim*' => Http::sequence()
+                ->push([], 503)
+                ->push([
+                    ['display_name' => '台北車站', 'lat' => '25.0478', 'lon' => '121.5170'],
+                ], 200),
+        ]);
+
+        $this->getJson('/api/v1/geocode?q='.urlencode('台北車站'))
+            ->assertOk()
+            ->assertJsonPath('data', []);
+
+        $this->getJson('/api/v1/geocode?q='.urlencode('台北車站'))
+            ->assertOk()
+            ->assertJsonPath('data.0.display_name', '台北車站');
+
+        Http::assertSentCount(2);
+    }
 }

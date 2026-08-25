@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router';
+import { RouterLink, RouterView, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useFavoritesStore } from '@/stores/favorites';
 
+const router = useRouter();
 const auth = useAuthStore();
+const favorites = useFavoritesStore();
 
 async function handleLogout() {
     await auth.logout();
+    favorites.reset();
+
+    if (router.currentRoute.value.meta.requiresAuth) {
+        await router.push({ name: 'home' });
+    }
 }
 </script>
 

@@ -23,11 +23,15 @@ function fakeRestaurant(id: number) {
 }
 
 let restaurantsPayload: { data: unknown[]; meta?: Record<string, unknown> } = { data: [] };
+const restaurantCalls: Record<string, unknown>[] = [];
 const recommendedCalls: Record<string, unknown>[] = [];
 
 const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) => {
     if (url === '/cities') return Promise.resolve({ data: { data: cities } });
-    if (url === '/restaurants') return Promise.resolve({ data: restaurantsPayload });
+    if (url === '/restaurants') {
+        restaurantCalls.push(config?.params ?? {});
+        return Promise.resolve({ data: restaurantsPayload });
+    }
     if (url === '/restaurants/recommended') {
         recommendedCalls.push(config?.params ?? {});
         return Promise.resolve({ data: { data: [] } });
@@ -92,6 +96,7 @@ function activeCityLabel(wrapper: { findAll: (s: string) => { text: () => string
 describe('HomeView 多城市切換', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        restaurantCalls.length = 0;
         recommendedCalls.length = 0;
         localStorage.clear();
         setViewportMatches(true);
@@ -167,6 +172,7 @@ describe('HomeView 多城市切換', () => {
 describe('HomeView 結果計數', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        restaurantCalls.length = 0;
         recommendedCalls.length = 0;
         localStorage.clear();
         setViewportMatches(true);
@@ -204,6 +210,7 @@ describe('HomeView 結果計數', () => {
 describe('HomeView 篩選也套到推薦', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        restaurantCalls.length = 0;
         recommendedCalls.length = 0;
         localStorage.clear();
         setViewportMatches(true);
@@ -215,5 +222,29 @@ describe('HomeView 篩選也套到推薦', () => {
         await mountHome('/?city=taichung&takeout=1');
 
         expect(recommendedCalls[recommendedCalls.length - 1]?.takeout).toBe(1);
+    });
+});
+
+describe('HomeView 地圖範圍', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        restaurantsPayload = { data: [] };
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('列表與推薦送 bbox，不是會超過 50km 上限的 radius', async () => {
+        await mountHome('/?city=taichung');
+
+        const restaurantsParams = restaurantCalls[restaurantCalls.length - 1];
+        const recommendedParams = recommendedCalls[recommendedCalls.length - 1];
+
+        expect(restaurantsParams?.bbox).toBe('24.9,121.4,25.1,121.7');
+        expect(restaurantsParams).not.toHaveProperty('radius');
+        expect(recommendedParams?.bbox).toBe('24.9,121.4,25.1,121.7');
+        expect(recommendedParams).not.toHaveProperty('radius');
     });
 });

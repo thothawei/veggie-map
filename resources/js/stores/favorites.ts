@@ -29,5 +29,10 @@ export const useFavoritesStore = defineStore('favorites', {
         isFavorite(restaurantId: number): boolean {
             return this.ids.has(restaurantId);
         },
+        reset() {
+            this.ids = new Set();
+            this.restaurants = [];
+            this.loaded = false;
+        },
     },
 });

@@ -16,6 +16,7 @@ class FavoriteController extends Controller
         $perPage = min((int) $request->integer('per_page', 20), 100);
 
         $restaurants = Restaurant::query()
+            ->where('status', 'active')
             ->whereHas('favorites', fn ($q) => $q->where('user_id', $request->user()->id))
             ->orderBy('id')
             ->cursorPaginate($perPage);

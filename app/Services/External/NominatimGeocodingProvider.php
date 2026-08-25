@@ -44,14 +44,16 @@ class NominatimGeocodingProvider implements GeocodingProviderInterface
             if (! $success) {
                 $errorCode = 'HTTP_'.$status;
 
-                return [];
+                throw new GeocodingUnavailableException('Nominatim returned HTTP '.$status);
             }
 
             return $this->parseResults($response->json() ?? []);
+        } catch (GeocodingUnavailableException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             $errorCode = substr(class_basename($e), 0, 100);
 
-            return [];
+            throw new GeocodingUnavailableException($e->getMessage(), 0, $e);
         } finally {
             ExternalApiLog::create([
                 'provider' => 'nominatim',

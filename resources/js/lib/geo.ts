@@ -9,5 +9,10 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
     const a =
         Math.sin(dLat / 2) ** 2 +
         Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function formatBbox(bounds: { minLat: number; minLng: number; maxLat: number; maxLng: number }): string {
+    return `${bounds.minLat},${bounds.minLng},${bounds.maxLat},${bounds.maxLng}`;
 }

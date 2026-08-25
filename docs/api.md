@@ -115,7 +115,7 @@ Nominatim 逾時／失敗時回 `{"success": true, "data": []}`（不讓地圖�
 
 ## `GET /restaurants/recommended` — 推薦餐廳
 
-首頁「推薦餐廳」用（見總體規劃第三十節）。候選集是同一套半徑搜尋結果，
+首頁「推薦餐廳」用（見總體規劃第三十節）。候選集是同一套 search()（半徑或 bbox），
 `RuleBasedRecommendationService`（`app/Services/Recommendation/`）依六個分量加權排序，
 不是單純依 rating 排序：
 
@@ -129,13 +129,15 @@ score = distance_score * 0.25 + rating_score * 0.20 + vegetarian_confidence * 0.
 同一套設計），未來要換 `AIRecommendationService` 只改 `AppServiceProvider` 的綁定，
 `RestaurantController` 不用動。
 
-參數：`latitude`／`longitude`（必填）、`radius`（公里，預設 5）、`limit`（預設 6，上限 20），
+參數：`latitude`／`longitude`（必填）、`radius`（公里，預設 5，上限 50）、`bbox`（與列表相同，
+不受 50km 限制）、`limit`（預設 6，上限 20），
 以及與列表相同的 `diet` 與特色布林篩選（`takeout`／`wifi`／`pet_friendly` 等）。首頁推薦會跟著
 目前篩選收窄候選集，不是另外撈一組沒篩過的。
 
 ```
 GET /api/v1/restaurants/recommended?latitude=25.033&longitude=121.5645&radius=5&limit=6
 GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&takeout=1
+GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.9500,120.4300,24.4500,121.4700
 ```
 
 回應的每筆 Restaurant 多一個 `recommendation_score`（0~1），只有這支端點才會出現。

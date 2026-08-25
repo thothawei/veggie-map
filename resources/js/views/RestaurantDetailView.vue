@@ -16,6 +16,7 @@ const favorites = useFavoritesStore();
 const restaurant = ref<Restaurant | null>(null);
 const loading = ref(true);
 const notFound = ref(false);
+const loadError = ref<string | null>(null);
 const dietLabels = ref<Record<string, string>>({});
 const featureLabels = ref<Record<string, string>>({});
 
@@ -34,15 +35,17 @@ function labelFor(code: string, labels: Record<string, string>): string {
 async function load() {
     loading.value = true;
     notFound.value = false;
+    loadError.value = null;
+    reviewComment.value = '';
     try {
         const response = await client.get<ApiSuccess<Restaurant>>(`/restaurants/${props.id}`);
         restaurant.value = response.data.data;
     } catch (error: unknown) {
+        restaurant.value = null;
         if (isAxiosError(error) && error.response?.status === 404) {
             notFound.value = true;
-            restaurant.value = null;
         } else {
-            throw error;
+            loadError.value = extractApiErrorMessage(error, '載入餐廳失敗，請稍後再試。');
         }
     } finally {
         loading.value = false;
@@ -99,6 +102,7 @@ watch(() => props.id, load, { immediate: true });
     <div class="restaurant-detail">
         <p v-if="loading">載入中…</p>
         <p v-else-if="notFound">找不到這間餐廳。</p>
+        <p v-else-if="loadError" class="error">{{ loadError }}</p>
         <template v-else-if="restaurant">
             <header>
                 <h1>{{ restaurant.name }}</h1>
@@ -151,7 +155,8 @@ watch(() => props.id, load, { immediate: true });
                 </button>
             </section>
             <p v-else>
-                <RouterLink to="/login">登入</RouterLink> 後可以收藏餐廳或寫評論。
+                <RouterLink :to="{ name: 'login', query: { redirect: `/restaurants/${restaurant.id}` } }">登入</RouterLink>
+                後可以收藏餐廳或寫評論。
             </p>
         </template>
     </div>

@@ -234,6 +234,12 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
             $tags['addr:housenumber'] ?? null,
         ]);
 
-        return $parts === [] ? null : implode(' ', $parts);
+        if ($parts !== []) {
+            return implode(' ', $parts);
+        }
+
+        $full = trim((string) ($tags['addr:full'] ?? ''));
+
+        return $full === '' ? null : $full;
     }
 }

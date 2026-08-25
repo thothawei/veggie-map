@@ -22,6 +22,7 @@ interface Options {
 export interface UseCities {
     cities: Ref<City[]>;
     loading: Ref<boolean>;
+    loadFailed: Ref<boolean>;
     /** null 代表「全部城市」或尚未載入；用 loading 區分這兩種。 */
     activeCity: ComputedRef<City | null>;
     activeSlug: ComputedRef<string | null>;
@@ -39,6 +40,7 @@ export function useCities(options: Options): UseCities {
 
     const cities = ref<City[]>([]);
     const loading = ref(true);
+    const loadFailed = ref(false);
 
     const activeCity = computed<City | null>(() => {
         if (!cities.value.length) return null;
@@ -63,9 +65,13 @@ export function useCities(options: Options): UseCities {
     }
 
     onMounted(async () => {
+        loadFailed.value = false;
         try {
             const { data } = await client.get<ApiSuccess<City[]>>('/cities');
             cities.value = data.data;
+        } catch {
+            cities.value = [];
+            loadFailed.value = true;
         } finally {
             loading.value = false;
         }
@@ -79,7 +85,7 @@ export function useCities(options: Options): UseCities {
         router.replace({ query: { ...route.query, city: fallback.slug } });
     });
 
-    return { cities, loading, activeCity, activeSlug, selectCity };
+    return { cities, loading, loadFailed, activeCity, activeSlug, selectCity };
 }
 
 export function rememberCity(slug: string): void {

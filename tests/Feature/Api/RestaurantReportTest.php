@@ -51,4 +51,14 @@ class RestaurantReportTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('error.code', 'VALIDATION_ERROR');
     }
+
+    public function test_cannot_report_an_inactive_restaurant(): void
+    {
+        $restaurant = Restaurant::factory()->create(['status' => 'pending']);
+        $user = User::factory()->create();
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$user->createToken('test')->plainTextToken])
+            ->postJson("/api/v1/restaurants/{$restaurant->id}/reports", ['type' => 'wrong_info'])
+            ->assertStatus(404);
+    }
 }

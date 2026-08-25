@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { haversineKm } from './geo';
+import { formatBbox, haversineKm } from './geo';
 
 describe('haversineKm', () => {
     it('returns 0 for the same point', () => {
@@ -17,5 +17,13 @@ describe('haversineKm', () => {
         const a = haversineKm(24.1477, 120.6736, 25.0478, 121.517);
         const b = haversineKm(25.0478, 121.517, 24.1477, 120.6736);
         expect(a).toBeCloseTo(b, 9);
+    });
+});
+
+describe('formatBbox', () => {
+    it('組成 API 要的 minLat,minLng,maxLat,maxLng', () => {
+        expect(formatBbox({ minLat: 23.95, minLng: 120.43, maxLat: 24.45, maxLng: 121.47 })).toBe(
+            '23.95,120.43,24.45,121.47',
+        );
     });
 });

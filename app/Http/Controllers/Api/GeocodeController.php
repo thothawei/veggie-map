@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\GeocodeRequest;
 use App\Http\Resources\GeocodedPlaceResource;
 use App\Services\External\GeocodingProviderInterface;
+use App\Services\External\GeocodingUnavailableException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
 
@@ -22,9 +23,15 @@ class GeocodeController extends Controller
         $query = $request->validated('q');
         $cacheKey = 'geocode:'.md5(mb_strtolower(trim($query)));
 
-        $places = Cache::remember($cacheKey, now()->addDay(), function () use ($query) {
-            return $this->geocoder->search($query);
-        });
+        try {
+            // 失敗不能寫進 cache：Nominatim 503 回空陣列，remember 會把「這串字找不到」
+            // 存一天，真正的地點整天都搜不到。空結果（200 + []）仍可 cache。
+            $places = Cache::remember($cacheKey, now()->addDay(), function () use ($query) {
+                return $this->geocoder->search($query);
+            });
+        } catch (GeocodingUnavailableException) {
+            $places = [];
+        }
 
         return response()->json([
             'success' => true,

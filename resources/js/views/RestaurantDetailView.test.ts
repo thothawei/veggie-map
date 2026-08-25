@@ -44,7 +44,7 @@ const get = vi.fn((url: string) => {
         });
     }
 
-    return Promise.reject({ response: { status: 404 } });
+    return Promise.reject(new Error('network'));
 });
 
 vi.mock('@/api/client', () => ({
@@ -99,5 +99,20 @@ describe('RestaurantDetailView', () => {
 
         expect(wrapper.find('h1').text()).toBe('第二家');
         expect(get).toHaveBeenCalledWith('/restaurants/2');
+    });
+
+    it('未登入時登入連結會帶回這間店', async () => {
+        const { wrapper } = await mountDetail('1');
+        const login = wrapper.findAll('a').find((anchor) => anchor.text() === '登入');
+
+        expect(login?.attributes('href')).toContain('/login');
+        expect(decodeURIComponent(login?.attributes('href') ?? '')).toContain('/restaurants/1');
+    });
+
+    it('非 404 的載入失敗顯示錯誤，不是空白頁', async () => {
+        const { wrapper } = await mountDetail('9');
+
+        expect(wrapper.text()).toContain('載入餐廳失敗');
+        expect(wrapper.find('h1').exists()).toBe(false);
     });
 });

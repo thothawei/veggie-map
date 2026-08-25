@@ -129,7 +129,7 @@ paths:
       tags: [Restaurants]
       summary: 推薦餐廳（首頁「推薦餐廳」用，見總體規劃第三十節）
       description: >
-        候選集是同一套半徑搜尋結果，`RuleBasedRecommendationService` 依
+        候選集是同一套 search()（半徑或 bbox），`RuleBasedRecommendationService` 依
         distance/rating/vegetarian_confidence/feature_match/popularity/freshness
         六個分量加權排序（權重見 config/recommendation.php），不是單純依 rating 排序。
         `recommendation_score`（0~1）只有在這支端點的回應才會出現。
@@ -145,8 +145,14 @@ paths:
           schema: { type: number, format: float, minimum: -180, maximum: 180 }
         - name: radius
           in: query
-          description: 公里，預設 5
+          description: 公里，預設 5。超過 50 回 422；更大範圍請用 bbox。
           schema: { type: number, format: float, minimum: 0.1, maximum: 50 }
+        - name: bbox
+          in: query
+          description: >
+            "minLat,minLng,maxLat,maxLng"。與列表相同，不受 radius 50km 上限限制。
+            首頁地圖拉遠時走這條，不要把半對角線當 radius 送上來。
+          schema: { type: string }
         - name: limit
           in: query
           description: 預設 6

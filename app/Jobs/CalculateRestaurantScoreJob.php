@@ -12,9 +12,9 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * `restaurant_confidence_scores` 由這個 Job 整批重算後 upsert，查詢端只讀這張表，
- * 不即時彙總 `restaurant_verifications`（見 docs/database.md）。加總未過期驗證的
- * `score`（各筆分數在寫入時已經套過 config/vegetarian.php 的權重，見 VerificationService），
- * 封頂在 100。
+ * 不即時彙總 `restaurant_verifications`（見 docs/database.md）。依類型各取最高分再加總
+ * （索引註解寫的是「依餐廳＋類型彙總」）：同一類型多筆是重複證據，例如每日 sync 各寫
+ * 一筆 `external_source`，不能每筆 +10 把可信度灌到 100。封頂在 100。
  */
 class CalculateRestaurantScoreJob implements ShouldQueue
 {
@@ -34,7 +34,9 @@ class CalculateRestaurantScoreJob implements ShouldQueue
             ->where(function ($query) {
                 $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
             })
-            ->sum('score');
+            ->get()
+            ->groupBy('verification_type')
+            ->sum(fn ($rows) => (int) $rows->max('score'));
 
         RestaurantConfidenceScore::updateOrCreate(
             ['restaurant_id' => $restaurant->id],

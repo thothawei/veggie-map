@@ -207,4 +207,24 @@ class RestaurantTest extends TestCase
         $response->assertOk()->assertJsonCount(1, 'data');
         $this->assertSame($withTakeout->id, $response->json('data.0.id'));
     }
+
+    public function test_recommended_accepts_bbox_beyond_radius_cap(): void
+    {
+        Restaurant::factory()->create([
+            'latitude' => 24.1477,
+            'longitude' => 120.6736,
+            'location' => DB::raw('ST_SRID(POINT(120.6736, 24.1477), 4326)'),
+        ]);
+
+        $this->getJson('/api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.9500,120.4300,24.4500,121.4700')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
+    public function test_recommended_radius_over_50_is_rejected(): void
+    {
+        $this->getJson('/api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&radius=51')
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'VALIDATION_ERROR');
+    }
 }
