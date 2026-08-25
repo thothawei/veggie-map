@@ -2847,3 +2847,31 @@ resources/js/ai-office/components/dashboard/ActivityFeed.test.ts:34
 `17:42` 讀起來才有意義。
 
 驗證：`TZ=UTC` 與 `TZ=America/New_York` 各跑一次完整前端套件，253 個測試都綠。
+
+---
+
+## 2026-08-26 — CI 的第二個真因：沙箱測試假設「這台機器沒有 docker」
+
+修掉時區那條之後 Frontend 綠了，Backend 還是紅，另外兩條：
+
+```
+DockerToolTest > sandbox enabled does not call the engine
+TerminalToolTest > sandbox enabled refuses even allowlisted commands
+  Failed asserting that exception of type "RuntimeException" is thrown.
+```
+
+兩條測的都是規格第 43 節的硬規則——**沙箱開著但 docker 不可用時拒絕執行、
+不退回 host**。但它們只設了 `sandbox.enabled = true`，「docker 不可用」這個前提
+是靠環境碰巧成立的：本機的 app container 裡沒有 docker CLI 所以綠，
+GitHub Actions 的 runner 有 docker 所以 `mode()` 回 `sandbox` 而不是 `refuse`，
+沒有丟例外，紅。
+
+Phase 11 的 progress 其實寫過「整合測試沒有 docker 就 skip」，但這兩條不是那四條
+整合測試，它們沒有 skip 條件——當時本機驗證全綠，沒有人去看 CI。
+
+修法：把 `sandbox.docker_binary` 明確指向 `/nonexistent/docker`，讓「不可用」
+是**測試設定出來的條件**而不是機器的巧合，並把測試名稱改成
+`..._but_docker_unavailable_...`，講清楚驗的是什麼。
+
+**雙向驗證**：把那個設定暫時換成 `/bin/true`（＝模擬機器上有可用的 docker），
+兩條測試立刻紅——證明它確實是這個條件在決定結果；換回不存在的路徑就全綠。

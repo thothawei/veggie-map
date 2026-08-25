@@ -16,12 +16,22 @@ class DockerToolTest extends TestCase
     use PreparesProjectWorkspace;
     use RefreshDatabase;
 
-    public function test_sandbox_enabled_does_not_call_the_engine(): void
+    /**
+     * 沙箱開著但 docker 不可用時拒絕，而且**完全不碰 engine**。
+     *
+     * `docker_binary` 指向不存在的執行檔，讓「不可用」是測試設定出來的條件而不是
+     * 跑測試那台機器的巧合——先前這條在本機（app container 沒有 docker CLI）綠、
+     * 在 GitHub Actions（runner 有 docker）紅。
+     */
+    public function test_sandbox_enabled_but_docker_unavailable_does_not_call_the_engine(): void
     {
         $project = $this->prepareWorkspace();
         $ctx = $this->toolContext($project);
         $engine = new FakeDockerEngine;
-        config(['ai_office.sandbox.enabled' => true]);
+        config([
+            'ai_office.sandbox.enabled' => true,
+            'ai_office.sandbox.docker_binary' => '/nonexistent/docker',
+        ]);
 
         $tool = $this->tool('docker_run', $engine);
 
