@@ -221,6 +221,9 @@ GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.
 | POST | `/ai-office/approvals/{id}/approve` | 核准；可選 `comment`。HTTP 內不跑工具，丟 `ProcessApprovalJob` | admin, manager |
 | POST | `/ai-office/approvals/{id}/reject` | 拒絕；工具不執行，任務標 `rejected` | admin, manager |
 | GET | `/ai-office/projects/{id}/activities` | 事件流列表（`?after_id=`、`?type=`、`?task_id=`、`?per_page=`） | 唯讀 |
+| GET | `/ai-office/agents/{id}/memories` | 這個 Agent 記得的事（`?project_id=`、`?memory_type=`） | 唯讀 |
+| GET | `/ai-office/usage` | 用量與成本報表（`?project_id=`、`?agent_id=`、`?from=`、`?to=`） | 唯讀 |
+| GET | `/ai-office/stats/agents` | 每位 Agent 的效能統計（`?project_id=`） | 唯讀 |
 | POST | `/ai-office/projects/{id}/events/ticket` | 換一張開 SSE 用的一次性票 | 唯讀 |
 | GET | `/ai-office/projects/{id}/events` | SSE 事件串流（`?ticket=`、`?after_id=`） | 憑票，票綁使用者與專案 |
 
@@ -260,6 +263,47 @@ new EventSource('/api/v1/ai-office/projects/12/events?ticket=…&after_id=348')
 3 條（超過回 **429** `TOO_MANY_CONNECTIONS`，不排隊）、每輪最多送 100 筆。這些是為了
 避免長連線佔滿 PHP-FPM worker。瀏覽器自動重連時帶的 `Last-Event-ID` 標頭優先於
 `after_id`，重連不會漏事件。
+
+### 用量、成本與 Agent 效能（規格 §38／§40）
+
+`GET /ai-office/usage` 全部從 `ai_office_token_usages` 聚合，沒有任何寫死的數字：
+
+```json
+{
+  "success": true,
+  "data": {
+    "totals": { "requests": 12, "input_tokens": 15000, "output_tokens": 4000,
+                "total_tokens": 19000, "estimated_cost": "0.123400" },
+    "by_model":   [{ "model": "claude-opus-5", "requests": 8, "total_tokens": 15000, "estimated_cost": "0.120000" }],
+    "by_agent":   [{ "agent_id": 7, "agent_name": "後端小周", "requests": 8, "total_tokens": 15000, "estimated_cost": "0.120000" }],
+    "by_project": [{ "project_id": 1, "project_name": "待辦 API", "requests": 8, "total_tokens": 15000, "estimated_cost": "0.120000" }],
+    "daily":      [{ "day": "2026-08-25", "total_tokens": 15000, "estimated_cost": "0.120000" }]
+  },
+  "meta": { "filters": { "project_id": null }, "pricing": { "claude-opus-5": { "input": 5, "output": 25 } } }
+}
+```
+
+- **金額一律是字串、固定 6 位小數**，帳務數字不經過浮點數。
+- 成本是加總寫入當下的 `estimated_cost`，**不在報表這層用現在的價目表重算**——重算的話，
+  改了 `config/ai_office.php` 的價格連歷史帳都會跟著變。`meta.pricing` 回傳目前的價目表，
+  讓畫面能說明「這些數字是用哪一份表估的」。價目表沒有的模型估成 0，不憑空補單價。
+- `daily` 只回有用量的日子；把空白日補 0 是畫圖那一端的事。
+- `to` 早於 `from` 回 **422**。
+
+`GET /ai-office/stats/agents` 回每位 Agent 的 `tasks／completed／failed／retries／runs／
+success_rate／avg_duration_ms／total_tokens／estimated_cost`。兩個地方刻意回 `null` 而不是 0：
+沒接過任務的人沒有成功率、沒有成功執行過的人沒有平均耗時——0 和「還沒有資料」不是同一件事。
+平均耗時只算 `status=completed` 的執行，否則「失敗得很快」會被算成效率高。
+
+### Agent 記憶（規格 §41）
+
+Agent 每完成或失敗一個任務就寫一則記憶（`task_result` / `error_pattern`），下次執行時
+重要度最高的前幾則會被放進 prompt。`GET /ai-office/agents/{id}/memories` 的排序跟實際
+recall 一致，所以清單前 `meta.recall_limit` 則就是下次真的會被送出去的那幾則。
+
+`project_id` 為 null 的記憶是跨專案通則（例如使用者偏好），在任何專案下都會被想起來。
+上限在 `config/ai_office.php` 的 `memory`：單則長度（超過截斷）與每次取幾則——記憶會進
+context，等於每次請求都要為它付 token。
 
 ### 健康檢查
 

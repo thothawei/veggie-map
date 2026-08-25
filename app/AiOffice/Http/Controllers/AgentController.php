@@ -2,8 +2,10 @@
 
 namespace App\AiOffice\Http\Controllers;
 
+use App\AiOffice\Http\Resources\AgentMemoryResource;
 use App\AiOffice\Http\Resources\AgentResource;
 use App\AiOffice\Models\Agent;
+use App\AiOffice\Models\AgentMemory;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +35,46 @@ class AgentController extends Controller
         return response()->json([
             'success' => true,
             'data' => $agents->map(fn (Agent $agent) => (new AgentResource($agent))->resolve())->all(),
+        ]);
+    }
+
+    /**
+     * 這個 Agent 記得的事（規格第 41 節）。順序跟 AgentMemoryService::recall() 一致
+     * ——面板上看到的前幾則，就是下次執行真的會被放進 prompt 的那幾則。
+     */
+    public function memories(Request $request, Agent $agent): JsonResponse
+    {
+        $this->authorize('view', $agent);
+
+        $filters = $request->validate([
+            'project_id' => ['nullable', 'integer'],
+            'memory_type' => ['nullable', Rule::in(AgentMemory::TYPES)],
+            'per_page' => ['nullable', 'integer', 'between:1,100'],
+        ]);
+
+        $memories = $agent->memories()
+            ->when(
+                $filters['project_id'] ?? null,
+                // 跨專案的通則（project_id 為 null）在任何專案下都算數，一起回。
+                fn ($query, $projectId) => $query->where(
+                    fn ($inner) => $inner->whereNull('project_id')->orWhere('project_id', $projectId),
+                ),
+            )
+            ->when($filters['memory_type'] ?? null, fn ($query, $type) => $query->where('memory_type', $type))
+            ->orderByDesc('importance')
+            ->orderByDesc('id')
+            ->paginate($filters['per_page'] ?? 20);
+
+        return response()->json([
+            'success' => true,
+            'data' => AgentMemoryResource::collection($memories)->resolve(),
+            'meta' => [
+                'current_page' => $memories->currentPage(),
+                'last_page' => $memories->lastPage(),
+                'per_page' => $memories->perPage(),
+                'total' => $memories->total(),
+                'recall_limit' => (int) config('ai_office.memory.recall_limit', 5),
+            ],
         ]);
     }
 

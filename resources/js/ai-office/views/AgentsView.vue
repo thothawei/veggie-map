@@ -4,6 +4,7 @@ import AiOfficeShell from '../components/AiOfficeShell.vue';
 import AgentList from '../components/agent/AgentList.vue';
 import { useAgentsStore } from '../stores/agents';
 import { extractApiErrorMessage } from '@/lib/apiError';
+import { MEMORY_TYPE_LABELS } from '../labels';
 
 const agents = useAgentsStore();
 const detailError = ref<string | null>(null);
@@ -43,6 +44,18 @@ onMounted(() => void agents.fetchAll());
                     <span :data-effect="effect">{{ effect }}</span>
                 </li>
             </ul>
+
+            <h3>記得的事（前 {{ agents.recallLimit }} 則會進下次的 prompt）</h3>
+            <p v-if="agents.memories.length === 0" class="muted">
+                還沒有記憶。Agent 每完成或失敗一個任務就會記一則。
+            </p>
+            <ol v-else class="memories">
+                <li v-for="(memory, index) in agents.memories" :key="memory.id" :class="{ recalled: index < agents.recallLimit }">
+                    <span class="type">{{ MEMORY_TYPE_LABELS[memory.memory_type] ?? memory.memory_type }}</span>
+                    <span class="importance">重要度 {{ memory.importance }}</span>
+                    <span class="content">{{ memory.content }}</span>
+                </li>
+            </ol>
 
             <h3>System prompt</h3>
             <pre class="prompt">{{ agents.detail.system_prompt }}</pre>
@@ -94,6 +107,44 @@ h3 {
 
 .permissions [data-effect='allow'] {
     color: #7fd18f;
+}
+
+.memories {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+}
+
+.memories li {
+    display: grid;
+    grid-template-columns: 6rem 5rem 1fr;
+    gap: 0.5rem;
+    padding: 0.3rem 0.4rem;
+    background: var(--ai-bg);
+    border-radius: 0.25rem;
+    /* 會進 prompt 的那幾則要看得出來，否則「記得很多」跟「真的會用到」分不開。 */
+    opacity: 0.55;
+}
+
+.memories li.recalled {
+    opacity: 1;
+    border-left: 2px solid #2f855a;
+}
+
+.memories .type,
+.memories .importance {
+    color: var(--ai-muted);
+}
+
+@media (max-width: 640px) {
+    .memories li {
+        grid-template-columns: 1fr;
+        gap: 0.15rem;
+    }
 }
 
 .prompt {

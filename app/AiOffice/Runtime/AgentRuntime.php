@@ -14,6 +14,7 @@ use App\AiOffice\Models\ToolExecution;
 use App\AiOffice\Security\PermissionGate;
 use App\AiOffice\Security\RiskLevel;
 use App\AiOffice\Services\ActivityRecorder;
+use App\AiOffice\Services\AgentMemoryService;
 use App\AiOffice\Services\ApprovalService;
 use App\AiOffice\Services\TokenUsageService;
 use App\AiOffice\Tools\ToolContext;
@@ -41,6 +42,7 @@ class AgentRuntime
         private readonly TokenUsageService $tokenUsage,
         private readonly ActivityRecorder $activities,
         private readonly ApprovalService $approvals,
+        private readonly AgentMemoryService $memories,
     ) {}
 
     public function run(Task $task): TaskRun
@@ -55,21 +57,29 @@ class AgentRuntime
 
         $agent->loadMissing(['permissions', 'tools']);
 
-        $taskRun = $this->startRun($task, $agent);
+        // prompt 只組一次，startRun 記進 task_runs.input 的與真正送出去的是同一份
+        // ——分別組兩次的話，記憶剛好在這中間被寫入就會對不起來，事後查案會被誤導。
+        $prompt = $this->initialPrompt($task, $agent);
+        $taskRun = $this->startRun($task, $agent, $prompt);
         $guard = AgentLoopGuard::fromConfig();
 
         try {
-            return $this->loop($task, $agent, $taskRun, $guard);
+            return $this->loop($task, $agent, $taskRun, $guard, $prompt);
         } catch (Throwable $e) {
             return $this->failRun($task, $agent, $taskRun, $guard, $e->getMessage(), $e);
         }
     }
 
-    private function loop(Task $task, Agent $agent, TaskRun $taskRun, AgentLoopGuard $guard): TaskRun
-    {
+    private function loop(
+        Task $task,
+        Agent $agent,
+        TaskRun $taskRun,
+        AgentLoopGuard $guard,
+        string $prompt,
+    ): TaskRun {
         $messages = [[
             'role' => 'user',
-            'content' => $this->initialPrompt($task),
+            'content' => $prompt,
         ]];
 
         $toolDefinitions = $this->tools->definitionsFor($agent->tools->pluck('tool')->all());
@@ -232,7 +242,7 @@ class AgentRuntime
         ]);
     }
 
-    private function startRun(Task $task, Agent $agent): TaskRun
+    private function startRun(Task $task, Agent $agent, string $prompt): TaskRun
     {
         $runNumber = (int) $task->runs()->max('run_number') + 1;
 
@@ -251,7 +261,7 @@ class AgentRuntime
             'task_id' => $task->id,
             'agent_id' => $agent->id,
             'run_number' => $runNumber,
-            'input' => ['prompt' => $this->initialPrompt($task)],
+            'input' => ['prompt' => $prompt],
             'status' => 'running',
             'started_at' => now(),
         ]);
@@ -274,6 +284,7 @@ class AgentRuntime
         ]);
 
         $agent->update(['status' => 'idle']);
+        $this->memories->rememberTaskResult($task, $taskRun, $response->text);
 
         $this->activities->record('TaskCompleted', "{$agent->name} 完成「{$task->title}」", $task, $agent, [
             'run_number' => $taskRun->run_number,
@@ -317,6 +328,7 @@ class AgentRuntime
         ]);
 
         $agent->update(['status' => 'error']);
+        $this->memories->rememberFailure($task, $reason);
 
         AgentError::create([
             'agent_id' => $agent->id,
@@ -373,11 +385,11 @@ class AgentRuntime
         ]);
     }
 
-    private function initialPrompt(Task $task): string
+    private function initialPrompt(Task $task, Agent $agent): string
     {
         $description = $task->description ?: '（沒有補充說明）';
 
-        return <<<PROMPT
+        $prompt = <<<PROMPT
         任務：{$task->title}
 
         說明：
@@ -385,5 +397,10 @@ class AgentRuntime
 
         完成後直接回覆結果。需要使用工具時就呼叫工具，不要在文字裡描述你「將會」做什麼。
         PROMPT;
+
+        // 記憶放在任務敘述之後：任務本身永遠是主角，記憶是背景資訊。
+        $memories = $this->memories->contextBlock($agent, $task->project);
+
+        return $memories === null ? $prompt : $prompt."\n\n".$memories;
     }
 }

@@ -2188,3 +2188,73 @@ ai-office/
 
 **仍未做的：** 真正的 `/ai-office` 頁面還是沒有在瀏覽器裡登入看過（本輪由使用者自己驗），
 所以「像素辦公室在真實資料下的排版」只有元件層級的證據，沒有整頁截圖。
+
+---
+
+## 2026-08-25 — AI Office Phase 10：用量／成本報表、Agent 效能、以及真的接起來的 Agent 記憶
+
+三件事，其中一件是把 Phase 2 就建好卻從來沒人用過的表接上電。
+
+### 1. AgentMemory（規格 §41）從「有表沒用」變成真的有作用
+
+`ai_office_agent_memories` 從 Phase 2 就存在，但整個 repo 裡沒有任何一行寫入或讀取
+——查證方式是 `grep -rln AgentMemory app tests`，只有 Model 自己跟 `Agent::memories()`。
+這次補上 `AgentMemoryService`：
+
+- 任務完成寫一則 `task_result`，失敗寫一則 `error_pattern`（預設重要度 7 > 5：
+  下次接到類似任務時，「上次為什麼掛掉」比「上次做了什麼」更該先被想起來）。
+- 執行前把重要度最高的前 N 則放進 prompt。`project_id` 為 null 的是跨專案通則
+  （例如使用者偏好），換專案不會忘記。
+- 兩道上限在 `config/ai_office.php` 的 `memory`：單則長度、每次取幾則。理由很實際——
+  記憶是要塞進 context 的，無上限地塞等於每次請求都在為舊資訊付 token。
+
+順手修掉一個之前就存在的隱患：`initialPrompt()` 原本被呼叫兩次（一次寫進
+`task_runs.input`、一次真的送出去）。加了記憶之後兩次的內容可能不同，事後查案就會被
+`task_runs.input` 誤導。改成組一次、傳兩處用，並補了一條測試直接斷言兩者相同。
+
+### 2. 用量與成本報表（規格 §38／§40）
+
+`GET /ai-office/usage`：totals ＋ 依模型／Agent／專案分組 ＋ 每日序列，可依專案、Agent、
+日期區間篩選。`GET /ai-office/stats/agents`：每位 Agent 的任務數、完成、失敗、重試、
+執行次數、成功率、平均耗時、token 與成本。
+
+三個刻意的決定：
+
+- **成本用寫入當下的 `estimated_cost` 加總，不在報表這層重算單價。** 重算的話，改了
+  價目表連歷史帳單都會跟著變，對不上當時的實際請求。`meta.pricing` 回傳現行價目表，
+  讓畫面能說明數字的來源。
+- **金額一律回固定 6 位小數的字串**，不回浮點數。
+- **`success_rate` 與 `avg_duration_ms` 在沒有資料時回 `null` 而不是 0。** 兩者意義不同，
+  回 0 會讓排行榜把還沒上工的人排到最後一名。平均耗時只算 `status=completed` 的執行，
+  否則「失敗得很快」會被算成效率高。
+
+聚合查詢分成四段各自算完再在 PHP 併起來，不寫成一個大 join：任務→執行→用量是一對多再
+一對多，join 起來 SUM 會把同一筆用量重複計算——那種錯誤在報表上只是「數字有點大」，
+非常難被發現。
+
+### 過程中抓到的兩個真問題
+
+1. **`Column 'created_at' in where clause is ambiguous`（500）**：`by_agent`／`by_project`
+   會 join 另一張表，那兩張表也有 `created_at`；**只有在同時帶日期篩選時才會炸**，
+   所以很容易漏測。修法是查詢條件一律帶表名，並補一條專門測「日期篩選＋join 同時出現」
+   的測試。
+2. **PHPStan 抓到把統計列當成 Model 用**：`SUM(...) as total_tokens` 用 Eloquent 取回來時，
+   `$row->total_tokens` 是模型上不存在的動態屬性——執行期安靜地能跑，但型別上是錯的。
+   改成 `->toBase()`，聚合結果就是 stdClass 列。
+
+### 3. 前端 `/ai-office/usage`
+
+總計磚、每日 token 長條圖（純 CSS 高度，沒有引第三方圖表套件——一張長條圖不值得多背一個
+相依，也不用擔心它的預設配色跟深色主題打架）、依模型／依專案清單、Agent 效能表。
+Agent 詳情頁多了「記得的事」，會進下次 prompt 的那幾則用左側綠線與不透明度標出來
+——「記得很多」跟「真的會用到」是兩件事。
+
+### 驗證
+
+後端 351 → **375 個測試全綠**，前端 210 → **220 全綠**，PHPStan 0 error、Pint PASS、
+`vue-tsc`／ESLint／`npm run build` 都過。**反向驗證三項**：拿掉 prompt 裡的記憶區塊 → 1 條紅；
+把 null 成功率改成 0 → 1 條紅；把長條圖高度寫死成 100% → 1 條紅。
+
+**仍未做的：** 一樣沒有在瀏覽器裡登入看過（使用者自己驗）。另外 `AgentMemory` 目前只有
+自動寫入與唯讀 API，沒有「人工新增／刪除一則記憶」的端點——規格沒有要求，而且開放寫入
+等於開放任意注入 prompt 內容，先不做。

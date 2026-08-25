@@ -105,3 +105,69 @@ export interface StreamTicket {
     expires_in: number;
     latest_id: number;
 }
+
+export interface UsageTotals {
+    requests: number;
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    /** 金額是字串（後端固定 6 位小數）：帳務數字不經過浮點數。 */
+    estimated_cost: string;
+}
+
+export interface UsageGroupRow {
+    requests: number;
+    total_tokens: number;
+    estimated_cost: string;
+    model?: string;
+    agent_id?: number | null;
+    agent_name?: string | null;
+    project_id?: number | null;
+    project_name?: string | null;
+}
+
+export interface UsageDailyRow {
+    day: string;
+    total_tokens: number;
+    estimated_cost: string;
+}
+
+export interface UsageReport {
+    totals: UsageTotals;
+    by_model: UsageGroupRow[];
+    by_agent: UsageGroupRow[];
+    by_project: UsageGroupRow[];
+    daily: UsageDailyRow[];
+}
+
+export interface AgentPerformance {
+    agent_id: number;
+    name: string;
+    role: string;
+    status: AgentStatus;
+    tasks: number;
+    completed: number;
+    failed: number;
+    retries: number;
+    runs: number;
+    /** 沒接過任務時是 null，不是 0——兩者意義不同。 */
+    success_rate: number | null;
+    avg_duration_ms: number | null;
+    total_tokens: number;
+    estimated_cost: string;
+}
+
+export const MEMORY_TYPES = [
+    'project_context', 'technical_decision', 'user_preference', 'task_result', 'error_pattern',
+] as const;
+export type MemoryType = (typeof MEMORY_TYPES)[number];
+
+export interface AgentMemoryItem {
+    id: number;
+    agent_id: number;
+    project_id: number | null;
+    memory_type: MemoryType;
+    content: string;
+    importance: number;
+    created_at: string | null;
+}

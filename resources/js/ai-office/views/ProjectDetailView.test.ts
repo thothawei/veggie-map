@@ -60,6 +60,7 @@ async function mountView(role = 'developer') {
             { path: '/ai-office', name: 'ai-office', component: stub },
             { path: '/ai-office/agents', name: 'ai-office-agents', component: stub },
             { path: '/ai-office/approvals', name: 'ai-office-approvals', component: stub },
+            { path: '/ai-office/usage', name: 'ai-office-usage', component: stub },
         ],
     });
     await router.push('/ai-office');

@@ -37,6 +37,12 @@ const router = createRouter({
             meta: { requiresAuth: true, requiresAiOffice: true },
         },
         {
+            path: '/ai-office/usage',
+            name: 'ai-office-usage',
+            component: () => import('@/ai-office/views/UsageView.vue'),
+            meta: { requiresAuth: true, requiresAiOffice: true },
+        },
+        {
             path: '/ai-office/approvals',
             name: 'ai-office-approvals',
             component: () => import('@/ai-office/views/ApprovalsView.vue'),

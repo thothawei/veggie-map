@@ -1,4 +1,4 @@
-import type { AgentStatus, ProjectStatus, TaskStatus } from './types';
+import type { AgentStatus, MemoryType, ProjectStatus, TaskStatus } from './types';
 
 /**
  * 狀態的中文顯示名。狀態碼本身不翻譯（API 傳的是 `running`，畫面上寫「執行中」），
@@ -32,6 +32,14 @@ export const AGENT_STATUS_LABELS: Record<AgentStatus, string> = {
     waiting_review: '等待核准',
     error: '錯誤',
     offline: '離線',
+};
+
+export const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
+    project_context: '專案背景',
+    technical_decision: '技術決定',
+    user_preference: '使用者偏好',
+    task_result: '任務結果',
+    error_pattern: '失敗模式',
 };
 
 export const RISK_LABELS: Record<string, string> = {

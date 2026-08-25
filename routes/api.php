@@ -7,6 +7,7 @@ use App\AiOffice\Http\Controllers\HealthController as AiOfficeHealthController;
 use App\AiOffice\Http\Controllers\ProjectController as AiOfficeProjectController;
 use App\AiOffice\Http\Controllers\TaskController as AiOfficeTaskController;
 use App\AiOffice\Http\Controllers\TaskDependencyController as AiOfficeTaskDependencyController;
+use App\AiOffice\Http\Controllers\UsageController as AiOfficeUsageController;
 use App\Http\Controllers\Api\Admin\MenuItemController as AdminMenuItemController;
 use App\Http\Controllers\Api\Admin\RestaurantReportController as AdminRestaurantReportController;
 use App\Http\Controllers\Api\Admin\RestaurantVerificationController as AdminRestaurantVerificationController;
@@ -75,6 +76,11 @@ Route::middleware('throttle:api')->group(function () {
             // Agent 唯讀：開放 API 建立 Agent 等於開放任意設定 system prompt 與權限。
             Route::get('/agents', [AiOfficeAgentController::class, 'index']);
             Route::get('/agents/{agent}', [AiOfficeAgentController::class, 'show']);
+            Route::get('/agents/{agent}/memories', [AiOfficeAgentController::class, 'memories']);
+
+            // 用量／成本／效能（規格第 38、40 節）。唯讀，viewer 也看得到。
+            Route::get('/usage', [AiOfficeUsageController::class, 'index']);
+            Route::get('/stats/agents', [AiOfficeUsageController::class, 'agents']);
 
             // 事件流（規格第 35／36 節）。SSE 本身在 auth:sanctum 群組外面另外掛，
             // 因為 EventSource 帶不了 Authorization 標頭，改用這裡發的一次性票。

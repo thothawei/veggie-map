@@ -23,10 +23,11 @@
 - [x] Phase 7 — Activity + SSE（事件流 REST／SSE 串流／一次性票／連線上限／狀態變動 observer，13 個測試）
 - [x] Phase 8 — Vue Dashboard（`resources/js/ai-office/`：CommandCenter／TaskBoard／TaskDetail／
       AgentCard／ApprovalPanel／ActivityFeed＋SSE 訂閱，48 個前端測試）
-      — Usage／成本面板留到 Phase 10（後端還沒有對應端點）
+      — Usage／成本面板已於 Phase 10 補上（`/ai-office/usage`）
 - [x] Phase 9 — Pixel Office（OfficeMap／OfficeRoom／AgentDesk／AgentCharacter／
       AgentStatusBadge，純 SVG 方塊＋CSS 動畫，掛在總覽與專案詳情兩頁，22 個測試）
-- [ ] Phase 10 — TokenUsage / Cost / AgentMemory / Agent 效能
+- [x] Phase 10 — TokenUsage／Cost 報表端點＋Agent 效能統計＋AgentMemory 真的接起來
+      （寫入、recall 進 prompt、面板顯示），前端 `/ai-office/usage` 頁面，34 個測試
 - [ ] Phase 11 — Docker Sandbox / GitHub Actions
 - [ ] Phase 12 — 完整 Demo
 

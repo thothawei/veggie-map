@@ -322,7 +322,7 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 - Readiness 端點：`GET /api/v1/ai-office/health`（需登入且具備 AI Office 角色）。
   資料庫／Redis／佇列／workspace 都是**真的去連**，任一項不通就回 503 `degraded`。
 
-目前進度：**Phase 9 完成**（Phase 7 事件流＋SSE、Phase 8 Vue Dashboard、Phase 9 Pixel Office）。已可用的端點：
+目前進度：**Phase 10 完成**（事件流＋SSE、Vue Dashboard、Pixel Office、用量成本與 Agent 記憶）。已可用的端點：
 
 | Method | Path | 說明 |
 |---|---|---|
@@ -339,6 +339,9 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 | GET | `/ai-office/projects/{id}/activities` | 事件流列表（`after_id` 增量補漏） |
 | POST | `/ai-office/projects/{id}/events/ticket` | 換一張開 SSE 用的一次性票 |
 | GET | `/ai-office/projects/{id}/events` | SSE 事件串流（憑票，非 Bearer token） |
+| GET | `/ai-office/agents/{id}/memories` | Agent 記得的事（前 `recall_limit` 則會進下次 prompt） |
+| GET | `/ai-office/usage` | 用量與成本報表（依模型／Agent／專案／日期聚合） |
+| GET | `/ai-office/stats/agents` | 每位 Agent 的任務數、成功率、平均耗時、token 與成本 |
 
 前端面板在 `/ai-office`（總覽／專案詳情／Agent／核准），只有具備 AI Office 角色的登入者
 看得到入口。專案詳情頁用 `EventSource` 訂閱上面那條 SSE，任務看板與事件流會即時更新；

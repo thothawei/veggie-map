@@ -24,6 +24,7 @@ function makeRouter() {
             { path: '/ai-office/projects/:id', name: 'ai-office-project', component: stub },
             { path: '/ai-office/agents', name: 'ai-office-agents', component: stub },
             { path: '/ai-office/approvals', name: 'ai-office-approvals', component: stub },
+            { path: '/ai-office/usage', name: 'ai-office-usage', component: stub },
         ],
     });
 }
