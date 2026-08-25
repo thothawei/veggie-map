@@ -17,6 +17,25 @@ class NominatimGeocodingProvider implements GeocodingProviderInterface
 
     public function search(string $query): array
     {
+        $breaker = CircuitBreaker::for('nominatim');
+
+        // 這條在使用者請求路徑上（GET /geocode），斷路的價值比同步更高：Nominatim
+        // 掛掉時每個搜尋都要等滿 5 秒逾時×3 次重試才回錯，使用者體感是整個網站卡住。
+        // 開路期間直接丟 GeocodingUnavailableException——呼叫端已經會把它轉成
+        // 「搜尋地點暫時無法使用」，不是 500。
+        if (! $breaker->available()) {
+            ExternalApiLog::create([
+                'provider' => 'nominatim',
+                'endpoint' => '/search',
+                'status' => 0,
+                'response_time_ms' => 0,
+                'success' => false,
+                'error_code' => 'CIRCUIT_OPEN',
+            ]);
+
+            throw new GeocodingUnavailableException('Nominatim circuit is open');
+        }
+
         $url = rtrim(config('services.nominatim.url'), '/').'/search';
         $userAgent = config('services.nominatim.user_agent');
 
@@ -55,6 +74,8 @@ class NominatimGeocodingProvider implements GeocodingProviderInterface
 
             throw new GeocodingUnavailableException($e->getMessage(), 0, $e);
         } finally {
+            $success ? $breaker->recordSuccess() : $breaker->recordFailure();
+
             ExternalApiLog::create([
                 'provider' => 'nominatim',
                 'endpoint' => '/search',

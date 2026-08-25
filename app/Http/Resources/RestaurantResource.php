@@ -34,7 +34,10 @@ class RestaurantResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'slug' => $this->slug,
-            'description' => $this->description,
+            // 列表沒有撈 description（見 RestaurantRepository::LIST_COLUMNS）。
+            // whenHas＝沒撈到就整個 key 不出現，而不是回 null——回 null 等於宣稱
+            // 「這家店沒有描述」，那是安靜地說謊。
+            'description' => $this->whenHas('description'),
             'address' => $this->address,
             'city' => $this->city,
             'district' => $this->district,
@@ -76,7 +79,7 @@ class RestaurantResource extends JsonResource
             'open_now' => $this->when($opening !== null, fn () => $opening['open_now']),
             'closes_at' => $this->when($opening !== null && $opening['closes_at'] !== null, fn () => $opening['closes_at']),
             'next_opens_at' => $this->when($opening !== null && $opening['opens_at'] !== null, fn () => $opening['opens_at']),
-            'opening_hours_raw' => $this->when($opening !== null, fn () => $this->opening_hours),
+            'opening_hours_raw' => $this->whenHas('opening_hours'),
             'opening_hours_week' => $this->when(
                 $opening !== null && $this->openingHours->isNotEmpty(),
                 fn () => OpeningStatus::week($this->resource),

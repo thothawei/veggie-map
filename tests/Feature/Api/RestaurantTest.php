@@ -298,4 +298,29 @@ class RestaurantTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('error.code', 'VALIDATION_ERROR');
     }
+
+    /**
+     * 總 Prompt 第三十二節：大型列表不要 SELECT *。這條同時守住「該省的省掉」與
+     * 「省掉的欄位不能變成 null 說謊」。
+     */
+    public function test_list_omits_heavy_columns_instead_of_returning_them_as_null(): void
+    {
+        Restaurant::factory()->create(['description' => '這是一段很長的描述']);
+
+        $listed = $this->getJson('/api/v1/restaurants')->json('data.0');
+
+        $this->assertArrayNotHasKey('description', $listed, 'description 沒撈就不該出現在回應裡');
+        $this->assertArrayNotHasKey('opening_hours_raw', $listed);
+        $this->assertArrayHasKey('name', $listed);
+        $this->assertArrayHasKey('latitude', $listed);
+    }
+
+    public function test_detail_still_returns_the_columns_the_list_skips(): void
+    {
+        $restaurant = Restaurant::factory()->create(['description' => '這是一段很長的描述']);
+
+        $this->getJson("/api/v1/restaurants/{$restaurant->id}")
+            ->assertOk()
+            ->assertJsonPath('data.description', '這是一段很長的描述');
+    }
 }

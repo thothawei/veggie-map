@@ -36,6 +36,16 @@ return [
     ],
 
     // VeggieMap 外部資料源設定，見 docs/external-apis.md。
+    /*
+    | 斷路器（見 App\Services\External\CircuitBreaker）。連續失敗達到門檻後，
+    | 冷卻時間內的請求直接短路。門檻設 5：排程一次跑五個城市 bbox，Overpass 整個
+    | 掛掉時第一輪就會達標，第二個城市起不再空等。
+    */
+    'circuit_breaker' => [
+        'failure_threshold' => env('EXTERNAL_API_CIRCUIT_FAILURE_THRESHOLD', 5),
+        'cooldown_seconds' => env('EXTERNAL_API_CIRCUIT_COOLDOWN_SECONDS', 600),
+    ],
+
     'overpass' => [
         'url' => env('EXTERNAL_API_OVERPASS_URL', 'https://overpass-api.de/api/interpreter'),
         'timeout' => env('EXTERNAL_API_OVERPASS_TIMEOUT', 30),

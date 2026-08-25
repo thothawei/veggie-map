@@ -383,8 +383,8 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 - [x] 關鍵字搜尋強化（多詞、料理種類／菜色、相關性排序）✅ 2026-08-26
 - [x] 素食可信度篩選／排序（`confidence_min`、`sort=confidence`、列表帶分數）✅ 2026-08-26
 - [x] 搜尋自動完成 `GET /restaurants/suggest`（店名／料理種類／行政區）✅ 2026-08-26
-- [ ] 列表 API `select()` 收欄位
-- [ ] External API circuit breaker
+- [x] 列表 API `select()` 收欄位 ✅ 2026-08-26
+- [x] External API circuit breaker ✅ 2026-08-26
 - [ ] `possible_duplicate` Admin 審核入口
 - [ ] 詳情頁走 slug
 
@@ -577,10 +577,10 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       「http://localhost:8080/docs」。最小做法：用 `darkaonline/l5-swagger` 或靜態
       Redoc 頁吃同一份 yaml，production 可選擇只在 local 開。
 
-- [ ] **Circuit breaker（第二十節、`docs/external-apis.md`）**
-      timeout／retry／log／fallback 都有。連續 N 次失敗後停止該次 `restaurants:sync`
-      （建議 5 次）沒做。現在排程一次打 5 個城市 bbox，Overpass 掛掉會連打 5 次才結束，
-      這時候斷路器才有意義。
+- [x] **Circuit breaker（第二十節）✅ 2026-08-26**
+      `App\Services\External\CircuitBreaker`，狀態存 Redis（跨程序共用，因為排程是
+      五個獨立 artisan 程序）。Overpass 與 Nominatim 都接上：開路期間直接短路並寫
+      一筆 `CIRCUIT_OPEN` 的 `ExternalApiLog`。門檻／冷卻在 `config/services.php`。
 
 - [ ] **搜尋 UI 沒接上的 API 參數（第八、二十八節）**
       後端有 `price_level`、`rating_min`、`district`，前端 FilterDrawer 只有 diet＋
@@ -613,7 +613,12 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       Telescope 只在 local。若要履歷上的「Logging / Monitoring」站得住，至少做一個
       輕量 request timing middleware，或上 Laravel Pulse；不要為了表格好看接一堆 APM。
 
-- [ ] **列表 API 仍是整列撈出（第三十二節）**
+- [x] **列表 API 仍是整列撈出（第三十二節）✅ 2026-08-26**
+      `LIST_COLUMNS` 明列欄位，排除 `description`／`source_id`／`opening_hours`／
+      `location`；Resource 用 `whenHas()`——沒撈到就整個 key 消失，不是回 null
+      （回 null 等於宣稱「這家店沒有描述」）。詳情維持完整欄位。
+
+      ~~原始說明~~：
       規劃寫大型列表不要 `SELECT *`。`RestaurantRepository::search()` 沒有
       `select()` 收欄位，列表不需要 `description`／`source_id` 等。資料量還小所以
       感覺不出來；要動的話連 Resource／cache key 一起收斂，避免 detail／list 共用

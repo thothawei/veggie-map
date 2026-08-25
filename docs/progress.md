@@ -2599,3 +2599,45 @@ id=suggest 的餐廳而 404。有一條測試明確守著這件事。
 後端 450 → **458 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
 前端 238 → **243 個測試全綠**（含用 fake timers 驗證 debounce 真的只發一次請求），
 vue-tsc／ESLint 乾淨。OpenAPI 過 `@redocly/cli lint`。
+
+---
+
+## 2026-08-26 — 列表欄位收斂與外部 API 斷路器
+
+兩件互不相關但都屬於「規劃明寫、一直沒閉環」的項目。
+
+### 列表不再 SELECT *（第三十二節）
+
+`RestaurantRepository::LIST_COLUMNS` 明列欄位，排除 `description`（TEXT，卡片不顯示）、
+`source_id`（只有去重用得到）、`opening_hours`（列表要的是解析後的狀態，走關聯）、
+`location`（POINT 二進位，距離已經另外算成 `distance` 欄位）。
+
+`location` 沒被 SELECT 出來不影響半徑搜尋——WHERE 與計算欄位仍然讀得到它。
+
+**關鍵是 Resource 那邊用 `whenHas()` 而不是直接取值**：Eloquent 對沒撈到的欄位
+回 null 而不是報錯，所以直接寫 `$this->description` 會讓列表宣稱「這家店沒有描述」。
+`whenHas()` 讓那個 key 整個消失，前端與 API 使用端因此分得出「沒有」與「沒撈」。
+有一條測試同時斷言「列表沒有這個 key」與「詳情仍然有值」。
+
+### 斷路器（第二十節）
+
+timeout／retry／log／fallback 早就有了，缺的是「連續失敗後不要再空等」。
+
+排程一次跑五個城市 bbox，那是**五個獨立的 artisan 程序**。Overpass 掛掉時，五個
+程序會各自 retry 三次、各自等滿 30 秒逾時——十五次注定失敗的請求。所以狀態必須存
+在 Redis 而不是程序記憶體，存在物件裡的計數器在這個場景等於沒有（有一條測試明確
+用兩個不同實例驗這件事）。
+
+Nominatim 也接上，而且價值更高：它在**使用者請求路徑上**，掛掉時每個搜尋都要等滿
+逾時×重試才回錯，體感是整個網站卡住。開路期間直接丟 `GeocodingUnavailableException`，
+呼叫端既有的 fallback 會把它轉成空結果——測試明確斷言使用者拿到的是 200 空清單而
+不是 500。
+
+只做 closed／open 兩態，沒有 half-open 的試探請求：冷卻到期就放行下一個請求，
+成功歸零、失敗重新開路。效果接近 half-open，少一套狀態機。開路的每次短路仍然寫
+一筆 `error_code = CIRCUIT_OPEN` 的 log——不然「今天為什麼沒同步」查不到。
+
+### 驗證
+
+後端 458 → **465 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
+**反向驗證**：把 Overpass 的開路判斷改成 `if (false)` → 1 條紅。

@@ -140,3 +140,25 @@ Overpass／Nominatim 都是「免費但不保證 SLA」的公開服務，因此�
   且用 bounding box 分批查詢（見 `docs/database.md` 的匯入策略），不要一次撈全台灣。
 - Nominatim 政策原文對「商業應用」的表態偏保留，見上表；MVP／Portfolio Demo 用途風險低，但若這個專案
   未來要真的上線給大眾使用，需要重新評估是否改用地圖服務商（例如 Google/Mapbox 的付費 Geocoding）。
+
+---
+
+## 失敗處理與斷路器
+
+每次外部呼叫都寫一筆 `external_api_logs`（provider／endpoint／status／
+response_time_ms／success／error_code，**不記任何 key 或 query 內容**）。
+
+| 層級 | 做法 |
+|---|---|
+| timeout | Overpass 30s（可調 `EXTERNAL_API_OVERPASS_TIMEOUT`）、Nominatim 5s |
+| retry | Overpass 429 退避 3 次；Nominatim 429 退避 2 次 |
+| fallback | 失敗一律回空集合／丟 `GeocodingUnavailableException`，呼叫端轉成空結果，不讓第三方掛掉變成我們 500 |
+| circuit breaker | 連續失敗達門檻（預設 5）後開路，冷卻期間（預設 600s）直接短路 |
+
+斷路器狀態存在 **Redis 而不是程序記憶體**：排程一次跑五個城市 bbox，那是五個
+獨立的 artisan 程序，存在物件裡的計數器在這個場景等於沒有。開路期間的每次短路
+仍然寫一筆 `error_code = CIRCUIT_OPEN` 的 log——不然「今天為什麼沒有同步」會完全
+查不到。
+
+只有 closed／open 兩態，沒有 half-open 的試探請求：冷卻時間到就直接放行下一個
+請求，成功歸零、失敗重新開路。效果接近 half-open，少一套狀態機。

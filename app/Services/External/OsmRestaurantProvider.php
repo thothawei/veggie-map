@@ -7,6 +7,7 @@ use App\Support\CuisineCatalog;
 use App\Support\DietCatalog;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Overpass API（overpass-api.de），僅用於 `restaurants:sync` 離線批次匯入，不掛在使用者
@@ -28,6 +29,27 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
 
     public function fetch(BoundingBox $bbox): array
     {
+        $breaker = CircuitBreaker::for('overpass');
+
+        // 斷路：連續失敗過門檻後，冷卻時間內不再空等。排程一次跑五個 bbox，
+        // Overpass 掛掉時後面幾個城市會立刻回來，而不是各自 retry 三次。
+        if (! $breaker->available()) {
+            Log::warning('Overpass circuit is open, skipping sync fetch', [
+                'retry_after_seconds' => $breaker->retryAfter(),
+            ]);
+
+            ExternalApiLog::create([
+                'provider' => 'overpass',
+                'endpoint' => '/api/interpreter',
+                'status' => 0,
+                'response_time_ms' => 0,
+                'success' => false,
+                'error_code' => 'CIRCUIT_OPEN',
+            ]);
+
+            return [];
+        }
+
         $query = $this->buildQuery($bbox);
         $url = config('services.overpass.url');
         $timeout = (int) config('services.overpass.timeout', 30);
@@ -73,6 +95,10 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
 
             return [];
         } finally {
+            // 斷路器只認「這次呼叫成不成功」，不管失敗原因是逾時、429 還是 500——
+            // 對呼叫端來說結果一樣是拿不到資料。
+            $success ? $breaker->recordSuccess() : $breaker->recordFailure();
+
             ExternalApiLog::create([
                 'provider' => 'overpass',
                 'endpoint' => '/api/interpreter',
