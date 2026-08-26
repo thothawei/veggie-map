@@ -261,6 +261,9 @@ watch(committedKeyword, (value) => {
                     >{{ restaurant.venue_badge }}</span>
                     <span v-if="formatCuisines(restaurant.cuisines)" class="cuisines">{{ formatCuisines(restaurant.cuisines) }}</span>
                     <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
+                    <span v-if="restaurant.matched_menu_items?.length" class="match-reason">
+                        命中菜色：{{ restaurant.matched_menu_items.join('、') }}
+                    </span>
                     <span
                         v-if="formatConfidence(restaurant.confidence_score)"
                         class="confidence"
@@ -444,5 +447,10 @@ li button:hover {
     border-radius: 6px;
     background: #fff;
     font-size: 0.9rem;
+}
+
+.match-reason {
+    color: #2f855a;
+    font-size: 0.85rem;
 }
 </style>

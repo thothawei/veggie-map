@@ -102,6 +102,11 @@ export interface Restaurant {
     menu_empty_message?: string | null;
     confidence_score?: number | null;
     /**
+     * 這家店為什麼出現在搜尋結果裡——命中的菜色名稱（最多三個）。只有店名／地址
+     * 以外的東西命中時才會出現；店名本身就命中時不需要解釋。
+     */
+    matched_menu_items?: string[];
+    /**
      * 三態：open／closed／unknown。unknown 是 OSM 最常見的情況（多數店家沒填
      * opening_hours），不要在畫面上把它顯示成「已打烊」。
      */

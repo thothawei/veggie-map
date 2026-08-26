@@ -145,4 +145,60 @@ class RestaurantKeywordSearchTest extends TestCase
         sort($expected);
         $this->assertSame($expected, $seen, '有店家在翻頁時被漏掉');
     }
+
+    /**
+     * 搜「拉麵」跳出一家店名、地址、料理種類都沒有那兩個字的店時，使用者看不出
+     * 關聯——不說明的話這筆結果看起來像 bug。
+     */
+    public function test_result_says_which_menu_item_matched(): void
+    {
+        $restaurant = Restaurant::factory()->create(['name' => '綠光食堂']);
+        MenuItem::factory()->create([
+            'restaurant_id' => $restaurant->id,
+            'name' => '味噌拉麵',
+            'diet_type' => 'vegan',
+        ]);
+
+        $data = $this->getJson('/api/v1/restaurants?keyword=拉麵')->json('data.0');
+
+        $this->assertSame(['味噌拉麵'], $data['matched_menu_items']);
+    }
+
+    public function test_no_match_reason_key_when_the_name_itself_matched(): void
+    {
+        Restaurant::factory()->create(['name' => '拉麵屋']);
+
+        $data = $this->getJson('/api/v1/restaurants?keyword=拉麵')->json('data.0');
+
+        // 店名本身就命中時不需要解釋，多一行只是雜訊。
+        $this->assertArrayNotHasKey('matched_menu_items', $data);
+    }
+
+    public function test_match_reasons_do_not_cause_a_query_per_row(): void
+    {
+        // 逐筆補查就是 N+1。整頁一次查完，所以菜色查詢固定只有一次。
+        foreach (range(1, 5) as $i) {
+            $restaurant = Restaurant::factory()->create(['name' => "食堂 {$i}"]);
+            MenuItem::factory()->create([
+                'restaurant_id' => $restaurant->id,
+                'name' => '味噌拉麵',
+                'diet_type' => 'vegan',
+            ]);
+        }
+
+        $menuQueries = 0;
+        \DB::listen(function ($query) use (&$menuQueries) {
+            // 只數「另外整批去查菜色」那一支。主查詢裡也有兩處提到 menu_items
+            // （相關性的 EXISTS、以及 whereHas 編譯出來的 exists 子句），但那些
+            // 是同一次查詢的一部分——用批次載入特有的 `where restaurant_id in`
+            // 形狀來認，才不會把它們算進來。
+            if (str_contains($query->sql, 'from `menu_items` where `restaurant_id` in')) {
+                $menuQueries++;
+            }
+        });
+
+        $this->getJson('/api/v1/restaurants?keyword=拉麵')->assertOk()->assertJsonCount(5, 'data');
+
+        $this->assertSame(1, $menuQueries, "菜色查詢應該只有一次，實際 {$menuQueries} 次");
+    }
 }

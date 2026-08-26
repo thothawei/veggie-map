@@ -1401,6 +1401,11 @@ components:
           type: string
           nullable: true
           description: 一句說明，文案來自 config/diet.php copy
+        matched_menu_items:
+          type: array
+          items: { type: string }
+          description: >
+            命中的菜色名稱（最多三個）。只有在帶 keyword、而且命中的不是店名時才出現。
         open_status:
           type: string
           enum: [open, closed, unknown]

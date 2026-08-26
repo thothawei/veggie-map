@@ -561,3 +561,34 @@ describe('RestaurantListView 空結果的建議', () => {
         expect(wrapper.text()).toContain('降低素食可信度門檻');
     });
 });
+
+describe('RestaurantListView 命中原因', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+    });
+
+    /**
+     * 搜「拉麵」跳出一家店名沒有那兩個字的店時，使用者看不出關聯——不說明的話
+     * 這筆結果看起來像 bug。
+     */
+    it('命中的是菜色時說出來', async () => {
+        listPayload = {
+            data: [{ ...fakeRestaurant(1), name: '綠光食堂', matched_menu_items: ['味噌拉麵', '擔擔麵'] }],
+            meta: { next_cursor: null },
+        };
+
+        const { wrapper } = await mountList('/restaurants?keyword=拉麵');
+
+        expect(wrapper.find('.match-reason').text()).toContain('味噌拉麵、擔擔麵');
+    });
+
+    it('店名本身命中時不多印一行，那只是雜訊', async () => {
+        listPayload = { data: [{ ...fakeRestaurant(1), name: '拉麵屋' }], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountList('/restaurants?keyword=拉麵');
+
+        expect(wrapper.find('.match-reason').exists()).toBe(false);
+    });
+});

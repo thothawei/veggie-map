@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\Feature;
+use App\Models\MenuItem;
 use App\Models\Restaurant;
 use App\Repositories\Search\KeywordSearch;
 use App\Support\CityCatalog;
@@ -11,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 
 class RestaurantRepository
@@ -201,7 +203,11 @@ class RestaurantRepository
             // 不是點進詳情才知道。
             $query->with(['dietTypes', 'features', 'openingHours', 'confidenceScore']);
 
-            return $query->cursorPaginate($perPage);
+            $paginator = $query->cursorPaginate($perPage);
+
+            $this->attachMatchReasons($paginator->items(), $terms);
+
+            return $paginator;
         });
     }
 
@@ -263,6 +269,48 @@ class RestaurantRepository
         }
 
         return $query;
+    }
+
+    /**
+     * 標出「這家店為什麼出現在結果裡」。
+     *
+     * 搜「拉麵」跳出「綠光食堂」時，使用者看不出關聯——店名、地址、料理種類都
+     * 沒有那兩個字，命中的是一道菜。不說的話這筆結果看起來像 bug。
+     *
+     * 一次查完整頁的菜色（`whereIn` 這一頁的 id），不是逐筆補查——後者就是 N+1。
+     * 料理種類已經在 `features` 關聯裡，不必再查。
+     *
+     * @param  array<int, Model>  $restaurants
+     * @param  list<string>  $terms
+     */
+    private function attachMatchReasons(array $restaurants, array $terms): void
+    {
+        if ($terms === [] || $restaurants === []) {
+            return;
+        }
+
+        $ids = array_map(fn ($restaurant) => $restaurant->getKey(), $restaurants);
+
+        $menuItems = MenuItem::query()
+            ->whereIn('restaurant_id', $ids)
+            ->where(function ($query) use ($terms) {
+                foreach ($terms as $term) {
+                    $query->orWhere('name', 'like', '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $term).'%');
+                }
+            })
+            ->get(['id', 'restaurant_id', 'name'])
+            ->groupBy('restaurant_id');
+
+        foreach ($restaurants as $restaurant) {
+            $matched = $menuItems->get($restaurant->getKey());
+
+            // 只留前三個：命中十道菜時列出十個名字會把卡片撐爆，而使用者要的
+            // 只是「喔，是因為菜色」這個資訊。
+            $restaurant->setAttribute(
+                'matched_menu_items',
+                $matched === null ? [] : $matched->take(3)->pluck('name')->all(),
+            );
+        }
     }
 
     /**

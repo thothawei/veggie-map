@@ -15,6 +15,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * @property float|null $distance `RestaurantRepository::search()` 的 subquery 計算欄位
  *                                （見 app/Repositories/RestaurantRepository.php 的 selectRaw），只有半徑搜尋時才存在，
  *                                不是 restaurants 表的實際欄位，Restaurant model 本身不會宣告它。
+ * @property list<string>|null $matched_menu_items `RestaurantRepository::search()` 在有關鍵字時
+ *                                                 動態掛上的「命中的菜色名稱」，不是資料表欄位。
  * @property float|null $recommendation_score `RuleBasedRecommendationService::rank()` 動態
  *                                            設定的分數，只有 GET /restaurants/recommended 才會有。
  */
@@ -83,6 +85,12 @@ class RestaurantResource extends JsonResource
             'opening_hours_week' => $this->when(
                 $opening !== null && $this->openingHours->isNotEmpty(),
                 fn () => OpeningStatus::week($this->resource),
+            ),
+            // 「這家店為什麼出現在結果裡」。搜「拉麵」跳出一家店名、地址、料理種類
+            // 都沒有那兩個字的店時，不說明看起來像 bug（見 attachMatchReasons）。
+            'matched_menu_items' => $this->when(
+                is_array($this->matched_menu_items) && $this->matched_menu_items !== [],
+                fn () => $this->matched_menu_items,
             ),
             'confidence_score' => $this->whenLoaded('confidenceScore', fn () => $this->confidenceScore?->score),
             'created_at' => $this->created_at,
