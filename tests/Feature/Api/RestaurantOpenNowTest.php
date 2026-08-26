@@ -143,4 +143,25 @@ class RestaurantOpenNowTest extends TestCase
             ->assertOk()
             ->assertJsonCount(2, 'data');
     }
+
+    /**
+     * `open_now` 的答案跟「現在幾點」有關，但 cache key 原本只認篩選條件。
+     *
+     * **時間間隔必須小於 cache TTL（300 秒）**，否則證明的是「TTL 到期了」而不是
+     * 「key 有跟著時間變」——第一版寫 13:55 → 14:03 差了 8 分鐘，把時間桶整段拿掉
+     * 測試照樣綠，是一條假保護。改成 13:58 → 14:01：只差 3 分鐘、TTL 還沒到期，
+     * 但跨過了 14:00 的打烊時間與 5 分鐘一格的時間桶邊界。
+     */
+    public function test_open_now_results_are_not_served_from_a_stale_cache_after_closing(): void
+    {
+        $this->freezeAt('2026-08-26 05:58:00'); // 台北 13:58，還在營業
+
+        Restaurant::factory()->withOpeningHours('Mo-Fr 11:00-14:00')->create();
+
+        $this->getJson('/api/v1/restaurants?open_now=1')->assertOk()->assertJsonCount(1, 'data');
+
+        $this->freezeAt('2026-08-26 06:01:00'); // 台北 14:01，已打烊
+
+        $this->getJson('/api/v1/restaurants?open_now=1')->assertOk()->assertJsonCount(0, 'data');
+    }
 }

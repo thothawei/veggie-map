@@ -164,6 +164,10 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 （unknown 時是 `null`）、`closes_at`／`next_opens_at`，詳情另外帶 `opening_hours_week`
 （一週時間表，`ranges` 空陣列＝當天公休）與 `opening_hours_raw`（OSM 原始字串）。
 
+搜尋結果的 Redis cache TTL 是 300 秒，但 `open_now=1` 的 cache key 會多帶一個
+**5 分鐘一格的時間桶**——不帶的話，13:59 算出來的結果會被拿去回答 14:03 的請求，
+那時候中午時段的店已經打烊了。
+
 `unknown` 是刻意保留的第三態：OSM 多數餐廳沒有 `opening_hours` 標籤，把未知壓成
 「已打烊」會誤導使用者。同理，`open_now=1` **不會**把未知的店算進來。
 

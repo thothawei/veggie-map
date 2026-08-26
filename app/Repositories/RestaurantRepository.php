@@ -120,7 +120,18 @@ class RestaurantRepository
         // key，才能在 RestaurantObserver 寫入時整批清掉，不用維護「哪些 hash 曾經存在」
         // 這種額外簿記，也不會變成總體規劃第十七節明講禁止的 `Cache::flush()` 全域清空。
         ksort($filters);
-        $cacheKey = 'restaurants:search:'.md5(json_encode($filters));
+
+        // open_now 的答案跟「現在幾點」有關，但 cache key 只認篩選條件——同一組條件
+        // 在 13:59 算出來的結果會被拿去回答 14:03 的請求，那時候中午時段的店已經
+        // 打烊了。把時間切成 5 分鐘一格放進 key：最多晚 5 分鐘，而不是「TTL 剛好
+        // 沒過期就一直錯」。其他查詢不受影響（key 裡不會多這一段）。
+        $keySource = $filters;
+
+        if (! empty($filters['open_now'])) {
+            $keySource['_time_bucket'] = (int) floor(now()->timestamp / 300);
+        }
+
+        $cacheKey = 'restaurants:search:'.md5(json_encode($keySource));
 
         return Cache::tags(['restaurants'])->remember($cacheKey, 300, function () use ($filters) {
             $hasCoords = isset($filters['latitude'], $filters['longitude']);
