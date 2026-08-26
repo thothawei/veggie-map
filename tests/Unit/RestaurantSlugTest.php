@@ -31,4 +31,25 @@ class RestaurantSlugTest extends TestCase
     {
         $this->assertNotSame('osm-node-1', RestaurantSlug::base('清心蔬食', 'osm', 'node-1'));
     }
+
+    /**
+     * 整串丟 Pinyin::permalink 會把英文段落原本的連字號吃掉
+     * （`DuBuque-Erdman 全素` → `DuBuqueErdman-quan-su`），兩個字黏在一起。
+     * 只轉漢字段落才留得住。
+     */
+    public function test_mixed_name_keeps_the_hyphen_inside_the_ascii_part(): void
+    {
+        $this->assertSame(
+            'dubuque-erdman-quan-su',
+            RestaurantSlug::base('DuBuque-Erdman 全素', 'osm', 'node-1'),
+        );
+    }
+
+    public function test_mixed_name_keeps_the_original_word_order(): void
+    {
+        $this->assertSame(
+            'qing-xin-shu-shi-vegan',
+            RestaurantSlug::base('清心蔬食 Vegan', 'osm', 'node-1'),
+        );
+    }
 }

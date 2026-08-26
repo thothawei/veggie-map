@@ -19,13 +19,7 @@ class RestaurantSlug
 
     public static function base(string $name, string $source, string $sourceId): string
     {
-        $candidate = self::containsHan($name)
-            ? self::ascii(Pinyin::permalink($name))
-            : self::ascii($name);
-
-        if ($candidate === '') {
-            $candidate = self::ascii($name);
-        }
+        $candidate = self::ascii(self::transliterateHan($name));
 
         if ($candidate === '') {
             $candidate = self::ascii($source.'-'.$sourceId) ?: 'restaurant';
@@ -34,9 +28,22 @@ class RestaurantSlug
         return self::truncate($candidate);
     }
 
-    private static function containsHan(string $text): bool
+    /**
+     * 只把漢字段落換成拼音，其餘字元原樣留給 `Str::slug()`。
+     *
+     * 不能整串丟 `Pinyin::permalink()`：它把非漢字字元一律當分隔符移除再用自己的
+     * delimiter 重組，`DuBuque-Erdman 全素` 會變成 `DuBuqueErdman-quan-su`——英文
+     * 店名裡原本的連字號被吃掉，兩個字黏在一起。
+     */
+    private static function transliterateHan(string $name): string
     {
-        return preg_match('/\p{Han}/u', $text) === 1;
+        $result = preg_replace_callback(
+            '/\p{Han}+/u',
+            fn (array $m): string => ' '.Pinyin::permalink($m[0]).' ',
+            $name,
+        );
+
+        return $result ?? $name;
     }
 
     private static function ascii(string $text): string
