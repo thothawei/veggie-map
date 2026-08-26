@@ -53,6 +53,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 | GET | `/admin/reviews` | 評論列表，含 hidden（Phase 7） | 必須（admin） |
 | POST | `/admin/reviews/{id}/hide` | 隱藏評論（Phase 7） | 必須（admin） |
 | POST | `/admin/restaurants/{id}/menu-items` | 新增菜單（Phase C，diet_type 合法值見 `GET /diets` 的 `meta.menu_item_diets`） | 必須（admin） |
+| GET | `/ai-office/dashboard` | AI Office 今日統計（完成／等待／錯誤／執行中）＋各狀態分佈 | 必須（AI Office 角色） |
 | GET | `/admin/duplicates` | 被標為 `is_possible_duplicate` 的餐廳，依「同名＋100m 內」分組（`stale=true` 代表同組另一筆已處理、標記過期） | 必須（admin） |
 | POST | `/admin/restaurants/{id}/duplicate` | 處置一筆：`action=keep`（清標記）或 `action=deactivate`（下架，不刪除）。**沒有 merge／delete** | 必須（admin） |
 | GET | `/admin/verification-types` | 可手動寫入的驗證類型（code／label／分數，來自 `config/vegetarian.php`） | 必須（admin） |

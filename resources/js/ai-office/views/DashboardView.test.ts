@@ -71,6 +71,19 @@ describe('DashboardView', () => {
                 });
             }
 
+            if (url === '/ai-office/dashboard') {
+                return Promise.resolve({
+                    data: {
+                        data: {
+                            today: { completed: 14, waiting: 1, errors: 0, running: 6 },
+                            agents: { idle: 1, working: 1, waiting_review: 0, error: 0, offline: 0 },
+                            projects: { planning: 0, active: 1, paused: 0, completed: 1, failed: 0, archived: 0 },
+                            approvals: { pending: 1 },
+                        },
+                    },
+                });
+            }
+
             if (url === '/ai-office/approvals') {
                 return Promise.resolve({ data: { data: [{ id: 3, status: 'pending', action: 'git_push', risk_level: 'high' }] } });
             }
@@ -79,19 +92,41 @@ describe('DashboardView', () => {
         });
     });
 
-    it('統計數字全部由 API 資料算出來', async () => {
+    /**
+     * 規格第 38 節要的是「今日：完成任務／等待處理／錯誤／執行中」，而且第 74 節
+     * 明講不可以是假的。先前這裡是前端自己數**分頁清單**（`projects.length` 之類），
+     * 數字會隨著載入了幾頁變動，而且數的根本不是規格要的那四個。
+     */
+    it('統計數字直接來自 GET /dashboard，不是前端數清單湊出來的', async () => {
         const { wrapper } = await mountDashboard();
         const values = wrapper.findAll('.stat').map((node) => node.find('.value').text());
 
-        // 專案 2、進行中 1、工作中的 Agent 1、待核准 1
-        expect(values).toEqual(['2', '1', '1', '1']);
+        expect(values).toEqual(['14', '1', '0', '6']);
+        expect(wrapper.findAll('.stat').map((node) => node.find('.label').text()))
+            .toEqual(['今日完成任務', '等待處理', '今日錯誤', '執行中']);
     });
 
-    it('有待核准項目時把那格標成警示色的 tone', async () => {
+    it('有待處理項目時把那格標成警示色的 tone', async () => {
         const { wrapper } = await mountDashboard();
         const tones = wrapper.findAll('.stat').map((node) => node.attributes('data-tone'));
 
-        expect(tones[3]).toBe('warn');
+        expect(tones[1]).toBe('warn');
+    });
+
+    /**
+     * 「載入失敗」跟「今天沒有完成任何任務」是兩件事。用 0 佔位會讓人以為系統很閒，
+     * 實際上是數字根本沒拿到。
+     */
+    it('dashboard 端點失敗時整排統計不顯示，不用 0 佔位', async () => {
+        get.mockImplementation((url: string) => {
+            if (url === '/ai-office/dashboard') return Promise.reject(new Error('boom'));
+
+            return Promise.resolve({ data: { data: [] } });
+        });
+
+        const { wrapper } = await mountDashboard();
+
+        expect(wrapper.findAll('.stat')).toHaveLength(0);
     });
 
     it('點專案導到專案詳情', async () => {

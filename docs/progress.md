@@ -3113,3 +3113,56 @@ markers 渲染時丟例外，`loading` 卡在 true。症狀是「badge 顯示載
 
 前端 267 → **269 個測試全綠**（含「依 venue_kind 給不同樣式」與「沒有 kind 時退回
 中性樣式」）。瀏覽器上用真實資料確認 DOM 裡同時有 exclusive 與 friendly 兩種 marker。
+
+---
+
+## 2026-08-26 — 對照 AI Office 規格重新盤點，補上 `GET /dashboard`
+
+這次接手時使用者要的是「對照兩份規格找出還缺什麼」。前面幾批都在 VeggieMap，
+這批回頭比對 AI Office 規格，找到三個**規格明寫但沒做**的項目：
+
+1. `GET /api/dashboard`（第 50 節）——不存在
+2. `messages` 表（第 34 節 Agent Communication）——表跟 Model 都在，**一行寫入都沒有**
+3. `TaskGraph` 元件（第 44、49、56 節都列了）——不存在，只有 TaskDetail 列出相依 id
+
+這批先做第一個。
+
+### 儀表板的數字先前是假的（不是 hardcode，是更難發現的那種）
+
+規格第 74 節明講「禁止 hardcode Dashboard Statistics」。程式碼沒有 hardcode——
+但前端是這樣算的：
+
+```
+{ label: '專案', value: projects.projects.length }
+{ label: '進行中專案', value: projects.countByStatus.active ?? 0 }
+```
+
+兩個問題：
+
+- 那是**已經載入的清單**的長度。清單是分頁的，數字會隨著「載入了幾頁」變動。
+  hardcode 至少是穩定的錯，這種是會動的錯，更難發現。
+- 規格第 38 節要的是**今日**的「完成任務／等待處理／錯誤／執行中」。畫面上那四個
+  是「專案／進行中專案／工作中的 Agent／待核准」——根本不是同一組數字。
+
+`DashboardSummaryService` 由後端算：
+
+- **完成**用 `completed_at` 而不是 `created_at`——昨天派的工今天做完，算今天的產出
+  才符合直覺。
+- **等待處理與執行中不限今天**：一個昨天卡住等核准的任務今天仍然要被看見，
+  用 `created_at` 濾掉它才是真正的謊報。這條有專門的測試。
+- **「今日」的界線用應用程式時區**，不是 UTC 硬切。回應的 meta 帶 `timezone`，
+  跨時區的人才知道數字是怎麼算的。
+- 每個合法狀態都補 0 出現在結果裡——少一個 key 的話前端得自己 `?? 0`，而且看不出
+  「是 0 還是這個狀態不存在」。
+- 端點失敗時前端**整排統計不顯示**，不用 0 佔位：「載入失敗」跟「今天沒有完成任何
+  任務」是兩件事。
+
+寫測試時踩到一個：`AgentError::create(['created_at' => ...])` 沒有用——`created_at`
+不在 `$fillable`，而且 Eloquent 會自己蓋掉，兩筆都變成「現在」，「只算今天」那條
+測試會永遠綠。改成事後 `forceFill()->saveQuietly()`，並加一條前置斷言確認時間真的
+被改掉了。
+
+### 驗證
+
+後端 504 → **511 個測試全綠 ＋ 4 skipped**，前端 269 → **270 個全綠**。
+Pint PASS、PHPStan 0 error。

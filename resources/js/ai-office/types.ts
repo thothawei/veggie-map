@@ -171,3 +171,11 @@ export interface AgentMemoryItem {
     importance: number;
     created_at: string | null;
 }
+
+/** GET /ai-office/dashboard（規格第 38／50 節）。 */
+export interface AiOfficeDashboard {
+    today: { completed: number; waiting: number; errors: number; running: number };
+    agents: Record<string, number>;
+    projects: Record<string, number>;
+    approvals: { pending: number };
+}

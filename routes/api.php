@@ -3,6 +3,7 @@
 use App\AiOffice\Http\Controllers\ActivityController as AiOfficeActivityController;
 use App\AiOffice\Http\Controllers\AgentController as AiOfficeAgentController;
 use App\AiOffice\Http\Controllers\ApprovalController as AiOfficeApprovalController;
+use App\AiOffice\Http\Controllers\DashboardController as AiOfficeDashboardController;
 use App\AiOffice\Http\Controllers\HealthController as AiOfficeHealthController;
 use App\AiOffice\Http\Controllers\ProjectController as AiOfficeProjectController;
 use App\AiOffice\Http\Controllers\TaskController as AiOfficeTaskController;
@@ -64,6 +65,10 @@ Route::middleware('throttle:api')->group(function () {
         // 註冊過也看不到，這是預設拒絕不是事後補檢查。
         Route::prefix('ai-office')->middleware('ai-office')->group(function () {
             Route::get('/health', [AiOfficeHealthController::class, 'show']);
+
+            // 規格第 38／50 節：今日統計。在這之前前端是自己從分頁清單數出來的，
+            // 數字會隨著「載入了幾頁」變動。
+            Route::get('/dashboard', [AiOfficeDashboardController::class, 'show']);
 
             Route::apiResource('projects', AiOfficeProjectController::class);
 

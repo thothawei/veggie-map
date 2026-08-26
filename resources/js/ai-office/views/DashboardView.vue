@@ -11,6 +11,8 @@ import { useApprovalsStore } from '../stores/approvals';
 import { useProjectsStore } from '../stores/projects';
 import { useAuthStore } from '@/stores/auth';
 import { extractApiErrorMessage } from '@/lib/apiError';
+import { fetchDashboard } from '../api/dashboard';
+import type { AiOfficeDashboard } from '../types';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -23,12 +25,49 @@ const createError = ref<string | null>(null);
 const canWrite = computed(() => ['admin', 'manager', 'developer'].includes(auth.user?.role ?? ''));
 const canApprove = computed(() => ['admin', 'manager'].includes(auth.user?.role ?? ''));
 
-const stats = computed(() => [
-    { label: '專案', value: projects.projects.length },
-    { label: '進行中專案', value: projects.countByStatus.active ?? 0 },
-    { label: '工作中的 Agent', value: agents.busyCount },
-    { label: '待核准', value: approvals.pendingCount, tone: approvals.pendingCount > 0 ? 'warn' as const : undefined },
-]);
+/**
+ * 規格第 38 節要的四個數字是「今日：完成任務／等待處理／錯誤／執行中」，而且
+ * 第 74 節明講不可以是假的。
+ *
+ * 先前這裡是 `projects.projects.length` 這種前端自己數分頁清單的做法——數字會隨著
+ * 「載入了幾頁」變動，而且數的根本不是規格要的那四個。改成由 `GET /dashboard`
+ * 算好回傳。
+ *
+ * 端點失敗時整排不顯示（`stats` 是空陣列），不用 0 佔位——「載入失敗」跟
+ * 「今天沒有完成任何任務」是兩件事。
+ */
+const dashboard = ref<AiOfficeDashboard | null>(null);
+
+const stats = computed(() => {
+    const data = dashboard.value;
+
+    if (!data) {
+        return [];
+    }
+
+    return [
+        { label: '今日完成任務', value: data.today.completed },
+        {
+            label: '等待處理',
+            value: data.today.waiting,
+            tone: data.today.waiting > 0 ? ('warn' as const) : undefined,
+        },
+        {
+            label: '今日錯誤',
+            value: data.today.errors,
+            tone: data.today.errors > 0 ? ('danger' as const) : undefined,
+        },
+        { label: '執行中', value: data.today.running },
+    ];
+});
+
+async function loadDashboard() {
+    try {
+        dashboard.value = await fetchDashboard();
+    } catch {
+        dashboard.value = null;
+    }
+}
 
 async function create(payload: { name: string; description: string | null }) {
     createError.value = null;
@@ -48,6 +87,7 @@ function openProject(id: number) {
 }
 
 onMounted(() => {
+    void loadDashboard();
     void projects.fetchAll();
     void agents.fetchAll();
     void approvals.fetchPending();
@@ -56,7 +96,7 @@ onMounted(() => {
 
 <template>
     <AiOfficeShell title="AI Office 總覽">
-        <StatisticsPanel :items="stats" />
+        <StatisticsPanel v-if="stats.length" :items="stats" />
 
         <p v-if="createError" class="error" role="alert">{{ createError }}</p>
 
