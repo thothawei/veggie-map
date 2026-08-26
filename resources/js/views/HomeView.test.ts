@@ -367,6 +367,27 @@ describe('HomeView 關鍵字搜尋', () => {
         const { wrapper } = await mountHome('/?city=taipei&keyword=不存在的菜');
 
         expect(mapStub.fitBounds).not.toHaveBeenCalled();
-        expect(wrapper.text()).toContain('沒有符合「不存在的菜」的餐廳');
+        expect(wrapper.text()).toContain('找不到符合「不存在的菜」的餐廳');
+        // 關鍵字搜尋不受視野限制，所以「拉遠一點」是錯的建議。
+        expect(wrapper.text()).not.toContain('把地圖拉遠');
+    });
+
+    it('打了關鍵字就不送 bbox 與座標——搜尋不該被目前視野鎖住', async () => {
+        await mountHome('/?city=taipei&keyword=拉麵');
+
+        const call = restaurantCalls[restaurantCalls.length - 1];
+        expect(call.keyword).toBe('拉麵');
+        expect(call.bbox).toBeUndefined();
+        // 帶座標會套上預設 5km 半徑，等於換一種方式把搜尋鎖回原地。
+        expect(call.latitude).toBeUndefined();
+        expect(call.longitude).toBeUndefined();
+    });
+
+    it('沒有關鍵字時仍然只查目前視野', async () => {
+        await mountHome('/?city=taipei');
+
+        const call = restaurantCalls[restaurantCalls.length - 1];
+        expect(call.bbox).toBeDefined();
+        expect(call.latitude).toBeDefined();
     });
 });

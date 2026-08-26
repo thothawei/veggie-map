@@ -71,17 +71,26 @@ async function loadByBounds() {
 
         const [restaurantsResult, recommendedResult] = await Promise.allSettled([
             client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
-                params: {
-                    bbox,
-                    latitude: midLat,
-                    longitude: midLng,
-                    // 有關鍵字時交給後端的相關性排序（店名 > 菜色／料理 > 地區），
-                    // 同分才看距離；沒關鍵字維持純距離。
-                    sort: keyword.value ? 'relevance' : 'distance',
-                    keyword: keyword.value || undefined,
-                    per_page: 100,
-                    ...filterParams,
-                },
+                params: keyword.value
+                    // 打了關鍵字就**不受目前視野限制**，跟列表頁同一個決定：
+                    // 搜「Loving Hut」卻只看到畫面裡那幾家，使用者會以為其他地方
+                    // 沒有。找到之後 fitToKeywordResults() 會把地圖帶過去。
+                    // 也不送座標——帶座標會套上預設 5km 半徑，等於換一種方式把
+                    // 搜尋鎖回原地。
+                    ? {
+                        keyword: keyword.value,
+                        sort: 'relevance',
+                        per_page: 100,
+                        ...filterParams,
+                    }
+                    : {
+                        bbox,
+                        latitude: midLat,
+                        longitude: midLng,
+                        sort: 'distance',
+                        per_page: 100,
+                        ...filterParams,
+                    },
             }),
             // 後端 RuleBasedRecommendationService 依 distance/rating/vegetarian_confidence/
             // feature_match/popularity/freshness 加權排序（見總體規劃第三十節），不是單純
@@ -261,18 +270,25 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                 載入失敗，移動地圖可重新嘗試。
             </p>
             <p v-else-if="hasResults" class="map-badge" role="status">
-                這個範圍有 {{ restaurants.length }}{{ hasMore ? '+' : '' }} 家
+                <template v-if="keyword">
+                    符合「{{ keyword }}」的有 {{ restaurants.length }}{{ hasMore ? '+' : '' }} 家（不限目前範圍）
+                </template>
+                <template v-else>
+                    這個範圍有 {{ restaurants.length }}{{ hasMore ? '+' : '' }} 家
+                </template>
             </p>
         </section>
 
         <section v-if="showEmptyState" class="empty-state">
             <p class="empty-title">
-                <template v-if="keyword">這個範圍沒有符合「{{ keyword }}」的餐廳</template>
+                <template v-if="keyword">找不到符合「{{ keyword }}」的餐廳</template>
                 <template v-else>這個範圍還沒有素食餐廳</template>
             </p>
             <p class="empty-hint">
-                試著把地圖拉遠一點，或切換到其他城市看看。
-                <template v-if="keyword"> 也可以清掉關鍵字。</template>
+                <template v-if="keyword">
+                    這個關鍵字在所有城市都沒有結果——換個說法，或清掉關鍵字回到地圖瀏覽。
+                </template>
+                <template v-else>試著把地圖拉遠一點，或切換到其他城市看看。</template>
                 <template v-if="hasActiveFilters"> 也可以先清掉篩選條件。</template>
             </p>
         </section>
