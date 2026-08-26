@@ -5,7 +5,7 @@
 素食 × 地圖 × 多條件搜尋 × 寵物友善 × 使用者回報 × 素食可信度的餐廳探索平台。這是一個以「展示中高階
 Backend Engineer 系統設計能力」為目標的作品專案，不是一個簡單 CRUD demo。
 
-現況：後端 API 與 Vue 前端已完成並實測（485 個後端測試、253 個前端測試全綠）。
+現況：後端 API 與 Vue 前端已完成並實測（526 個後端測試、283 個前端測試全綠）。
 2026-08-26 補上一批**搜尋強化**：營業中篩選、關鍵字比對菜色與料理種類＋相關性排序、
 搜尋建議（自動完成）、素食可信度篩選／排序。詳細進度見
 [docs/progress.md](docs/progress.md)，剩餘規劃見 [docs/todo.md](docs/todo.md)。
@@ -19,6 +19,9 @@ Backend Engineer 系統設計能力」為目標的作品專案，不是一個簡
   （店名完全相同 > 開頭 > 包含 > 菜色 > 料理種類 > 地區 > 描述）。
 - **搜尋建議（自動完成）**：`GET /restaurants/suggest` 回三種型別——店名、料理種類、
   行政區，各自對應不同的後續動作。料理種類只建議實際上有餐廳掛著的分類。
+- **說明為什麼是這一家**：命中的是菜色時，結果會帶上是哪幾道
+  （搜「拉麵」跳出一家店名沒有那兩個字的店，不說明看起來像 bug）。
+- **地圖分辨純素食店與素食友善**：實心綠／空心橘＋圖例，形狀也不同，不是只靠顏色。
 - **營業中篩選**：OSM `opening_hours` 解析成可查詢的時段表，`open_now` 用 SQL 篩、
   依**該店所在地的當地時間**判斷（台北與東京差一小時）。解析不了的寫法一律回
   「營業時間未知」，不猜——把打烊的店標成營業中比留白更糟。
@@ -207,17 +210,19 @@ docker compose logs -f horizon   # 確認 queue worker 真的在跑、有沒有 
 docker compose exec app php artisan test
 ```
 
-485 個 Feature/Unit test、1378 個 assertion（＋4 個需要 docker 的整合測試在容器內 skip；
+526 個 Feature/Unit test、1482 個 assertion（＋4 個需要 docker 的整合測試在容器內 skip；
 2026-08-26 實測），涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
 Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:sync` 冪等性與去重、
 `RestaurantRepository` bounding box 純數學、`ReviewService` 真實併發競態、
 `RuleBasedRecommendationService` 加權排序、search/detail cache 命中與失效、rate limiting
-429、`users:promote`、批次計算 Job 排程、`opening_hours` 解析與 `open_now`（時間釘死，
+429、`users:promote`、批次計算 Job 排程、**OpenAPI 與實際路由的漂移偵測**
+（`OpenApiContractTest`，第一次跑就抓到 26 支沒寫進規格的端點）、
+`opening_hours` 解析與 `open_now`（時間釘死，
 否則半夜跑會整批反過來）、關鍵字相關性排序、搜尋建議、外部 API 斷路器、重複審核——
 不是只驗證回應內容，快取那組測試直接斷言重複請求的 DB query 數為 0；測試環境
 `QUEUE_CONNECTION=sync`，Job 仍然同步跑完才斷言結果，不需要真的等 Horizon worker）。
 
-前端 253 個 Vitest 測試（`npx vitest run`），涵蓋地圖、篩選抽屜、搜尋建議的 debounce
+前端 283 個 Vitest 測試（`npx vitest run`），涵蓋地圖、篩選抽屜、搜尋建議的 debounce
 與競態、Admin 重複審核，以及「未知營業時間不能顯示成已打烊」這類產品規則。
 
 測試用 MySQL（非 sqlite in-memory）——schema 用了 `POINT`／`ST_Distance_Sphere`／`MBRContains`

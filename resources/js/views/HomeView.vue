@@ -551,7 +551,11 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 .map-legend {
     position: absolute;
     left: 0.75rem;
-    bottom: 0.75rem;
+    /*
+     * 抬高到 Leaflet 的著作權標示上方。實測 375×812 時兩者重疊——OSM 的授權
+     * 要求那行必須看得見，蓋住它不只是版面問題。
+     */
+    bottom: 1.75rem;
     z-index: 500;
     display: flex;
     gap: 0.75rem;
