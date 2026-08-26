@@ -609,11 +609,12 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       `"user\r\n"@example.com`。`composer audit` 仍會報三則——那要升 major
       （12.61.1+／13.12+），是獨立的工作，不要因為擋住了就說已修補。
 
-- [~] **Observability 三缺（第三十五節）— 做了一項 ✅ 2026-08-26**
+- [x] **Observability 三缺（第三十五節）— 三項都完成 ✅ 2026-08-26**
       - [x] 一般 API 的 response time：`LogSlowApiRequests` middleware，每筆回應帶
             `X-Response-Time-Ms`，超過門檻才寫 log（route 樣板、不記 query string）
-      - [ ] Cache hit／miss 分 key 追蹤（Redis `INFO stats` 是全域，應用層沒記）
-      - [ ] DB 慢查詢（沒有 `DB::listen`、也沒開 MySQL slow query log）
+      - [x] Cache hit／miss 分 key 追蹤：`CacheStatsRecorder` ＋ `php artisan cache:stats`
+      - [x] DB 慢查詢：`QueryPerformanceLogger` 掛 `DB::listen`（MySQL 那邊的
+            slow query log 仍未開，那需要伺服器存取權）
 
 - [x] **列表 API 仍是整列撈出（第三十二節）✅ 2026-08-26**
       `LIST_COLUMNS` 明列欄位，排除 `description`／`source_id`／`opening_hours`／

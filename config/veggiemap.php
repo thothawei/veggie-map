@@ -37,6 +37,17 @@ return [
 
     'observability' => [
         'slow_request_ms' => env('VEGGIEMAP_SLOW_REQUEST_MS', 1000),
+
+        /*
+        | 超過這個毫秒數的 SQL 會寫一筆 warning log（含 route，但**不含 bindings**
+        | ——那裡面有使用者打的關鍵字與座標）。設 0 以下＝整個關掉。
+        */
+        'slow_query_ms' => env('VEGGIEMAP_SLOW_QUERY_MS', 200),
+
+        /*
+        | Cache 命中率統計。每次 hit／miss 會多一次 Redis 寫入，量很大時可以關掉。
+        */
+        'cache_stats' => (bool) env('VEGGIEMAP_CACHE_STATS', true),
     ],
 
     /*

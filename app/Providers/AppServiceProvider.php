@@ -17,8 +17,14 @@ use App\Services\External\OsmRestaurantProvider;
 use App\Services\External\RestaurantProviderInterface;
 use App\Services\Recommendation\RecommendationServiceInterface;
 use App\Services\Recommendation\RuleBasedRecommendationService;
+use App\Support\CacheStatsRecorder;
+use App\Support\QueryPerformanceLogger;
+use Illuminate\Cache\Events\CacheHit;
+use Illuminate\Cache\Events\CacheMissed;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -68,6 +74,20 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // 慢查詢記錄（見 QueryPerformanceLogger 對「為什麼是應用層而不是 MySQL
+        // slow query log」的說明）。門檻在 config，設成 0 以下就整個關掉。
+        if ((int) config('veggiemap.observability.slow_query_ms', 200) > 0) {
+            DB::listen(QueryPerformanceLogger::handle(...));
+        }
+
+        // Cache 命中率分 key family 統計（見 CacheStatsRecorder）。Redis 的
+        // INFO stats 是全域的，混了 session／rate limit／queue，看不出搜尋快取
+        // 到底有沒有用。
+        if (config('veggiemap.observability.cache_stats', true)) {
+            Event::listen(CacheHit::class, CacheStatsRecorder::hit(...));
+            Event::listen(CacheMissed::class, CacheStatsRecorder::missed(...));
+        }
+
         Restaurant::observe(RestaurantObserver::class);
         RestaurantConfidenceScore::observe(RestaurantConfidenceScoreObserver::class);
         MenuItem::observe(MenuItemObserver::class);

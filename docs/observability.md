@@ -79,15 +79,41 @@ Cache 本身已經實作：`GET /geocode`（`GeocodeController`）、`GET /resta
 Caching 段落）都走 Redis，寫入後由 `RestaurantObserver`／
 `RestaurantConfidenceScoreObserver` 主動清快取。
 
-**但命中率追蹤沒有實作。** Redis 本身可以用 `INFO stats` 看全域的
-`keyspace_hits`／`keyspace_misses`，應用層沒有針對個別 cache key（例如區分
-`restaurant:{id}` 命中率 vs `restaurants:search:*` 命中率）另外記錄。這是誠實的缺口——
-目前的驗證方式是測試裡直接數 DB query 次數（見 `RestaurantCachingTest`），不是量測
-production 流量下的命中率，兩者是不同層級的保證。
+**命中率追蹤已實作**（2026-08-26）：`App\Support\CacheStatsRecorder` 監聽
+`CacheHit`／`CacheMissed`，**按 key family 分開記**——`restaurants:search`、
+`restaurants:suggest`、`restaurant`（詳情）、`geocode`。
+
+Redis 的 `INFO stats` 只有全域的 `keyspace_hits`／`keyspace_misses`，混了 session、
+rate limit、queue 等所有東西，看不出「搜尋快取到底有沒有用」。
+
+```bash
+docker compose exec app php artisan cache:stats            # 今天
+docker compose exec app php artisan cache:stats --day=2026-08-25
+```
+
+三個設計取捨：
+
+- **不記完整的 key**：`restaurants:search:{md5}` 的 hash 是使用者查詢條件算出來的，
+  逐個記等於記下每一次搜尋，而且會產生幾萬個 key。
+- **沒有樣本時 ratio 是 `null` 不是 0**：「這段時間沒人查」跟「命中率 0%」是兩件事，
+  印成 0% 會讓人以為快取壞了。
+- **計數器帶 TTL（兩天）**：`Cache::add()` 先建立帶 TTL 的 0 再 `increment()`——
+  直接 increment 一個不存在的 key 會建立**沒有 TTL** 的計數器，那會永遠留在 Redis。
+
+這是取樣統計不是稽核紀錄：重啟 Redis 就歸零，那可以接受。
+測試裡數 DB query 次數（`RestaurantCachingTest`）仍然是「快取有沒有生效」的保證，
+兩者是不同層級的東西。
 
 ## Database Slow Query Awareness
 
-**沒有實作。** 沒有掛 `DB::listen()` 記錄慢查詢，也沒有開 MySQL 的 slow query log。
+**已實作**（2026-08-26）：`App\Support\QueryPerformanceLogger` 掛在 `DB::listen()`，
+超過門檻（`veggiemap.observability.slow_query_ms`，預設 200ms）寫一筆 warning log，
+**含 route 但不含 bindings**——搜尋條件裡有使用者打的關鍵字與座標，那是個人資料
+（跟 API response time 不記 query string 是同一個理由）。SQL 樣板本身不含資料，
+太長的會截斷到 500 字。
+
+選應用層而不是 MySQL 的 slow query log：後者要有伺服器存取權才看得到，而且無法把
+「是哪一個端點打的」關聯進去。兩者不衝突，正式環境兩個都開最好。MySQL 那邊仍然沒開。
 [`docs/database.md`](database.md) 記錄了 Index 設計的理由，`RestaurantRepository::search()`
 的兩段式查詢（Bounding Box 過濾 → `ST_Distance_Sphere` 精算）是唯一經過 `EXPLAIN` 手動驗證過
 的查詢（見 [docs/progress.md](progress.md) Phase 3），但那是開發時的一次性驗證，不是持續監控。
@@ -109,6 +135,6 @@ Laravel 11 內建的 `/up` 路由（`bootstrap/app.php` 的 `health: '/up'`）�
 | Queue 失敗記錄（`failed_jobs`） | ✅ Horizon＋`dispatch()`（2026-08-25 起），失敗的 Job 會真的落到 `failed_jobs` |
 | 一般 API 端點的 response time 追蹤 | ✅ 已實作（`X-Response-Time-Ms` 標頭＋慢請求 log） |
 | 外部 API 斷路器狀態 | ✅ 開路期間的每次短路都寫一筆 `error_code = CIRCUIT_OPEN` 的 `external_api_logs` |
-| Cache hit/miss 追蹤 | ❌ 未實作 |
-| DB 慢查詢記錄 | ❌ 未實作，僅 Phase 3 手動 `EXPLAIN` 過一次 |
+| Cache hit/miss 追蹤 | ✅ 分 key family（`php artisan cache:stats`） |
+| DB 慢查詢記錄 | ✅ 應用層 `DB::listen`（MySQL 的 slow query log 仍未開） |
 | Health check endpoint | ✅ Laravel 內建 `/up` |

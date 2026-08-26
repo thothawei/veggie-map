@@ -3042,3 +3042,48 @@ Pint PASS、PHPStan 0 error、OpenAPI lint 0 error。
 
 後端 495 → **499 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
 `/docs` 在瀏覽器上真的渲染出全部端點。
+
+---
+
+## 2026-08-26 — 可觀測性三缺補完（第三十五節）
+
+`docs/observability.md` 從 Phase 11 就誠實列著三個未做項目。API response time 前面
+補了，這批補完剩下兩個。
+
+### DB 慢查詢：應用層而不是 MySQL slow query log
+
+`QueryPerformanceLogger` 掛 `DB::listen`，超過門檻（預設 200ms）寫 warning log。
+
+選應用層的理由：MySQL 的 slow query log 要有伺服器存取權才看得到，而且**沒有辦法
+把「是哪一個端點打的」關聯進去**。應用層記得到 route，排查時才知道要改哪一支查詢。
+兩者不衝突，正式環境兩個都開最好——MySQL 那邊仍然沒開，文件寫清楚了。
+
+**不記 bindings**：搜尋條件裡有使用者打的關鍵字與座標，是個人資料，跟
+`LogSlowApiRequests` 不記 query string 同一個理由。SQL 樣板本身不含資料。
+有一條測試直接斷言「一個放在 bindings 裡的字串不會出現在 log context 裡」。
+
+### Cache 命中率：分 key family
+
+Redis 的 `INFO stats` 只有全域數字，混了 session、rate limit、queue，看不出
+「搜尋快取到底有沒有用」。`CacheStatsRecorder` 監聽 `CacheHit`／`CacheMissed`，
+按家族（`restaurants:search`／`restaurants:suggest`／`restaurant`／`geocode`）分開記，
+`php artisan cache:stats` 讀出來。
+
+三個實作細節，兩個是坑：
+
+1. **`Cache::increment()` 對不存在的 key 會建立沒有 TTL 的計數器**，那會永遠留在
+   Redis 裡。要先 `Cache::add($key, 0, $ttl)` 再 increment。
+2. **沒有樣本時 ratio 回 `null` 不是 0**：「這段時間沒人查」跟「命中率 0%」是兩件事，
+   印成 0% 會讓人以為快取壞了。指令輸出印「—」。
+3. **不記完整的 key**：`restaurants:search:{md5}` 的 hash 是查詢條件算出來的，
+   逐個記等於記下每一次搜尋，還會產生幾萬個 key。
+
+真實流量驗證：連打三次同一組搜尋條件之後，`cache:stats` 顯示
+`restaurants:search` 1 miss／2 hit（66.7%），`restaurants:suggest` 1 miss／1 hit。
+
+### 驗證
+
+後端 499 → **504 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
+PHPStan 擋下一個：`request()` 在 console 情境下仍然存在（不是 null），
+`request()?->` 的 `?.` 是多餘的——但 `route()` 才真的可能是 null，改成
+`request()->route()?->uri()`。
