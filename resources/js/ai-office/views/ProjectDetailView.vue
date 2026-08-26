@@ -6,6 +6,7 @@ import ActivityFeed from '../components/dashboard/ActivityFeed.vue';
 import MessageFeed from '../components/dashboard/MessageFeed.vue';
 import TaskBoard from '../components/task/TaskBoard.vue';
 import TaskDetail from '../components/task/TaskDetail.vue';
+import TaskGraph from '../components/task/TaskGraph.vue';
 import StatisticsPanel from '../components/dashboard/StatisticsPanel.vue';
 import OfficeMap from '../components/office/OfficeMap.vue';
 import { useActivityStream } from '../composables/useActivityStream';
@@ -167,6 +168,9 @@ onUnmounted(() => stopStream());
                 @cancel="cancelTask"
             />
         </div>
+
+        <!-- 規格第 44／49 節的 DAG 視覺化。點節點＝選取那個任務，跟看板一致。 -->
+        <TaskGraph class="panel" :tasks="tasks.tasks" @select="tasks.select($event)" />
 
         <MessageFeed class="panel feed" :messages="messages" />
 
