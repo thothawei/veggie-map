@@ -3834,3 +3834,8 @@ OpenAPI 的 `address` 補 `nullable: true`。
 反向：把 provider 與 sync 的兩處改回去，兩條新測試都會紅。
 
 後端 573 綠、前端 298 綠、PHPStan 0、Pint PASS、vue-tsc 無錯。
+
+**開發庫已 migrate**：三欄空字串歸零（address 618／city 627／district 676 轉成 NULL）。
+實測：`/api/v1/restaurants/33` 三欄回 `null`（不是 `""`）；列表 API 20 筆裡 9 筆
+`address: null`；瀏覽器上沒地址的店顯示「地址未提供」、有地址的照常顯示完整地址。
+`migrate:rollback` 有 `down()` 可以還原成空字串。
