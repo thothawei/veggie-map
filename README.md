@@ -305,6 +305,12 @@ Bounding Box，`MBRContains` 過濾出候選集合（能用到 Spatial Index）�
 
 ## Performance
 
+實測數字（1159 家餐廳，docker-compose MySQL 8）：bbox 搜尋 p50 **12.5ms**、
+帶關鍵字 **14.1ms**、`open_now` **17.5ms**、半徑搜尋 **13.8ms**。EXPLAIN 確認
+空間索引與 `open_now` 的覆蓋索引都有被用到。完整方法與**誠實的擴展極限**
+（前置萬用字元的 `LIKE` 用不到索引，全表掃描；觸發改動的條件是「超過約五萬筆
+或 p95 > 100ms」）見 [docs/database.md](docs/database.md#效能實測2026-08-26開發環境)。
+
 - 列表 API 用 `select()`／`with()` 避免 N+1，cursor pagination 取代 offset pagination。
 - `per_page` 上限 100，避免使用者要求超大分頁拖垮資料庫。
 - Rating／confidence score 是快取欄位（`restaurants.rating`／`rating_count`、

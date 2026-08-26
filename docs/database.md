@@ -346,3 +346,50 @@ MySQL 不支援條件式 unique index，因此以 Service 層交易保證）。I
 
 匯入時「同名 + 距離 < 100m」視為可能重複，寫入時把新舊兩筆都標記 `is_possible_duplicate = true`，
 不自動合併/刪除，交給 Admin 審核（Phase 8 實作於 `restaurants:sync`）。
+
+---
+
+## 效能實測（2026-08-26，開發環境）
+
+不是估計值，是在 docker-compose 的 MySQL 8 上跑出來的。資料量：**1159 家餐廳、
+651 筆營業時段、114 道菜**。每項暖機一次後跑 20 次取 p50／p95，並在 filters 裡塞
+一個亂數把 Redis cache key 打散——量的是資料庫，不是快取。
+
+| 查詢 | p50 | p95 |
+|---|---|---|
+| bbox 搜尋（無關鍵字） | 12.5 ms | 14.9 ms |
+| bbox ＋ 關鍵字（相關性排序） | 14.1 ms | 16.2 ms |
+| bbox ＋ `open_now` | 17.5 ms | 21.4 ms |
+| 半徑 5km（`ST_Distance_Sphere`） | 13.8 ms | 16.4 ms |
+| `sort=confidence` | 13.0 ms | 15.8 ms |
+| 搜尋建議（cache miss） | 8.6 ms | 86.1 ms |
+
+搜尋建議的 p95 跳到 86ms 是因為每次量測前都 `Cache::flush()`，連 config／route
+快取一起清掉，量到的是重建成本而不是查詢本身——**這個數字不能拿來說「建議很慢」**，
+正式流量下它有 60 秒 cache，而且同一個前綴會被反覆命中。
+
+### EXPLAIN：索引真的有被用到
+
+```
+半徑／bbox 搜尋   type=range  key=restaurants_location_spatial   rows=2
+open_now 時段     type=range  key=roh_day_time_index             rows=23   Using index
+```
+
+`open_now` 那條是**覆蓋索引**（`Using index`）——三個欄位都在索引裡，不必回表。
+
+### 誠實的擴展極限
+
+```
+沒有 bbox 的關鍵字搜尋   type=ALL  key=NULL  rows=1159
+```
+
+前置萬用字元的 `LIKE '%素食%'` **用不到任何索引**，這是全表掃描。1159 筆時
+14ms 感覺不出來，資料量到十萬筆就會是問題。
+
+現在不處理，因為處理的代價是引入 MySQL 全文檢索（中文要 ngram parser）或
+Elasticsearch，而那會讓「店名要贏過地址」這種產品判斷變得不可控——目前的
+CASE 加權是刻意的選擇，見 `App\Repositories\Search\KeywordSearch` 的註解。
+
+要動的時候，觸發條件是明確的：**資料量超過約五萬筆，或關鍵字搜尋的 p95 超過 100ms**。
+在那之前，地圖與列表的主要路徑都有 bbox／半徑先把候選集縮小，全表掃描只發生在
+「跨全部城市的關鍵字搜尋」這一條路徑上。

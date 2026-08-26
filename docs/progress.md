@@ -3393,3 +3393,41 @@ PHPStan 擋下一個：`expires_at` 的 datetime cast 沒有被推斷出來，
 ### 驗證
 
 後端 530 → **531 個測試全綠 ＋ 4 skipped**。
+
+---
+
+## 2026-08-26 — 效能實測（把形容詞換成數字）
+
+README 的 Performance 章節先前只有敘述（「用 select() 避免 N+1」「cursor pagination」），
+沒有任何數字。對一個以「展示中高階 Backend 系統設計能力」為目標的專案來說，
+這一段沒有量測等於沒說。
+
+在 docker-compose 的 MySQL 8 上，1159 家餐廳、651 筆營業時段：
+
+| 查詢 | p50 | p95 |
+|---|---|---|
+| bbox 搜尋 | 12.5 ms | 14.9 ms |
+| bbox ＋ 關鍵字（相關性排序） | 14.1 ms | 16.2 ms |
+| bbox ＋ `open_now` | 17.5 ms | 21.4 ms |
+| 半徑 5km | 13.8 ms | 16.4 ms |
+
+量測時在 filters 裡塞亂數把 cache key 打散——不打散的話量到的是 Redis 不是 MySQL。
+
+### EXPLAIN 確認索引真的有被用到
+
+- 半徑／bbox：`type=range key=restaurants_location_spatial rows=2`
+- `open_now`：`type=range key=roh_day_time_index rows=23 Using index`（覆蓋索引，不回表）
+
+### 一個不能拿來說嘴的數字
+
+搜尋建議的 p95 是 86ms，但那是因為每次量測前 `Cache::flush()` 連 config／route 快取
+一起清掉，量到的是重建成本而不是查詢本身。寫進文件時明講了這件事——把它當成
+「建議很慢」的證據會是錯的結論。
+
+### 誠實的擴展極限
+
+`LIKE '%素食%'` 是前置萬用字元，**用不到任何索引**：`type=ALL rows=1159`。
+1159 筆時 14ms 感覺不出來，十萬筆就會是問題。
+
+現在不處理，而且寫下了**觸發條件**：資料量超過約五萬筆，或關鍵字搜尋 p95 超過
+100ms。沒有觸發條件的「未來優化」只是願望清單。
