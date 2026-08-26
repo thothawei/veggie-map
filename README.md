@@ -232,8 +232,8 @@ docker compose logs -f horizon   # 確認 queue worker 真的在跑、有沒有 
 docker compose exec app php artisan test
 ```
 
-526 個 Feature/Unit test、1482 個 assertion（＋4 個需要 docker 的整合測試在容器內 skip；
-2026-08-26 實測），涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
+578 個 Feature/Unit test、1597 個 assertion（＋4 個需要 docker 的整合測試在容器內 skip，
+在 CI 的 ubuntu runner 上會真的跑；2026-08-26 實測），涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
 Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:sync` 冪等性與去重、
 `RestaurantRepository` bounding box 純數學、`ReviewService` 真實併發競態、
 `RuleBasedRecommendationService` 加權排序、search/detail cache 命中與失效、rate limiting
@@ -244,8 +244,12 @@ Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:syn
 不是只驗證回應內容，快取那組測試直接斷言重複請求的 DB query 數為 0；測試環境
 `QUEUE_CONNECTION=sync`，Job 仍然同步跑完才斷言結果，不需要真的等 Horizon worker）。
 
-前端 283 個 Vitest 測試（`npx vitest run`），涵蓋地圖、篩選抽屜、搜尋建議的 debounce
-與競態、Admin 重複審核，以及「未知營業時間不能顯示成已打烊」這類產品規則。
+前端 298 個 Vitest 測試（32 個檔案），涵蓋地圖、篩選抽屜、搜尋建議的 debounce
+與競態、Admin 重複審核、餐廳詳情與 AI Office 面板，以及「未知營業時間不能顯示成已打烊」
+這類產品規則。
+
+（數字是 2026-08-26 實測。會不會過期以
+[CI](.github/workflows/ci.yml) 為準——它每次 push 都真的把兩邊跑完。）
 
 測試用 MySQL（非 sqlite in-memory）——schema 用了 `POINT`／`ST_Distance_Sphere`／`MBRContains`
 等 MySQL 專屬空間函式，sqlite 跑不起來，所以需要 `scripts/setup-test-db.sh` 先建立
@@ -258,12 +262,13 @@ Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:syn
 
 ```bash
 npm run type-check   # vue-tsc --noEmit
-npm run test         # Vitest，目前只涵蓋純邏輯（例如 lib/geo.ts 的距離計算）
+npm run test         # Vitest（元件 ＋ 純邏輯）
 ```
 
-沒有 Vitest 元件測試或 Playwright E2E——golden path（地圖／搜尋／收藏／評論／Admin 審核）
-目前靠手動瀏覽器驗證覆蓋，見 [docs/progress.md](docs/progress.md) Phase 9/10 與
-[docs/todo.md](docs/todo.md)。
+**沒有 Playwright／真瀏覽器 E2E**：元件層已有測試，但「開瀏覽器把 golden path
+（地圖／搜尋／收藏／評論／Admin 審核）從頭走一遍」目前靠手動驗證覆蓋。
+這是刻意的 ROI 取捨，不是忘了做——理由與重新評估的條件見
+[docs/progress.md](docs/progress.md) Phase 9/10 與 [docs/todo.md](docs/todo.md)。
 
 ## External APIs
 
