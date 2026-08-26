@@ -199,7 +199,11 @@ const emptySuggestions = computed(() => {
     // 這兩個條件最常把結果篩成 0，而且使用者未必記得自己開了：「營業中」在深夜
     // 幾乎會清空整份清單，可信度門檻則會濾掉所有還沒有人查證過的店。
     if (filters.value.open_now) suggestions.push('關掉「營業中」（很多店家沒有營業時間資料）');
-    if (filters.value.confidence_min) suggestions.push('降低素食可信度門檻');
+    // 「降低門檻」不夠——使用者不知道為什麼一家都沒有。OSM 匯入的店只有外部
+    // 資料來源那 5～10 分的基礎分，門檻 30 以上要有人工查證才達得到。
+    if (filters.value.confidence_min) {
+        suggestions.push('降低素食可信度門檻（多數餐廳目前只有外部資料來源的基礎分，還沒有人工查證）');
+    }
     if (hasActiveFilters.value) suggestions.push('清掉篩選條件');
     if (activeCity.value && bbox.value) suggestions.push('切換到其他城市');
 

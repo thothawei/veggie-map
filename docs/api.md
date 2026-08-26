@@ -158,6 +158,12 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 `GET /diets` 的 `meta.confidence_filters` 給前端。前端不決定「幾分算有查證」——那是
 產品判斷，會跟著 `verification_weights` 一起調整。
 
+**目前的資料現實**：OSM 匯入的餐廳只有 `external_source` 那 5～10 分的基礎分，
+所以門檻 30／60 實際上會回 0 筆——要有人工查證（`admin_verified` +30、
+`menu_verified` +20）或使用者回報（+10）累積上去才達得到。這個篩選是對的，
+只是現在還沒有資料撐得起它；列表頁的空狀態會把這個原因講出來，而不是只說
+「沒有結果」。
+
 ### 營業時間
 
 列表與詳情都會帶 `open_status`（`open`／`closed`／`unknown` 三態）、`open_now`

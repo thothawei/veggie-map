@@ -561,6 +561,8 @@ describe('RestaurantListView 空結果的建議', () => {
         const { wrapper } = await mountList('/restaurants?city=taipei&confidence_min=60');
 
         expect(wrapper.text()).toContain('降低素食可信度門檻');
+        // 「降低門檻」不夠——要說得出為什麼一家都沒有。
+        expect(wrapper.text()).toContain('還沒有人工查證');
     });
 });
 
