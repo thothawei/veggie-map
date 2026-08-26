@@ -191,6 +191,8 @@ export interface RestaurantSearchParams {
     wifi?: boolean;
     outdoor_seating?: boolean;
     family_friendly?: boolean;
+    /** 無障礙（OSM `wheelchair=yes|limited|designated`）。 */
+    wheelchair?: boolean;
     sort?: 'relevance' | 'confidence' | 'distance' | 'rating' | 'popular' | 'newest';
     per_page?: number;
     cursor?: string;

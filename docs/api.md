@@ -100,7 +100,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 `venue_scope`（`exclusive`／`friendly`／`all`，名稱與合法值見 `GET /diets` 的 `meta.venue_scope`；
 **省略＝不過濾**，前端預設會送 `exclusive`）, `price_level`,
 `rating_min`, `confidence_min`（素食可信度下限 0–100，門檻選項見 `GET /diets` 的
-`meta.confidence_filters`）, 以及 `features.code` 對應的布林篩選（`pet_friendly`／`parking`／`delivery`／`takeout`／`reservation`／`wifi`／`outdoor_seating`／`family_friendly`；請傳 `1`／`0`，也接受 `true`／`false` 字串）, `open_now`（只留此刻在該店**當地時間**營業中的餐廳；沒有可解析營業時間的店不會出現在結果裡）, `sort`（distance/rating/popular/newest，
+`meta.confidence_filters`）, 以及 `features.code` 對應的布林篩選（`pet_friendly`／`parking`／`delivery`／`takeout`／`reservation`／`wifi`／`outdoor_seating`／`family_friendly`／`wheelchair`；請傳 `1`／`0`，也接受 `true`／`false` 字串）, `open_now`（只留此刻在該店**當地時間**營業中的餐廳；沒有可解析營業時間的店不會出現在結果裡）, `sort`（distance/rating/popular/newest，
 預設 `distance`；帶 `latitude`+`longitude` 才可用 `distance`）, `page`, `per_page`（預設 20，上限 100）。
 
 範例：

@@ -11,6 +11,7 @@ export const FEATURE_CODES = [
     'wifi',
     'outdoor_seating',
     'family_friendly',
+    'wheelchair',
 ] as const;
 
 export type FeatureCode = (typeof FEATURE_CODES)[number];

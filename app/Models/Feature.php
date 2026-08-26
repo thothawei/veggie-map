@@ -25,6 +25,9 @@ class Feature extends Model
         'wifi',
         'outdoor_seating',
         'family_friendly',
+        // 2026-08-26 產品決定加入。OSM 的 `wheelchair` 標籤在既有匯入資料裡有
+        // 52 筆，是當時「最豐富卻完全沒用到」的標籤。
+        'wheelchair',
     ];
 
     public $timestamps = true;

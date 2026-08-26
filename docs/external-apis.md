@@ -106,6 +106,11 @@ Admin 寫入或種子資料，不是 Open Food Facts。
 `delivery=no` 5 筆。只看 key 存在會把明確標示「沒有」的店標成「有」——把使用者騙去白跑一趟，
 比漏收嚴重得多。
 
+**2026-08-26 新增 `wheelchair`**：OSM 的 `wheelchair` 標籤對應到 `features.wheelchair`，
+收 `yes`／`limited`／`designated`。`limited` 也收的理由是它的語意是「部分無障礙
+（例如有斜坡但廁所不行）」——對需要的人來說仍然是有用的資訊，比完全查不到好。
+`no` 不收。實際匯入後台灣四市共 **129 家**有這個標籤。
+
 **沒有對應的兩個特色**：`parking` 與 `family_friendly` 在兩地共 387 筆節點裡是 **0 筆**
 （含 `capacity:parking`／`kids_area` 等變體都查過）。OSM 對餐廳節點沒有通用的停車標註慣例。
 寧可讓這兩個篩選維持空的，也不硬湊一個不成立的對應。

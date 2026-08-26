@@ -571,7 +571,13 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       被算成營業中。API 回三態 `open_status`，前端 FilterDrawer 有「營業中」晶片、
       卡片／popup／詳情顯示狀態與一週時間表。
 
-- [ ] **回報核准後要不要動餐廳（第十二、十八節）**
+- [x] **回報核准後要不要動餐廳（第十二、十八節）** ✅ 2026-08-26 產品決定：
+      核准「已歇業」＝自動把 `status` 改 `inactive`（不是刪除）。核准本身就是人工
+      判斷過了，再要求 admin 到另一個畫面按第二次，實務上的結果是歇業的店一直留在
+      地圖上——那正是使用者回報要解決的問題。設定在 `config/diet.php` 的
+      `report_actions`，`deactivate` 這個動作早就實作好了，只是沒有 type 對到它。
+
+      ~~原始說明~~：
       `not_vegetarian`／`menu_changed` 已由 **P0 Phase C** 接到
       `config/diet.php` 的 `report_actions`（exclusive → 降為 friendly；菜單過期則清空）。
       還缺：`type=closed` 核准後要不要把 `restaurant.status` 改 `inactive`。

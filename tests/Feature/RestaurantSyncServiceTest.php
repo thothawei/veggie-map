@@ -526,4 +526,29 @@ class RestaurantSyncServiceTest extends TestCase
 
         app(RestaurantProviderInterface::class);
     }
+
+    /**
+     * 2026-08-26 產品決定加入無障礙。OSM 的 `wheelchair=limited` 語意是「部分
+     * 無障礙（例如有斜坡但廁所不行）」——對需要的人來說仍然是有用的資訊，
+     * 比完全查不到好。`no` 當然不收。
+     */
+    public function test_sync_maps_the_wheelchair_tag(): void
+    {
+        Feature::factory()->create(['code' => 'wheelchair', 'label' => '無障礙']);
+
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-wc-yes',
+                name: '無障礙店',
+                latitude: 25.03,
+                longitude: 121.55,
+                featureCodes: ['wheelchair'],
+            ),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-wc-yes')->firstOrFail();
+        $this->assertTrue($restaurant->features->pluck('code')->contains('wheelchair'));
+    }
 }

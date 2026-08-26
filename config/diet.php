@@ -155,6 +155,18 @@ return [
     | 沒列的 type（closed、wrong_info…）維持 Phase 7：只改回報狀態、不動餐廳。
     */
     'report_actions' => [
+        /*
+        | 2026-08-26 產品決定：使用者回報「店家已歇業」經 admin 核准後自動下架。
+        |
+        | 核准本身就是人工判斷過了，再要求 admin 到另一個畫面按第二次，實務上的
+        | 結果是歇業的店一直留在地圖上——那正是使用者回報要解決的問題。
+        |
+        | 下架是 `status = inactive` 而不是刪除：判斷錯了救得回來，reviews／
+        | favorites 的外鍵也不會跟著消失（跟重複審核的處置一致）。
+        */
+        'closed' => [
+            '*' => 'deactivate',
+        ],
         'not_vegetarian' => [
             'exclusive' => 'demote_to_friendly',
             'friendly' => 'remove_exclusive_codes',
@@ -179,6 +191,9 @@ return [
         'internet_access' => ['feature' => 'wifi', 'values' => ['wlan', 'yes']],
         'reservation' => ['feature' => 'reservation', 'values' => ['yes', 'required', 'recommended']],
         'dog' => ['feature' => 'pet_friendly', 'values' => ['yes', 'leashed']],
+        // `limited` 也收：OSM 的語意是「部分無障礙（例如有斜坡但廁所不行）」，
+        // 對需要的人來說仍然是有用的資訊，比完全查不到好。`no` 當然不收。
+        'wheelchair' => ['feature' => 'wheelchair', 'values' => ['yes', 'limited', 'designated']],
     ],
 
 ];

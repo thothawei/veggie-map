@@ -139,7 +139,8 @@ class DietCatalogTest extends TestCase
         $this->assertSame('remove_exclusive_codes', DietCatalog::reportAction('not_vegetarian', 'friendly'));
         $this->assertSame('clear_menu_items', DietCatalog::reportAction('menu_changed', 'exclusive'));
         $this->assertSame('clear_menu_items', DietCatalog::reportAction('menu_changed', null));
-        $this->assertSame('noop', DietCatalog::reportAction('closed', 'exclusive'));
+        // 2026-08-26 產品決定：核准「已歇業」＝自動下架。
+        $this->assertSame('deactivate', DietCatalog::reportAction('closed', 'exclusive'));
         $this->assertSame('noop', DietCatalog::reportAction('wrong_info', null));
     }
 

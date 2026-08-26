@@ -3474,3 +3474,54 @@ README 的 Performance 章節先前只有敘述（「用 select() 避免 N+1」�
 
 後端 532 → **541 個測試全綠 ＋ 4 skipped**。開發庫現在有 1159 家餐廳、
 3727 筆營業時段（Asia/Taipei 938 家、Asia/Tokyo 195 家）。
+
+---
+
+## 2026-08-26 — 三個產品決定一次做完
+
+使用者確認了先前列出的三個「要產品決定才能動」的項目。
+
+### 一、五個城市全部同步（見上一則）
+
+### 二、核准「已歇業」＝自動下架
+
+`deactivate` 這個動作從 Phase C 就實作好了，只是 `config/diet.php` 的
+`report_actions` 沒有把 `closed` 對到它——所以核准之後什麼都不會發生。
+
+理由寫進 config 註解：核准本身就是人工判斷過了，再要求 admin 到另一個畫面按第二次，
+實務上的結果是歇業的店一直留在地圖上——那正是使用者回報要解決的問題。
+
+下架是 `status = inactive` 而不是刪除（跟重複審核的處置一致）：判斷錯了救得回來，
+`reviews`／`favorites` 的外鍵也不會跟著消失。
+
+原本那條測試叫 `test_approving_closed_does_not_change_restaurant_status`，
+現在改成 `..._deactivates_the_restaurant`，並多驗兩件事：資料列還在（不是刪除）、
+而且**列表與詳情立刻就看不到它**（detail cache 的 key 是 id，不清的話會繼續吐
+600 秒）。另外補一條「駁回就不要動它」。
+
+### 三、`wheelchair` 加入 features
+
+先前 todo 估「東京＋台中共 52 筆」。實際重跑台灣四市同步後是 **129 家**——當時只
+看了兩個城市，而且沒算 `limited`。
+
+`limited` 也收：OSM 的語意是「部分無障礙（例如有斜坡但廁所不行）」，對需要的人來說
+仍然是有用的資訊，比完全查不到好。`no` 當然不收。
+
+FilterDrawer 不必改——它本來就是依 `/features` 動態渲染的（那是 P0 Phase A 定下的
+規矩），新增一個特色只要 seeder 與 `Feature::CODES` 跟上，晶片就自己出現了。
+
+**東京的無障礙標籤還沒帶進來**：重跑時 Overpass 連兩次回 HTTP 504。那是外部服務忙碌
+（東京 bbox 是最大的查詢），不是我們的問題——而且 fallback 正確地回 0 筆而不是炸掉，
+`external_api_logs` 也留下了兩筆 `HTTP_504`。等每日排程補。這剛好是一次真實的
+失敗處理演練。
+
+### 一個「寫死數量」的測試順手改掉
+
+`LookupTest` 原本寫 `assertCount(8, $codes)`。加一個特色就要改那個 8，而改的人不會
+知道為什麼是 8。改成 `assertCount(count(Feature::CODES), $codes)`——跟常數比對本身
+就守住了「seeder 與常數一致」這件事，數字不必寫兩遍。
+
+### 驗證
+
+後端 541 → **543 個測試全綠 ＋ 4 skipped**，前端 286 個全綠。
+真實資料實測：台中 bbox 的 `?wheelchair=1` 回得到店，features 陣列裡有 `wheelchair`。

@@ -187,7 +187,13 @@ class RestaurantReportTest extends TestCase
         $this->assertSame(0, $restaurant->menuItems()->count());
     }
 
-    public function test_approving_closed_does_not_change_restaurant_status(): void
+    /**
+     * 2026-08-26 產品決定：核准「已歇業」＝自動下架。
+     *
+     * 在這之前核准 `closed` 什麼都不做，歇業的店會一直留在地圖上——那正是使用者
+     * 回報要解決的問題。核准本身就是人工判斷過了。
+     */
+    public function test_approving_closed_deactivates_the_restaurant(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
         $restaurant = Restaurant::factory()->create(['status' => 'active']);
@@ -199,6 +205,31 @@ class RestaurantReportTest extends TestCase
 
         $this->withHeaders($this->headers($admin))
             ->postJson("/api/v1/admin/reports/{$report->id}/approve")
+            ->assertOk();
+
+        $this->assertSame('inactive', $restaurant->fresh()->status);
+
+        // 下架不是刪除：判斷錯了救得回來。
+        $this->assertDatabaseHas('restaurants', ['id' => $restaurant->id]);
+
+        // 而且地圖與列表立刻就看不到它——detail cache 的 key 是 id，
+        // 不清的話會繼續吐 600 秒。
+        $this->getJson('/api/v1/restaurants')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson("/api/v1/restaurants/{$restaurant->id}")->assertNotFound();
+    }
+
+    public function test_rejecting_closed_leaves_the_restaurant_alone(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $restaurant = Restaurant::factory()->create(['status' => 'active']);
+        $report = RestaurantReport::factory()->create([
+            'restaurant_id' => $restaurant->id,
+            'type' => 'closed',
+            'status' => 'pending',
+        ]);
+
+        $this->withHeaders($this->headers($admin))
+            ->postJson("/api/v1/admin/reports/{$report->id}/reject")
             ->assertOk();
 
         $this->assertSame('active', $restaurant->fresh()->status);

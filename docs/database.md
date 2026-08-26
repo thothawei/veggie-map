@@ -237,7 +237,7 @@ Composite unique：`(restaurant_id, diet_type_id)`；Index：`diet_type_id`（�
 
 ### features / restaurant_features（Many-to-Many）
 
-`features`：`id`, `code`（pet_friendly/parking/delivery/takeout/reservation/wifi/outdoor_seating/family_friendly）, `label`。
+`features`：`id`, `code`（pet_friendly/parking/delivery/takeout/reservation/wifi/outdoor_seating/family_friendly/wheelchair）, `label`。
 
 `restaurant_features`：`restaurant_id`, `feature_id`。Composite unique：`(restaurant_id, feature_id)`；
 Index：`feature_id`。

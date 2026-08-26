@@ -117,6 +117,10 @@ paths:
         - name: wifi
           in: query
           schema: { type: boolean }
+        - name: wheelchair
+          in: query
+          description: 無障礙（OSM `wheelchair=yes|limited|designated`）
+          schema: { type: boolean }
         - name: outdoor_seating
           in: query
           schema: { type: boolean }
@@ -324,6 +328,10 @@ paths:
           schema: { type: boolean }
         - name: reservation
           in: query
+          schema: { type: boolean }
+        - name: wheelchair
+          in: query
+          description: 無障礙（OSM `wheelchair=yes|limited|designated`）
           schema: { type: boolean }
         - name: outdoor_seating
           in: query

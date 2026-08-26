@@ -37,8 +37,11 @@ class LookupTest extends TestCase
 
         $codes = array_column($this->getJson('/api/v1/features')->assertOk()->json('data'), 'code');
 
-        $this->assertCount(8, $codes);
+        // 寫死數量的話每次加一個特色都要改這裡，而且改的人不會知道為什麼；
+        // 跟 Feature::CODES 比對本身就守住了「seeder 與常數一致」這件事。
+        $this->assertCount(count(Feature::CODES), $codes);
         $this->assertEqualsCanonicalizing(Feature::CODES, $codes);
+        $this->assertContains('wheelchair', $codes);
         $this->assertContains('takeout', $codes);
         $this->assertContains('pet_friendly', $codes);
         $this->assertNotContains('japanese', $codes);

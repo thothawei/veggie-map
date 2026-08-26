@@ -23,6 +23,7 @@ class FeatureSeeder extends Seeder
             'wifi' => 'WiFi',
             'outdoor_seating' => '戶外座位',
             'family_friendly' => '親子友善',
+            'wheelchair' => '無障礙',
         ];
 
         foreach ($features as $code => $label) {
