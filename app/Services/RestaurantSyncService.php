@@ -10,9 +10,9 @@ use App\Services\External\RestaurantData;
 use App\Services\External\RestaurantProviderInterface;
 use App\Support\CityCatalog;
 use App\Support\DietCatalog;
+use App\Support\RestaurantSlug;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class RestaurantSyncService
 {
@@ -105,19 +105,17 @@ class RestaurantSyncService
     }
 
     /**
-     * `Str::slug()` 音譯不了純中文名稱（例如「清心蔬食」），會回傳空字串——多數台灣餐廳
-     * 匯入後全部撞成同一個 fallback，slug 失去「人類看得懂的 URL」的意義（見
-     * docs/database.md 對 `slug` 欄位的說明）。轉不出來就退回用來源＋來源 ID 當種子，
-     * 至少每家餐廳的 slug 是不同且可追溯的，不是一堆 `restaurant-2`／`restaurant-3`。
+     * 漢字走拼音（見 RestaurantSlug），其餘 Str::slug。仍撞名才加 -2。
+     * 只在 create 時寫入——重跑 sync 不改 slug，避免已分享的網址失效。
      */
     private function uniqueSlug(string $name, string $sourceId): string
     {
-        $base = Str::slug($name) ?: Str::slug($this->provider->sourceName().'-'.$sourceId) ?: 'restaurant';
+        $base = RestaurantSlug::base($name, $this->provider->sourceName(), $sourceId);
         $slug = $base;
         $suffix = 1;
 
         while (Restaurant::where('slug', $slug)->exists()) {
-            $slug = "{$base}-".(++$suffix);
+            $slug = $base.'-'.(++$suffix);
         }
 
         return $slug;

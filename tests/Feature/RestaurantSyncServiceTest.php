@@ -326,10 +326,37 @@ class RestaurantSyncServiceTest extends TestCase
         $this->assertSame(0, Restaurant::where('name', '連鎖店')->where('is_possible_duplicate', true)->count());
     }
 
-    public function test_slug_falls_back_to_source_seed_when_name_has_no_ascii_transliteration(): void
+    public function test_slug_uses_pinyin_for_chinese_names(): void
     {
         $provider = $this->fakeProvider([
-            new RestaurantData(sourceId: 'node-3', name: '純中文名稱店', latitude: 25.0, longitude: 121.5),
+            new RestaurantData(sourceId: 'node-3', name: '清心蔬食', latitude: 25.0, longitude: 121.5),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-3')->firstOrFail();
+        $this->assertSame('qing-xin-shu-shi', $restaurant->slug);
+    }
+
+    public function test_duplicate_chinese_names_get_a_numeric_suffix(): void
+    {
+        $provider = $this->fakeProvider([
+            new RestaurantData(sourceId: 'a', name: '清心蔬食', latitude: 25.0, longitude: 121.5),
+            new RestaurantData(sourceId: 'b', name: '清心蔬食', latitude: 24.1, longitude: 120.6),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $this->assertEqualsCanonicalizing(
+            ['qing-xin-shu-shi', 'qing-xin-shu-shi-2'],
+            Restaurant::whereIn('source_id', ['a', 'b'])->pluck('slug')->all(),
+        );
+    }
+
+    public function test_slug_falls_back_to_source_seed_when_name_has_no_transliteration(): void
+    {
+        $provider = $this->fakeProvider([
+            new RestaurantData(sourceId: 'node-3', name: '😊', latitude: 25.0, longitude: 121.5),
         ]);
 
         $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));

@@ -3745,3 +3745,15 @@ slug 快取沒走 `Cache::tags(['restaurants'])`（那是搜尋列表用的）�
 ### 驗證
 
 兩條測試先紅（改 slug 後舊網址 200、刪除後舊網址 200），修完變綠。`RestaurantSlugTest` 11 條全過，Pint／PHPStan 乾淨。
+
+---
+
+## 2026-08-26 — 中文店名的 slug 改走拼音
+
+詳情頁走 slug 之後，台灣店大多還是 `osm-node-123`：容器沒裝 intl，`Str::slug('清心蔬食')` 是空字串，只能退回來源 ID。
+
+漢字改走 `overtrue/pinyin` 的 permalink 再 `Str::slug`（`清心蔬食` → `qing-xin-shu-shi`）。沒有漢字的店名仍用 `Str::slug`；emoji 這類兩邊都轉不出來的，才退回 `osm-node-3`。撞名加 `-2`。
+
+**不回寫既有列。** slug 只在 create 時產生，重跑 sync 也不改。已經分享出去的 `osm-node-*` 網址維持有效；新匯入的才是拼音。若要幫舊資料換拼音，那是一次資料異動，另外同意再做。
+
+反向：拼音拿掉的話，「清心蔬食」會回到 `osm-node-1`，`test_chinese_name_is_not_the_source_id_fallback` 會紅。

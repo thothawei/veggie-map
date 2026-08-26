@@ -614,8 +614,8 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       `GET /restaurants/{idOrSlug}` 兩種都收（純數字＝id，其餘＝slug；slug 不可能是
       純數字所以沒有歧義），前端連結有 slug 就用 slug。舊的數字連結仍然有效——分享
       出去的網址不會因為改路由而失效。
-      **仍未做**：中文店名的 slug 還是 `osm-node-123` 這種形狀（`Str::slug()` 音譯不了
-      中文）。要有真正可讀的中文別名得接拼音轉換，那是另一件事，不在這次範圍。
+      中文店名用拼音（`清心蔬食` → `qing-xin-shu-shi`）。既有已匯入的
+      `osm-node-*` 不自動改，避免已分享的 slug 網址失效；新 sync 的店才用拼音。
 
 - [x] **可瀏覽的 API 文件掛在 `/docs`（最終完成標準）** ✅ **已完成 2026-08-26**：`GET /docs`（Redoc，CDN 載入）＋`/docs/openapi.yaml`
       直接送 repo 裡那份檔案。預設只在非 production 註冊路由。

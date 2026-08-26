@@ -152,7 +152,7 @@ erDiagram
 |---|---|---|
 | id | bigint unsigned, PK | |
 | name | varchar(255) | |
-| slug | varchar(255), unique | URL 用，供 `/restaurants/{slug}` |
+| slug | varchar(255), unique | URL 用，供 `/restaurants/{slug}`。漢字店名用拼音（`qing-xin-shu-shi`），`Str::slug()` 轉不出來才退回 `{source}-{source_id}` |
 | description | text, nullable | |
 | address | varchar(255) | |
 | city | varchar(100) | |
