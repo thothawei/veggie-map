@@ -18,7 +18,7 @@
 
 ~~剩下的都是 P3「要產品決定才能動」的項目（見文件最後），沒有規格缺口了。~~
 
-**2026-08-26 第二次對照後修正上面這句：規格缺口還有 7 項**，全在 AI Office 子系統，
+**2026-08-26 第二次對照後修正上面這句：規格缺口還有 7 項**（其中 2 項當天完成，剩 5 項），全在 AI Office 子系統，
 見「P1 — AI Office：規劃自己列了但漏做」。其中 ResourceUsage／AgentDetailView／LogsView
 連 implementation-plan 第 185／189 行都自己列進清單了，Phase 8 沒做、這份待辦也沒接住。
 第一次盤點只比對了兩份總 Prompt，沒有回頭比對自己產出的 implementation-plan——
@@ -711,17 +711,22 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是 2026-08-26 直接查 repo 得到的，
 不是照抄規格。排序＝由便宜到貴。
 
-- [ ] **CI 沒有任何 `docker build`（AI Office §63）**
-      規格要 `backend.yml`／`frontend.yml`／`docker.yml` 三個 workflow。合併成一個
-      `ci.yml` 是合理裁決，但 **build image 這件事整條沒有**——`ci.yml` 裡唯一的 docker
-      指令是 `docker pull alpine:3.20`（給沙箱整合測試用）。Dockerfile 壞掉 CI 不會紅。
-      最小：ci.yml 加一個 job 跑 `docker compose build`（或 `docker build docker/php`）。
+- [x] **CI 沒有任何 `docker build`（AI Office §63）✅ 2026-08-26**
+      `ci.yml` 加了第三個 job `docker`：驗 compose 設定（base 與 sandbox 覆蓋檔疊起來驗，
+      sandbox 單獨 config 會因為缺 image/build 而失敗）→ buildx 建 `docker/php/Dockerfile`
+      （GHA cache）→ **驗映像裡八個 PHP 擴充與 composer 真的在**。
+      三個 workflow 合併成一個 `ci.yml` 是刻意的，不需要拆。
+      **build 成功不等於映像可用**，所以有第三步：少了 `redis` 擴充，AI Office 的
+      readiness 會固定回 503——那個洞先前就是這樣來的。本機實測 build 5 分鐘、八個擴充齊全。
 
-- [ ] **`docs/agents.md`／`tools.md`／`security.md`／`development.md`（AI Office §66）**
-      規格列 8 份文件，repo 有 architecture／api／database／deployment／observability，
-      缺這四份，而且 implementation-plan 從沒討論過要不要做。Agent 名冊、五個 Tool 的
-      權限與風險分級、沙箱邊界，目前只散在程式碼註解與 README 的 AI Office 段落裡。
-      注意：**不要為了湊檔名生一堆空殼**，寫不出實質內容的就在這裡註明「併入 README 某段」。
+- [x] **`docs/agents.md`／`tools.md`／`security.md`／`development.md`（AI Office §66）✅ 2026-08-26**
+      四份都寫了實質內容，不是空殼：agents 是名冊＋權限矩陣＋執行迴圈上限＋記憶；
+      tools 是五個工具的風險分級與三層指令過濾；security 是兩個子系統各自的威脅模型
+      （AI Office 那邊「LLM 輸出一律當攻擊者輸入」）＋**已知未解**一節；
+      development 是指令、慣例、與這個 repo 特有的三個測試坑。
+      每份都標明「真理來源是程式碼／設定檔」，避免文件變成第二個會漂的事實來源。
+      **寫的時候實查抓到自己寫錯一段**：原本描述 `AgentSelector` 會擋 `max_concurrency`，
+      實際上並行上限在 `AgentOrchestrator`，Selector 只排除 offline 並依忙碌程度排序。
 
 - [ ] **`POST /api/v1/ai-office/tasks/{id}/retry`／`/cancel`（AI Office §50）**
       端點不存在。功能上走得到——`PATCH /tasks/{id}` 改 `status` 後

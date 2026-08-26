@@ -186,6 +186,9 @@ GET /api/v1/geocode?q=台中一中街
 
 ## Local Development
 
+日常開發的指令、慣例與這個 repo 特有的坑（測試用真 MySQL、多 session 共用測試庫、
+沙箱測試只在 CI 真的跑）另見 [docs/development.md](docs/development.md)。
+
 ```bash
 git clone https://github.com/thothawei/veggie-map.git
 cd veggie-map
@@ -373,6 +376,8 @@ response_time_ms／success／error_code，不記 API Key）；`/api/*` 例外統
 
 - 完整規劃、與本 repo 既有技術棧的衝突裁決、12 個 Phase 的路線圖：
   [docs/implementation-plan.md](docs/implementation-plan.md)
+- Agent 名冊與權限矩陣：[docs/agents.md](docs/agents.md)｜工具與風險分級：
+  [docs/tools.md](docs/tools.md)｜信任邊界與已知未解：[docs/security.md](docs/security.md)
 - 隔離方式：命名空間 `App\AiOffice\*`、資料表前綴 `ai_office_`、路由前綴
   `/api/v1/ai-office/*`、前端 `resources/js/ai-office/*`，不與餐廳領域混在一起。
 - 刻意偏離原始規格之處（規格假設是全新專案）：沿用 MySQL 而非 PostgreSQL（餐廳查詢

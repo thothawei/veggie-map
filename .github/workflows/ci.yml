@@ -137,3 +137,51 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  docker:
+    name: Docker (compose config / image build / extensions)
+    runs-on: ubuntu-latest
+
+    # backend／frontend 兩個 job 跑的是 runner 上的 PHP 與 Node，碰不到
+    # docker/php/Dockerfile。這個 job 補的就是那個洞：Dockerfile 或 compose 壞掉
+    # 之前 CI 完全不會紅，只有下一個 `docker compose up -d` 的人會踩到。
+    steps:
+      - uses: actions/checkout@v4
+
+      # compose 語法 + 服務參照。sandbox 那份是覆蓋檔（只有 app／horizon 兩段），
+      # 必須疊在 base 上才驗得到，單獨 config 會因為缺 image/build 而失敗。
+      - name: Validate compose files
+        run: |
+          docker compose config -q
+          docker compose -f docker-compose.yml -f docker-compose.sandbox.yml config -q
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the PHP image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/php/Dockerfile
+          load: true
+          tags: veggiemap-app:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # build 成功不等於映像可用：apt/pecl 的步驟就算跑完，擴充仍可能沒被 enable。
+      # 這串正是 app container 真的需要的——少了 redis，AI Office 的 readiness
+      # 檢查會固定回 503（見上面 backend job 的註解，那個洞就是這樣來的）。
+      - name: Verify required PHP extensions
+        run: |
+          docker run --rm veggiemap-app:ci php -m | tr -d '\r' > extensions.txt
+          missing=""
+          for ext in pdo_mysql mbstring bcmath gd zip redis pcntl exif; do
+            grep -qx "$ext" extensions.txt || missing="$missing $ext"
+          done
+          if [ -n "$missing" ]; then
+            echo "映像缺少擴充:$missing"
+            exit 1
+          fi
+          echo "八個擴充都在"
+
+      - name: Verify composer is available in the image
+        run: docker run --rm veggiemap-app:ci composer --version
