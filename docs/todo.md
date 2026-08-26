@@ -16,7 +16,13 @@
 相關性排序、搜尋建議（自動完成）、素食可信度篩選／排序／明細、飲食類型多選、
 列表排序切換、附近的素食餐廳、地圖 marker 分辨純素食店與素食友善、命中原因說明。
 
-**剩下的都是 P3「要產品決定才能動」的項目**（見文件最後），沒有規格缺口了。
+~~剩下的都是 P3「要產品決定才能動」的項目（見文件最後），沒有規格缺口了。~~
+
+**2026-08-26 第二次對照後修正上面這句：規格缺口還有 7 項**，全在 AI Office 子系統，
+見「P1 — AI Office：規劃自己列了但漏做」。其中 ResourceUsage／AgentDetailView／LogsView
+連 implementation-plan 第 185／189 行都自己列進清單了，Phase 8 沒做、這份待辦也沒接住。
+第一次盤點只比對了兩份總 Prompt，沒有回頭比對自己產出的 implementation-plan——
+下次盤點三份都要比。
 
 測試：後端 **543**、前端 **296**，PHPStan 0 error、Pint PASS、CI 綠
 （CI 從 Phase 8 起一直是紅的，2026-08-26 修好——真因是一條依賴機器時區的測試，
@@ -697,6 +703,57 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       **第一次跑就抓到整個 AI Office 子系統（26 支端點）從來沒寫進規格**，
       連 `/cities` 也漏了。不驗每個欄位的 schema（那需要另一套工具，維護成本會
       超過它抓到的問題），只守住最容易漂移、也最誤導人的那一層。
+
+### P1 — AI Office：規劃自己列了但漏做（2026-08-26 第二次對照發現）
+
+**這一批是規劃與待辦之間的漏接，不是有意識的取捨**：其中三項連
+[implementation-plan.md](implementation-plan.md) 第 185／189 行都自己寫進元件與頁面清單了，
+Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是 2026-08-26 直接查 repo 得到的，
+不是照抄規格。排序＝由便宜到貴。
+
+- [ ] **CI 沒有任何 `docker build`（AI Office §63）**
+      規格要 `backend.yml`／`frontend.yml`／`docker.yml` 三個 workflow。合併成一個
+      `ci.yml` 是合理裁決，但 **build image 這件事整條沒有**——`ci.yml` 裡唯一的 docker
+      指令是 `docker pull alpine:3.20`（給沙箱整合測試用）。Dockerfile 壞掉 CI 不會紅。
+      最小：ci.yml 加一個 job 跑 `docker compose build`（或 `docker build docker/php`）。
+
+- [ ] **`docs/agents.md`／`tools.md`／`security.md`／`development.md`（AI Office §66）**
+      規格列 8 份文件，repo 有 architecture／api／database／deployment／observability，
+      缺這四份，而且 implementation-plan 從沒討論過要不要做。Agent 名冊、五個 Tool 的
+      權限與風險分級、沙箱邊界，目前只散在程式碼註解與 README 的 AI Office 段落裡。
+      注意：**不要為了湊檔名生一堆空殼**，寫不出實質內容的就在這裡註明「併入 README 某段」。
+
+- [ ] **`POST /api/v1/ai-office/tasks/{id}/retry`／`/cancel`（AI Office §50）**
+      端點不存在。功能上走得到——`PATCH /tasks/{id}` 改 `status` 後
+      `TaskController::update()` 會呼叫 `AgentOrchestrator::tryDispatch()` 重新派工——
+      但規格點名的兩支契約沒有，OpenAPI 自然也沒有。要做的話是薄封裝：
+      retry 應該同時處理 `retry_count`，不要只是換個名字打同一段 update。
+
+- [ ] **`ResourceUsage`：CPU／Memory 監控（AI Office §39、§44、plan L185）**
+      元件不存在。全 repo 的 `cpu` 只出現在 `DockerSandboxEngine`／`SandboxManager`
+      的 `--cpus` 限制。Token 用量有完整報表（`/ai-office/usage`），CPU／Memory 完全沒有。
+      §39 已經預先授權「取不到 host metrics 就用 application-level metrics，
+      **但 UI 必須標示資料來源、不要假裝是真的 host CPU**」——照這條做，
+      別為了畫一個好看的儀表去讀 host `/proc`。
+
+- [ ] **`AgentDetailView`（AI Office §47、plan L189）**
+      不存在。`AgentsView.vue` 的右欄只有：可用工具／權限／記得的事／system prompt。
+      §47 還要 Current Task、Recent Tasks、Recent Errors、Success Rate、Average Duration、
+      Token Usage——後三個現在只在 `/ai-office/usage` 的 `AgentPerformanceTable` 裡，
+      看單一 agent 要跨頁湊。資料面幾乎都有（`ai_office_agent_errors`、`task_runs`
+      都有在寫），缺的是端點聚合與頁面。
+
+- [ ] **`LogsView`（AI Office §44 pages、plan L189）**
+      不存在。目前只有專案內的 ActivityFeed（`/ai-office/projects/{id}`），
+      沒有跨專案的執行紀錄檢視。做之前先決定它到底顯示什麼：
+      `activities`／`tool_executions`／`task_runs` 是三種不同粒度，
+      全塞進同一頁只會變成沒人看的瀑布流。
+
+- [ ] **`Projects` 清單頁／`Tasks` 跨專案頁／`Settings` 頁（AI Office §44 pages）**
+      三頁都不存在：專案建立塞在 Dashboard、任務只能從專案詳情進去、沒有設定頁。
+      **這一項可能是合理裁決**（MVP 專案數少，總覽即清單），但裁決沒有被寫下來，
+      所以下一個接手的人只會看到「規格列了、repo 沒有」。
+      決定不做的話，就在這裡改成 `[~]` 並寫明理由，不要留白。
 
 ### P3 — 要產品決定才能動（不要擅自選）
 
