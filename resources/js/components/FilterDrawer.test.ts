@@ -87,6 +87,25 @@ describe('FilterDrawer', () => {
         expect(wrapper.find('.toggle').attributes('aria-expanded')).toBe('true');
     });
 
+
+    it('取消其中一個只拿掉那一個，不是整組清空', async () => {
+        setViewportMatches(true);
+        const wrapper = await mountDrawer({ diet: 'vegan,vegetarian' });
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '全素（Vegan）')!.trigger('click');
+
+        expect(wrapper.props('filters')).toEqual({ diet: 'vegetarian' });
+    });
+
+    it('全部取消後 diet 這個 key 會消失，不留空字串', async () => {
+        setViewportMatches(true);
+        const wrapper = await mountDrawer({ diet: 'vegan' });
+
+        await wrapper.findAll('.chip').find((c) => c.text() === '全素（Vegan）')!.trigger('click');
+
+        expect('diet' in wrapper.props('filters')).toBe(false);
+    });
+
     it('取消飲食篩選會把 key 刪掉，不是留一個 undefined', async () => {
         // 這是真的踩過的 bug：留著 undefined 的 key 會讓「還有幾個篩選條件」多算一個，
         // 徽章和空狀態提示都會跟著說謊。
@@ -140,15 +159,21 @@ describe('FilterDrawer', () => {
         expect(wrapper.findAll('.chip.active')).toHaveLength(0);
     });
 
-    it('飲食類型是單選，換一個會取代而不是累加', async () => {
+    /**
+     * 2026-08-26 起飲食類型改成**多選**（原本是單選）：素食者常常「全素或蛋奶素
+     * 都可以」，逼他們一次只能挑一個就得分兩次搜尋再自己合併。後端多個 code
+     * 之間是 OR。
+     */
+    it('飲食類型可以複選，網址上用逗號串起來', async () => {
         setViewportMatches(true);
         const wrapper = await mountDrawer();
 
         await wrapper.findAll('.chip').find((c) => c.text() === '全素（Vegan）')!.trigger('click');
         await wrapper.findAll('.chip').find((c) => c.text() === '素食（Vegetarian）')!.trigger('click');
 
-        expect(wrapper.props('filters')).toEqual({ diet: 'vegetarian' });
-        expect(wrapper.findAll('.chip.active')).toHaveLength(1);
+        expect(wrapper.props('filters')).toEqual({ diet: 'vegan,vegetarian' });
+        // 兩顆都要看起來是選取狀態——只亮一顆的話使用者會以為另一個沒生效。
+        expect(wrapper.findAll('.chip.active')).toHaveLength(2);
     });
 
     it('特色晶片依 /features 動態渲染，不是寫死寵物友善與停車', async () => {

@@ -83,6 +83,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 ## `GET /restaurants` 查詢參數
 
 `keyword`, `latitude`, `longitude`, `radius`（公里，上限 50）, `bbox`, `city`, `district`, `diet`,
+`diet`（可逗號分隔多個，例如 `diet=vegan,ovo_lacto`，彼此是 **OR**）,
 `venue_scope`（`exclusive`／`friendly`／`all`，名稱與合法值見 `GET /diets` 的 `meta.venue_scope`；
 **省略＝不過濾**，前端預設會送 `exclusive`）, `price_level`,
 `rating_min`, `confidence_min`（素食可信度下限 0–100，門檻選項見 `GET /diets` 的

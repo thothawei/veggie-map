@@ -127,15 +127,34 @@ function selectScope(value: string) {
     });
 }
 
+/**
+ * 飲食類型是**多選**：素食者常常「全素或蛋奶素都可以」，逼他們一次只能挑一個，
+ * 就得分兩次搜尋再自己合併。後端多個 code 之間是 OR。
+ */
+function selectedDiets(): string[] {
+    const raw = filters.value.diet;
+
+    return typeof raw === 'string' && raw !== '' ? raw.split(',') : [];
+}
+
+function isDietOn(code: string): boolean {
+    return selectedDiets().includes(code);
+}
+
 function toggleDiet(code: string) {
     replaceFilters((next) => {
-        if (next.diet === code) {
+        const current = selectedDiets();
+        const updated = current.includes(code)
+            ? current.filter((value) => value !== code)
+            : [...current, code];
+
+        if (updated.length === 0) {
             delete next.diet;
 
             return;
         }
 
-        next.diet = code;
+        next.diet = updated.join(',');
     });
 }
 
@@ -249,8 +268,8 @@ function clearAll() {
                     :key="diet.code"
                     type="button"
                     class="chip"
-                    :class="{ active: filters.diet === diet.code }"
-                    :aria-pressed="filters.diet === diet.code"
+                    :class="{ active: isDietOn(diet.code) }"
+                    :aria-pressed="isDietOn(diet.code)"
                     @click="toggleDiet(diet.code)"
                 >
                     {{ diet.label }}

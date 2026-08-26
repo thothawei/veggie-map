@@ -257,6 +257,31 @@ class DietCatalog
         return array_values(array_unique($codes));
     }
 
+    /**
+     * `?diet=vegan,ovo_lacto` → `['vegan', 'ovo_lacto']`。
+     *
+     * 對不上 config 的 code 直接丟掉而不是報錯：這是篩選條件不是寫入，使用者改
+     * 網址打錯字時忽略一個條件比整個列表變成「載入失敗」好。真正的把關在
+     * FormRequest（那裡會回 422），這裡只負責把字串變成乾淨的清單。
+     *
+     * @return list<string>
+     */
+    public static function parseDietCodes(mixed $value): array
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return [];
+        }
+
+        $known = self::codes();
+
+        $codes = array_values(array_unique(array_filter(
+            array_map('trim', explode(',', $value)),
+            fn (string $code) => in_array($code, $known, true),
+        )));
+
+        return $codes;
+    }
+
     public static function venueScopeParam(): string
     {
         return (string) config('diet.venue_scope.param', 'venue_scope');

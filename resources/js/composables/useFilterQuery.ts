@@ -33,6 +33,8 @@ function parse(query: Record<string, unknown>): Partial<UrlFilters> {
     const filters: Partial<UrlFilters> = {};
     const scopeParam = venueScopeParam();
 
+    // diet 可以是逗號分隔的多個 code（`?diet=vegan,ovo_lacto`，彼此是 OR）。
+    // 網址上刻意用逗號而不是重複的 `diet[]=`：一眼看得懂，貼進聊天室也不會被截斷。
     if (typeof query.diet === 'string' && query.diet !== '') {
         filters.diet = query.diet;
     }

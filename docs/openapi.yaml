@@ -67,8 +67,12 @@ paths:
           schema: { type: string, maxLength: 100 }
         - name: diet
           in: query
-          description: 對應 diet_types.code，見 GET /diets
+          description: >
+            對應 diet_types.code，見 GET /diets。可逗號分隔多個
+            （`diet=vegan,ovo_lacto`），彼此是 OR——一家店不可能同時被標成
+            全素又標成蛋奶素，AND 會把結果篩成 0。
           schema: { type: string }
+          example: vegan,ovo_lacto
         - name: venue_scope
           in: query
           description: >

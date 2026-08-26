@@ -323,4 +323,54 @@ class RestaurantTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.description', '這是一段很長的描述');
     }
+
+    /**
+     * `?diet=vegan,ovo_lacto`：多個飲食類型之間是 **OR**。素食者常常「全素或蛋奶素
+     * 都可以」，AND 會把結果篩成 0——一家店不可能同時被標成全素又標成蛋奶素。
+     */
+    public function test_multiple_diet_codes_are_combined_with_or(): void
+    {
+        $vegan = DietType::factory()->create(['code' => 'vegan']);
+        $ovoLacto = DietType::factory()->create(['code' => 'ovo_lacto']);
+
+        $veganShop = Restaurant::factory()->create(['name' => '全素店']);
+        $veganShop->dietTypes()->attach($vegan->id);
+
+        $ovoLactoShop = Restaurant::factory()->create(['name' => '蛋奶素店']);
+        $ovoLactoShop->dietTypes()->attach($ovoLacto->id);
+
+        Restaurant::factory()->create(['name' => '沒有標示的店']);
+
+        $ids = array_column(
+            $this->getJson('/api/v1/restaurants?diet=vegan,ovo_lacto&venue_scope=all')->json('data'),
+            'id',
+        );
+
+        sort($ids);
+        $expected = [$veganShop->id, $ovoLactoShop->id];
+        sort($expected);
+
+        $this->assertSame($expected, $ids);
+    }
+
+    public function test_single_diet_code_still_works(): void
+    {
+        $vegan = DietType::factory()->create(['code' => 'vegan']);
+        $veganShop = Restaurant::factory()->create();
+        $veganShop->dietTypes()->attach($vegan->id);
+        Restaurant::factory()->create();
+
+        $this->getJson('/api/v1/restaurants?diet=vegan&venue_scope=all')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
+    public function test_unknown_diet_code_in_the_list_is_rejected(): void
+    {
+        DietType::factory()->create(['code' => 'vegan']);
+
+        $this->getJson('/api/v1/restaurants?diet=vegan,not_a_diet')
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
+    }
 }

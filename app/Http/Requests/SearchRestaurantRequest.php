@@ -29,7 +29,21 @@ class SearchRestaurantRequest extends FormRequest
             'bbox' => ['nullable', 'string'],
             'city' => ['nullable', 'string', 'max:100'],
             'district' => ['nullable', 'string', 'max:100'],
-            'diet' => ['nullable', 'string', 'exists:diet_types,code'],
+            // 單一 code 或逗號分隔的多個（`?diet=vegan,ovo_lacto`，彼此是 OR）。
+            // 用自訂檢查而不是 `exists`：後者只認單一值，改成多選之後
+            // `vegan,ovo_lacto` 會被判成不存在的 code 而回 422。
+            'diet' => ['nullable', 'string', function (string $attribute, mixed $value, \Closure $fail) {
+                $codes = array_map('trim', explode(',', (string) $value));
+                $known = DietCatalog::codes();
+
+                foreach ($codes as $code) {
+                    if ($code === '' || ! in_array($code, $known, true)) {
+                        $fail("{$attribute} 含有未知的飲食類型：{$code}");
+
+                        return;
+                    }
+                }
+            }],
             'price_level' => ['nullable', 'integer', 'between:1,4'],
             'rating_min' => ['nullable', 'numeric', 'between:0,5'],
             // 只留下「此刻在該店當地時間營業中」的餐廳。沒有可解析營業時間的店

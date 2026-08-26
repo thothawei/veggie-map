@@ -224,8 +224,13 @@ class RestaurantRepository
             $query->where('district', $filters['district']);
         }
 
-        if (! empty($filters['diet'])) {
-            $query->whereHas('dietTypes', fn (Builder $q) => $q->where('code', $filters['diet']));
+        // diet 可以是單一 code 或逗號分隔的多個（`?diet=vegan,ovo_lacto`）。
+        // 多個之間是 **OR**：素食者常常「全素或蛋奶素都可以」，AND 會把結果篩成 0
+        // ——一家店不可能同時被標成全素又標成蛋奶素。
+        $dietCodes = DietCatalog::parseDietCodes($filters['diet'] ?? null);
+
+        if ($dietCodes !== []) {
+            $query->whereHas('dietTypes', fn (Builder $q) => $q->whereIn('code', $dietCodes));
         }
 
         DietCatalog::applyVenueScope($query, $filters[DietCatalog::venueScopeParam()] ?? null);
