@@ -3691,3 +3691,30 @@ Overpass 的使用政策明確要求節制，而且這很可能就是手動重�
 
 這類問題只有真的去看產出的東西才會發現——測試全綠、功能也對，但它在自己的
 輸出裡製造了噪音。
+
+---
+
+## 2026-08-26 — 自我複查：slug 直接當 cache key
+
+把 `RestaurantRepository` 從頭讀一遍時發現的：`findForDetailBySlug()` 把 slug
+原封不動串進 cache key（`'restaurant:slug:'.$slug`），而 **slug 直接來自網址**。
+
+兩個問題：
+
+1. **key 的長度與字元由外部決定**。slug 可以是任意 UTF-8——含空白、換行、`:` 的
+   字串會產生很難讀的 Redis key，排查時看不出是什麼，也可能撞到 key 的命名慣例。
+2. 掃不存在的 slug 每次都會寫一個 key。
+
+修法跟 `restaurants:search:{md5}` 一致：**先雜湊再當 key**，並抽成
+`RestaurantRepository::slugCacheKey()` 讓 `RestaurantCacheInvalidator` 用同一個函式
+算——兩邊各自拼字串遲早會不一致（先前只清 id 那份就是這種問題）。
+
+另外加一道長度守門：`slug` 欄位是 `varchar(255)`，比它長的**不可能存在**，
+提早回 404，不必拿一個 4KB 的字串去查 DB。有一條測試斷言「過長的 slug 完全不打 DB」。
+
+這不是能被利用來取得資料的漏洞，比較接近「讓外部輸入決定內部資源的形狀」——
+真正的代價是 Redis 裡塞一堆沒有意義的 key，以及排查時看不懂那些 key 是什麼。
+
+### 驗證
+
+後端 545 → **547 個測試全綠 ＋ 4 skipped**。

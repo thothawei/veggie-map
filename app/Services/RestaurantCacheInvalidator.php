@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Restaurant;
+use App\Repositories\RestaurantRepository;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -23,7 +24,8 @@ class RestaurantCacheInvalidator
         $slug = Restaurant::withoutGlobalScopes()->whereKey($restaurantId)->value('slug');
 
         if ($slug !== null) {
-            Cache::forget('restaurant:slug:'.$slug);
+            // 必須用 Repository 那個函式算，兩邊各自拼字串遲早會不一致。
+            Cache::forget(RestaurantRepository::slugCacheKey($slug));
         }
 
         Cache::tags(['restaurants'])->flush();

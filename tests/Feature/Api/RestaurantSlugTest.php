@@ -3,7 +3,9 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Restaurant;
+use App\Repositories\RestaurantRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -56,5 +58,35 @@ class RestaurantSlugTest extends TestCase
         // 只清 id 那份快取的話，這裡會拿到 600 秒的舊名字——而 slug 正是前端在用
         // 的那條路徑，等於快取失效對使用者完全沒生效。
         $this->getJson('/api/v1/restaurants/shi-fang-zhai')->assertJsonPath('data.name', '十方齋二店');
+    }
+
+    /**
+     * slug 直接來自網址。`slug` 欄位是 varchar(255)，比它長的不可能存在——
+     * 提早擋掉，才不會拿一個 4KB 的字串去查 DB、還順便寫一個 4KB 的 cache key。
+     */
+    public function test_absurdly_long_slug_is_rejected_without_touching_the_database(): void
+    {
+        DB::enableQueryLog();
+
+        $this->getJson('/api/v1/restaurants/'.str_repeat('a', 4000))->assertNotFound();
+
+        $queries = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        $this->assertSame(
+            [],
+            array_filter($queries, fn (array $q) => str_contains($q['query'], 'restaurants')),
+            '過長的 slug 不該打到 DB',
+        );
+    }
+
+    public function test_slug_cache_key_is_hashed_so_the_url_cannot_shape_redis_keys(): void
+    {
+        $weird = "slug with spaces\nand newline";
+
+        $this->assertSame(
+            'restaurant:slug:'.md5($weird),
+            RestaurantRepository::slugCacheKey($weird),
+        );
     }
 }

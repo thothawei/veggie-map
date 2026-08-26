@@ -86,11 +86,33 @@ class RestaurantRepository
      */
     public function findForDetailBySlug(string $slug): ?Restaurant
     {
+        // slug 直接來自網址。`slug` 欄位是 varchar(255)，比它長的不可能存在——
+        // 提早擋掉，才不會拿一個 4KB 的字串去查 DB、還順便寫一個 4KB 的 cache key。
+        if ($slug === '' || mb_strlen($slug) > 255) {
+            return null;
+        }
+
         return Cache::remember(
-            'restaurant:slug:'.$slug,
+            self::slugCacheKey($slug),
             600,
             fn () => $this->detailQuery()->where('slug', $slug)->first(),
         );
+    }
+
+    /**
+     * slug 進 cache key 前先雜湊。
+     *
+     * 兩個理由，都跟「這個值來自網址」有關：
+     * 1. **長度與字元可控**——slug 可以是任意 UTF-8，直接串進 key 會產生奇怪的
+     *    Redis key（含空白、換行、`:`），排查時很難讀，也可能撞到 key 的命名慣例。
+     * 2. 掃不存在的 slug 每次都會寫一個 key。雜湊之後至少長度固定，TTL 到期就消失。
+     *
+     * 跟 `restaurants:search:{md5}` 同一套做法。`RestaurantCacheInvalidator` 必須
+     * 用同一個函式算 key，否則清不掉（這正是先前只清 id 那份時踩到的問題）。
+     */
+    public static function slugCacheKey(string $slug): string
+    {
+        return 'restaurant:slug:'.md5($slug);
     }
 
     /**
