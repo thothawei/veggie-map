@@ -13,6 +13,13 @@ const emit = defineEmits<{
 const query = ref('');
 const results = ref<GeocodedPlace[]>([]);
 const suggestions = ref<RestaurantSuggestions>({ restaurants: [], cuisines: [], districts: [] });
+
+/**
+ * 已經替哪個字串查過地點。地點查詢只在按下搜尋／Enter 時才發生，而下拉在打字時
+ * 就打開了——沒有這個旗標的話，打完字還沒按搜尋的那段時間，清單會顯示
+ * 「找不到符合的地點」。**那時候根本還沒查過**（2026-08-26 瀏覽器實測）。
+ */
+const searchedQuery = ref<string | null>(null);
 const loading = ref(false);
 const showResults = ref(false);
 const error = ref<string | null>(null);
@@ -37,6 +44,11 @@ const hasSuggestions = computed(
 
 function onInput() {
     const q = query.value.trim();
+
+    // 字改了就不再是「查過的那個字串」——不然改完字還會沿用上一次的查詢結果狀態。
+    if (q !== searchedQuery.value) {
+        searchedQuery.value = null;
+    }
 
     window.clearTimeout(debounceTimer);
 
@@ -82,6 +94,7 @@ async function search() {
 
     if (q === '') {
         results.value = [];
+        searchedQuery.value = null;
         showResults.value = false;
         error.value = null;
 
@@ -95,6 +108,8 @@ async function search() {
 
     if (q.length < 2) {
         results.value = [];
+        // 太短不打 Nominatim，但那不等於「查過了、沒有結果」。
+        searchedQuery.value = null;
 
         return;
     }
@@ -105,8 +120,10 @@ async function search() {
             params: { q },
         });
         results.value = response.data.data;
+        searchedQuery.value = q;
     } catch (e: unknown) {
         results.value = [];
+        searchedQuery.value = null;
         error.value = extractApiErrorMessage(e, '搜尋地點失敗，請再試一次');
     } finally {
         loading.value = false;
@@ -213,7 +230,14 @@ function select(place: GeocodedPlace) {
             <li v-for="place in results" :key="place.display_name" @mousedown.prevent="select(place)">
                 {{ place.display_name }}
             </li>
-            <li v-if="!loading && results.length === 0 && !hasSuggestions" class="empty-item">
+            <!--
+              只有真的查過地點才說「找不到」。打字時下拉就開了，但地點查詢要按下
+              搜尋才會發生——沒有這個條件的話，那段空窗期會顯示一個還沒發生的結論。
+            -->
+            <li
+                v-if="!loading && searchedQuery === query.trim() && results.length === 0 && !hasSuggestions"
+                class="empty-item"
+            >
                 找不到符合的地點
             </li>
         </ul>

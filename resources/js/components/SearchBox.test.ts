@@ -173,3 +173,65 @@ describe('SearchBox 自動完成', () => {
         expect(hints[1]).toBe('地址未提供');
     });
 });
+
+describe('SearchBox 「找不到地點」的時機', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        get.mockReset();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    /**
+     * 2026-08-26 瀏覽器實測抓到：打完字還沒按搜尋時，下拉就顯示「找不到符合的地點」
+     * ——但地點查詢只在按下搜尋／Enter 時才發生，**那時候根本還沒查過**。
+     */
+    it('還沒按搜尋時不說「找不到符合的地點」', async () => {
+        get.mockResolvedValue({ data: { data: { restaurants: [], cuisines: [], districts: [] } } });
+
+        const wrapper = mount(SearchBox);
+        await wrapper.find('input').setValue('台中一中街');
+        await vi.advanceTimersByTimeAsync(300);
+        await flushPromises();
+
+        // 下拉是開的（有「搜尋餐廳」那一項），但不能宣稱地點找不到。
+        expect(wrapper.find('.keyword-option').exists()).toBe(true);
+        expect(wrapper.text()).not.toContain('找不到符合的地點');
+    });
+
+    it('真的查過而且沒有結果時才說找不到', async () => {
+        get.mockImplementation((url: string) => {
+            if (url === '/geocode') return Promise.resolve({ data: { data: [] } });
+
+            return Promise.resolve({ data: { data: { restaurants: [], cuisines: [], districts: [] } } });
+        });
+
+        const wrapper = mount(SearchBox);
+        await wrapper.find('input').setValue('不存在的地名');
+        await wrapper.find('button').trigger('click');
+        await flushPromises();
+
+        expect(wrapper.text()).toContain('找不到符合的地點');
+    });
+
+    it('查過之後又改字，就不再沿用上一次的結論', async () => {
+        get.mockImplementation((url: string) => {
+            if (url === '/geocode') return Promise.resolve({ data: { data: [] } });
+
+            return Promise.resolve({ data: { data: { restaurants: [], cuisines: [], districts: [] } } });
+        });
+
+        const wrapper = mount(SearchBox);
+        await wrapper.find('input').setValue('不存在的地名');
+        await wrapper.find('button').trigger('click');
+        await flushPromises();
+        expect(wrapper.text()).toContain('找不到符合的地點');
+
+        await wrapper.find('input').setValue('台中一中街');
+        await flushPromises();
+
+        expect(wrapper.text()).not.toContain('找不到符合的地點');
+    });
+});
