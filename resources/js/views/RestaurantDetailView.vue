@@ -5,7 +5,7 @@ import client from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { extractApiErrorMessage } from '@/lib/apiError';
 import { applyMenuItemDiets, menuItemDiets } from '@/lib/dietCatalog';
-import { formatAddress, formatCuisines, formatOpenStatus } from '@/lib/format';
+import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
 import { safeHttpUrl } from '@/lib/redirect';
 import type { AdminVerificationType, ApiSuccess, DietType, Feature, MenuItem, MenuItemDiet, Restaurant } from '@/types';
 
@@ -35,6 +35,12 @@ const websiteUrl = computed(() => safeHttpUrl(restaurant.value?.website));
 const displayAddress = computed(() => (restaurant.value ? formatAddress(restaurant.value) : null));
 const cuisineLine = computed(() => formatCuisines(restaurant.value?.cuisines));
 const openStatus = computed(() => (restaurant.value ? formatOpenStatus(restaurant.value) : null));
+
+/** 附近搜尋的範圍與筆數。2km 是走得到的距離；六筆一排排得下也不會搶走主內容。 */
+const NEARBY_RADIUS_KM = 2;
+const NEARBY_LIMIT = 6;
+
+const nearby = ref<Restaurant[]>([]);
 
 const menuGroups = computed(() => {
     const items = restaurant.value?.menu_items ?? [];
@@ -68,6 +74,43 @@ function labelFor(code: string, labels: Record<string, string>): string {
     return labels[code] ?? code;
 }
 
+/**
+ * 「附近的素食餐廳」。
+ *
+ * 看到一家不合適的店（今天公休、不是全素、太貴）時，使用者的下一步幾乎一定是
+ * 「那附近還有什麼」——原本得自己退回地圖再找一次。復用同一支搜尋 API，不另外
+ * 做一個推薦端點。
+ *
+ * `venue_scope=all`：這裡的目的是「附近還有哪些選擇」，把素食友善店排除掉會讓
+ * 這個區塊在很多地方變成空的。卡片本身會標示是純素食店還是素食友善。
+ */
+async function loadNearby(current: Restaurant) {
+    nearby.value = [];
+
+    try {
+        const response = await client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
+            params: {
+                latitude: current.latitude,
+                longitude: current.longitude,
+                radius: NEARBY_RADIUS_KM,
+                sort: 'distance',
+                per_page: NEARBY_LIMIT + 1,
+                venue_scope: 'all',
+            },
+        });
+
+        // 半徑搜尋一定會撈到自己（距離 0），要濾掉；多要一筆就是為了濾掉之後
+        // 仍然湊得滿。
+        nearby.value = response.data.data
+            .filter((item) => item.id !== current.id)
+            .slice(0, NEARBY_LIMIT);
+    } catch {
+        // 這是輔助區塊，失敗就整段不顯示。為了它在詳情頁跳一個紅色錯誤，
+        // 會讓使用者以為主要內容也壞了。
+        nearby.value = [];
+    }
+}
+
 async function load() {
     loading.value = true;
     notFound.value = false;
@@ -75,6 +118,7 @@ async function load() {
     try {
         const response = await client.get<ApiSuccess<Restaurant>>(`/restaurants/${props.id}`);
         restaurant.value = response.data.data;
+        await loadNearby(response.data.data);
     } catch (error: unknown) {
         restaurant.value = null;
         if (isAxiosError(error) && error.response?.status === 404) {
@@ -283,6 +327,26 @@ watch(() => props.id, load, { immediate: true });
                     </button>
                 </form>
             </section>
+
+            <section v-if="nearby.length" class="nearby">
+                <h2>附近的素食餐廳</h2>
+                <ul>
+                    <li v-for="item in nearby" :key="item.id">
+                        <RouterLink :to="{ name: 'restaurant-detail', params: { id: item.slug ?? item.id } }">
+                            <strong>{{ item.name }}</strong>
+                            <span v-if="item.venue_badge" class="venue-badge">{{ item.venue_badge }}</span>
+                            <span v-if="formatDistance(item.distance_meters)" class="distance">
+                                {{ formatDistance(item.distance_meters) }}
+                            </span>
+                            <span
+                                v-if="formatOpenStatus(item)"
+                                class="open-status"
+                                :data-state="formatOpenStatus(item)?.state"
+                            >{{ formatOpenStatus(item)?.text }}</span>
+                        </RouterLink>
+                    </li>
+                </ul>
+            </section>
         </template>
     </div>
 </template>
@@ -441,5 +505,33 @@ header {
 
 .open-status[data-state='closed'] {
     color: #718096;
+}
+
+.nearby ul {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.nearby a {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.nearby a:hover {
+    border-color: #2f855a;
+}
+
+.nearby .distance {
+    color: #718096;
+    font-size: 0.85rem;
 }
 </style>

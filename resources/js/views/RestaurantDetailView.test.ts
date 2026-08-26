@@ -6,7 +6,17 @@ import { resetVenueScopeMeta } from '@/lib/dietCatalog';
 import { useAuthStore } from '@/stores/auth';
 
 const post = vi.fn();
+
+/** 附近搜尋（`GET /restaurants`）的回應，各測試可以覆蓋。 */
+let nearbyPayload: { data: unknown[] } = { data: [] };
+let nearbyFails = false;
+
 const get = vi.fn((url: string) => {
+    if (url === '/restaurants') {
+        return nearbyFails
+            ? Promise.reject(new Error('network'))
+            : Promise.resolve({ data: nearbyPayload });
+    }
     if (url === '/me/favorites') {
         return Promise.resolve({ data: { data: [] } });
     }
@@ -135,6 +145,7 @@ describe('RestaurantDetailView', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         resetVenueScopeMeta();
+        nearbyPayload = { data: [] };
     });
 
     it('飲食與特色顯示中文標籤，不是 raw code', async () => {
@@ -260,5 +271,50 @@ describe('RestaurantDetailView', () => {
 
         expect(wrapper.text()).toContain('載入餐廳失敗');
         expect(wrapper.find('h1').exists()).toBe(false);
+    });
+});
+
+describe('RestaurantDetailView 附近的素食餐廳', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        resetVenueScopeMeta();
+        nearbyPayload = { data: [] };
+        nearbyFails = false;
+    });
+
+    it('列出附近的店，並把自己濾掉', async () => {
+        nearbyPayload = {
+            data: [
+                { id: 1, name: '第一家', slug: 'first', distance_meters: 0, diet_types: [], features: [] },
+                { id: 9, name: '隔壁素食', slug: 'next-door', distance_meters: 320, diet_types: [], features: [] },
+            ],
+        };
+
+        const { wrapper } = await mountDetail('1');
+
+        const text = wrapper.find('.nearby').text();
+        expect(text).toContain('隔壁素食');
+        // 半徑搜尋一定會撈到自己（距離 0），列出來只會讓人困惑。
+        expect(text).not.toContain('第一家');
+    });
+
+    it('附近沒有別家時整段不顯示，不留一個空標題', async () => {
+        nearbyPayload = {
+            data: [{ id: 1, name: '第一家', slug: 'first', distance_meters: 0, diet_types: [], features: [] }],
+        };
+
+        const { wrapper } = await mountDetail('1');
+
+        expect(wrapper.find('.nearby').exists()).toBe(false);
+    });
+
+    it('附近搜尋失敗時安靜略過，不讓人以為主要內容也壞了', async () => {
+        nearbyFails = true;
+
+        const { wrapper } = await mountDetail('1');
+
+        expect(wrapper.find('.nearby').exists()).toBe(false);
+        expect(wrapper.text()).toContain('第一家');
+        expect(wrapper.find('.error').exists()).toBe(false);
     });
 });

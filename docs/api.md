@@ -118,6 +118,12 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 - 帶 `keyword` 時**預設就是 `relevance`**；沒帶時維持原本的 `distance`／`newest`。
   `sort=relevance` 沒帶 `keyword` 會回 422，不會悄悄退回其他排序。
 
+### 附近的餐廳（前端組合，沒有新端點）
+
+詳情頁的「附近的素食餐廳」直接用 `GET /restaurants?latitude&longitude&radius=2&sort=distance&venue_scope=all`，
+沒有另外開一支推薦端點——那會是同一個查詢換個名字。前端自己把「自己」濾掉
+（半徑搜尋一定會撈到距離 0 的那一筆）。
+
 ### 素食可信度篩選與排序
 
 `confidence_min=N` 只留下可信度 ≥ N 的餐廳；`sort=confidence` 依可信度由高到低排序
