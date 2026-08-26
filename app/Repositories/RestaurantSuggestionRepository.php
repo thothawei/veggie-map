@@ -147,7 +147,7 @@ class RestaurantSuggestionRepository
             ->where('district', '!=', '');
 
         foreach ($terms as $term) {
-            $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $term).'%';
+            $like = '%'.KeywordSearch::escapeLike($term).'%';
             $query->where(fn (Builder $q) => $q->where('district', 'like', $like)->orWhere('city', 'like', $like));
         }
 

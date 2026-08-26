@@ -152,4 +152,18 @@ class RestaurantSuggestTest extends TestCase
         $this->getJson('/api/v1/cities')->assertStatus(429);
         $this->getJson('/api/v1/restaurants/suggest?q=素食')->assertOk();
     }
+
+    /**
+     * 跳脫規則跟搜尋本身共用（`KeywordSearch::escapeLike`）。各寫一份的話會出現
+     * 「搜尋跳脫了、建議沒跳脫」這種只在特定關鍵字下才現形的不一致。
+     */
+    public function test_like_wildcards_are_escaped_in_suggestions_too(): void
+    {
+        Restaurant::factory()->create(['name' => '甲蔬食']);
+        Restaurant::factory()->create(['name' => '乙蔬食']);
+
+        $data = $this->getJson('/api/v1/restaurants/suggest?q='.urlencode('%'))->json('data');
+
+        $this->assertSame([], $data['restaurants']);
+    }
 }

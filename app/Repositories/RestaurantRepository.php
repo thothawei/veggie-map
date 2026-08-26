@@ -307,7 +307,10 @@ class RestaurantRepository
             ->whereIn('restaurant_id', $ids)
             ->where(function ($query) use ($terms) {
                 foreach ($terms as $term) {
-                    $query->orWhere('name', 'like', '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $term).'%');
+                    // 跳脫規則跟搜尋本身共用（見 KeywordSearch::escapeLike），
+                    // 各寫一份的話會出現「搜尋跳脫了、標示命中原因沒跳脫」這種
+                    // 只在特定關鍵字下才現形的不一致。
+                    $query->orWhere('name', 'like', '%'.KeywordSearch::escapeLike($term).'%');
                 }
             })
             ->get(['id', 'restaurant_id', 'name'])

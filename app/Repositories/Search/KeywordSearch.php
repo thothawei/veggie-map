@@ -173,8 +173,12 @@ final class KeywordSearch
     /**
      * `%` 與 `_` 在 LIKE 裡是萬用字元。不跳脫的話，搜尋「100%純素」會退化成
      * 「1、0、0、任意字串、純素」——命中一堆不相干的店，而且使用者無從理解。
+     *
+     * public 是因為「命中原因」那段查詢（RestaurantRepository::attachMatchReasons）
+     * 要用同一套規則。兩邊各寫一份的話，日後只改一邊就會出現「搜尋跳脫了、
+     * 標示命中原因沒跳脫」這種只在特定關鍵字下才現形的不一致。
      */
-    private static function escapeLike(string $value): string
+    public static function escapeLike(string $value): string
     {
         return str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $value);
     }
