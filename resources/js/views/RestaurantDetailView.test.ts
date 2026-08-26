@@ -109,6 +109,26 @@ const get = vi.fn((url: string) => {
         });
     }
 
+    // 舊 slug（restaurant_slug_aliases）：後端仍然回這家店，但 payload 裡的 slug
+    // 是現行值。
+    if (url === '/restaurants/osm-node-9') {
+        return Promise.resolve({
+            data: {
+                data: {
+                    id: 9,
+                    name: '清心蔬食',
+                    slug: 'qing-xin-shu-shi',
+                    address: '',
+                    rating: 0,
+                    rating_count: 0,
+                    diet_types: [],
+                    features: [],
+                    menu_items: [],
+                },
+            },
+        });
+    }
+
     return Promise.reject(new Error('network'));
 });
 
@@ -365,5 +385,20 @@ describe('RestaurantDetailView 可信度依據', () => {
         const { wrapper } = await mountDetail('1');
 
         expect(wrapper.find('.confidence').exists()).toBe(false);
+    });
+
+    it('用舊 slug 進來時，網址換成現行 slug', async () => {
+        const { router } = await mountDetail('osm-node-9');
+        await flushPromises();
+
+        expect(router.currentRoute.value.params.id).toBe('qing-xin-shu-shi');
+    });
+
+    it('數字 id 的網址刻意不換成 slug（舊的數字連結仍然有效）', async () => {
+        detailOverrides = { slug: 'di-yi-jia' };
+        const { router } = await mountDetail('1');
+        await flushPromises();
+
+        expect(router.currentRoute.value.params.id).toBe('1');
     });
 });

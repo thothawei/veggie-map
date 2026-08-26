@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\Feature;
 use App\Models\MenuItem;
 use App\Models\Restaurant;
+use App\Models\RestaurantSlugAlias;
 use App\Repositories\Search\KeywordSearch;
 use App\Support\CityCatalog;
 use App\Support\DietCatalog;
@@ -99,7 +100,8 @@ class RestaurantRepository
             return $cached;
         }
 
-        $restaurant = $this->detailQuery()->where('slug', $slug)->first();
+        $restaurant = $this->detailQuery()->where('slug', $slug)->first()
+            ?? $this->findByAliasSlug($slug);
 
         // 找不到不寫 cache。Cache::remember(null) 看起來像快取了 404，但 get() 拿到
         // null 會當成 miss，下次還是打 DB，只是白寫一個 key。
@@ -108,6 +110,24 @@ class RestaurantRepository
         }
 
         return $restaurant;
+    }
+
+    /**
+     * 舊 slug 仍然打得開（`restaurant_slug_aliases`）。
+     *
+     * slug 一旦分享出去就是別人手上的網址，回寫拼音 slug 時把舊值留在 alias 表，
+     * 這裡再往回解析——否則那些連結全部 404。回傳的是正牌那家店，payload 裡的
+     * `slug` 就是現行值，前端可以據此把網址換掉。
+     */
+    private function findByAliasSlug(string $slug): ?Restaurant
+    {
+        $restaurantId = RestaurantSlugAlias::where('slug', $slug)->value('restaurant_id');
+
+        if ($restaurantId === null) {
+            return null;
+        }
+
+        return $this->detailQuery()->find($restaurantId);
     }
 
     /**

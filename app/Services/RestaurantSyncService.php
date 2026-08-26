@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\DietType;
 use App\Models\Feature;
 use App\Models\Restaurant;
+use App\Models\RestaurantSlugAlias;
 use App\Services\External\BoundingBox;
 use App\Services\External\RestaurantData;
 use App\Services\External\RestaurantProviderInterface;
@@ -114,7 +115,9 @@ class RestaurantSyncService
         $slug = $base;
         $suffix = 1;
 
-        while (Restaurant::where('slug', $slug)->exists()) {
+        // alias 也要避開：舊 slug 仍然解析得到另一家店，新店拿去用的話同一個網址
+        // 會有兩個主人，轉址變成不確定的。
+        while (Restaurant::where('slug', $slug)->exists() || RestaurantSlugAlias::where('slug', $slug)->exists()) {
             $slug = $base.'-'.(++$suffix);
         }
 

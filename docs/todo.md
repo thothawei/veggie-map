@@ -710,6 +710,10 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       改由 P0 `config/diet.php` 的 `implies[]` 處理，預設關、用設定打開，不當寫死規則。
 - [ ] ~~**台南要不要從 `only` 放寬成 `yes`**~~
       已由產品決定：Phase B 台灣四市（含台南）都改收友善店；預設篩選仍 exclusive。
+- [x] **舊資料的 slug 回寫拼音** ✅ 2026-08-26 產品決定：回寫，但舊網址不能死。
+      建 `restaurant_slug_aliases` 接住舊 slug，`restaurants:backfill-slugs`
+      （預設 dry-run）負責換。**開發／正式庫的實際回寫另外執行**，見 progress.md。
+
 - [ ] **匯入的 `city`／`district`／`address` 空字串 vs NULL**
       語意上 NULL 較正確，改了要連搜尋與前端空值判斷一起看。
 - [ ] **要不要加 `LICENSE` 檔**

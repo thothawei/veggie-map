@@ -28,6 +28,18 @@ class RestaurantObserver
         );
     }
 
+    /**
+     * alias 是 FK cascade 刪掉的，`deleted` 時已經查不到了。趁列還在先清一次，
+     * 否則舊網址會繼續吐 600 秒已刪除的店。
+     *
+     * 不用實例屬性把 slug 從 deleting 帶到 deleted：observer 是每次事件由容器
+     * 重新解析的，兩個 callback 不是同一個實例。
+     */
+    public function deleting(Restaurant $restaurant): void
+    {
+        RestaurantCacheInvalidator::invalidate($restaurant->id, $restaurant->slug);
+    }
+
     public function deleted(Restaurant $restaurant): void
     {
         // 列已經不在 DB，slug 只能從記憶體裡的 model 拿。

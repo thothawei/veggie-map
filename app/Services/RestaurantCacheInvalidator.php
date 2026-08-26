@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Restaurant;
+use App\Models\RestaurantSlugAlias;
 use App\Repositories\RestaurantRepository;
 use Illuminate\Support\Facades\Cache;
 
@@ -24,8 +25,12 @@ class RestaurantCacheInvalidator
 
         $fromDb = Restaurant::withoutGlobalScopes()->whereKey($restaurantId)->value('slug');
 
+        // 舊 slug 也解析得到這家店（見 restaurant_slug_aliases），所以它們各自有一份
+        // 快取要清。刪除時這張表會被 FK cascade 清掉，所以是在 `deleting` 清的。
+        $aliases = RestaurantSlugAlias::where('restaurant_id', $restaurantId)->pluck('slug')->all();
+
         $slugs = array_unique(array_filter(
-            [$fromDb, ...$knownSlugs],
+            [$fromDb, ...$aliases, ...$knownSlugs],
             fn (mixed $slug): bool => is_string($slug) && $slug !== '',
         ));
 

@@ -3757,3 +3757,45 @@ slug 快取沒走 `Cache::tags(['restaurants'])`（那是搜尋列表用的）�
 **不回寫既有列。** slug 只在 create 時產生，重跑 sync 也不改。已經分享出去的 `osm-node-*` 網址維持有效；新匯入的才是拼音。若要幫舊資料換拼音，那是一次資料異動，另外同意再做。
 
 反向：拼音拿掉的話，「清心蔬食」會回到 `osm-node-1`，`test_chinese_name_is_not_the_source_id_fallback` 會紅。
+
+## 2026-08-26 — 混合中英店名的 slug 把英文的連字號吃掉了
+
+驗收前一則的拼音 slug 時，掃既有資料發現 `DuBuque-Erdman 全素` 會變成
+`dubuqueerdman-quan-su`——兩個英文字黏在一起。
+
+機制：`Pinyin::permalink()` 把整串吃進去時，會把非漢字字元一律當分隔符移除，再用
+自己的 delimiter 重組。空白變 `-`，但原本就有的 `-` 反而消失。原本的測試只涵蓋純
+中文／純 ASCII／emoji 三種，混合名稱這條沒測到。
+
+改成只把漢字段落（`/\p{Han}+/u`）送去拼音，其餘原樣交給 `Str::slug()`。
+反向：改回整串 `permalink`，`test_mixed_name_keeps_the_hyphen_inside_the_ascii_part` 會紅。
+
+## 2026-08-26 — 舊資料的 slug 回寫拼音，舊網址用別名表接住
+
+拼音只在 create 時產生，所以上線前匯入的中文店名仍然是 `osm-node-123`。開發庫掃出
+**967 家**店名含漢字、slug 卻不是現行規則會給的值。
+
+直接回寫會讓已經分享出去的網址 404，所以先建 `restaurant_slug_aliases`（舊 slug →
+餐廳，unique），`GET /restaurants/{idOrSlug}` 查不到正牌 slug 就往這張表找，回的是
+正牌那家店、payload 裡的 `slug` 是現行值。前端拿到後用 `router.replace` 把網址換成
+正牌 slug——數字 id 的網址刻意不換（第二十六節說舊的數字連結仍然有效）。
+
+`php artisan restaurants:backfill-slugs`（**預設 dry-run，`--force` 才寫**）。三個
+容易錯過的地方：
+
+1. **同一輪撞名**：兩家「清心蔬食」在 dry-run 時都還沒寫進 DB，只查 DB 的話報表會
+   說兩家都變成 `qing-xin-shu-shi`。而那份報表正是使用者用來決定要不要 `--force` 的
+   依據，不能說謊——用一個 in-memory 的 `$taken` 補上。
+   （`--force` 是逐筆立即寫入，所以那條路徑光靠 DB 檢查就夠——反向驗證時先發現拔掉
+   `$taken` 測試不會紅，才補了直接針對 dry-run 報表的那一條。）
+2. **重跑不能一直加 `-2`**：撞名檢查要排除自己。
+3. **新店也要避開 alias 表**（`RestaurantSyncService::uniqueSlug()`），否則同一個網址
+   會同時是 A 的別名與 B 的正牌 slug。
+
+快取：alias 各自有一份 `restaurant:slug:{md5}`，Invalidator 一併清。刪除那條路徑是在
+`deleting` 就先清——alias 是 FK cascade 刪的，`deleted` 時已經查不到了。過程中也修掉
+一個原本打算用「`deleting` 抄下來、`deleted` 再用」的實例屬性寫法：observer 每次事件
+都由容器重新解析，兩個 callback 不是同一個實例，那個值永遠是空的。
+
+後端 570 綠、前端 298 綠、PHPStan 0、Pint PASS。**開發庫還沒回寫**——那是一次資料
+異動，等使用者看過 dry-run 報表再跑。

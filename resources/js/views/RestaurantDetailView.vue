@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { isAxiosError } from 'axios';
 import client from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
@@ -12,6 +13,7 @@ import type { AdminVerificationType, ApiSuccess, DietType, Feature, MenuItem, Me
 const props = defineProps<{ id: string }>();
 
 const auth = useAuthStore();
+const router = useRouter();
 
 const restaurant = ref<Restaurant | null>(null);
 const loading = ref(true);
@@ -111,6 +113,20 @@ async function loadNearby(current: Restaurant) {
     }
 }
 
+/**
+ * 用舊 slug（restaurant_slug_aliases）進來時，後端仍然回這家店，但網址還是舊的。
+ * 換成現行 slug，之後分享出去的才是正牌網址。
+ *
+ * 只處理「非數字的 id 參數且與現行 slug 不同」＝別名那條路；數字 id 的連結刻意
+ * 留著不動（第二十六節說舊的數字連結仍然有效）。
+ */
+function replaceWithCanonicalSlug(loaded: Restaurant) {
+    const requested = props.id;
+    if (!loaded.slug || /^\d+$/.test(requested) || requested === loaded.slug) return;
+
+    void router.replace({ name: 'restaurant-detail', params: { id: loaded.slug } });
+}
+
 async function load() {
     loading.value = true;
     notFound.value = false;
@@ -118,6 +134,7 @@ async function load() {
     try {
         const response = await client.get<ApiSuccess<Restaurant>>(`/restaurants/${props.id}`);
         restaurant.value = response.data.data;
+        replaceWithCanonicalSlug(response.data.data);
         await loadNearby(response.data.data);
     } catch (error: unknown) {
         restaurant.value = null;

@@ -32,7 +32,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 |---|---|---|---|
 | GET | `/restaurants` | 列表＋搜尋（見下方查詢參數） | 選用（登入可帶收藏狀態） |
 | GET | `/restaurants/recommended` | 推薦餐廳（首頁用，見下方） | 無 |
-| GET | `/restaurants/{idOrSlug}` | 詳情 | 選用 |
+| GET | `/restaurants/{idOrSlug}` | 詳情。純數字＝id，其餘＝slug；換掉的舊 slug 也仍然解析得到（`restaurant_slug_aliases`），回應裡的 `slug` 是現行值 | 選用 |
 | POST | `/restaurants/{id}/favorite` | 加入收藏 | 必須 |
 | DELETE | `/restaurants/{id}/favorite` | 取消收藏 | 必須 |
 | POST | `/restaurants/{id}/reviews` | 新增評論 | 必須 |
@@ -310,9 +310,15 @@ Controller 只做「呼叫 Service／回傳 Resource」，不做欄位驗證與�
 - `GET /restaurants/{id}`：`restaurant:{id}`，TTL 600s。route 不用 implicit model
   binding（那樣會在進 controller 前就先查一次 DB，等於白做快取），改用純 id 查詢，
   查詢本身包在 `Cache::remember()` 裡。
+- `GET /restaurants/{slug}`：`restaurant:slug:{md5(slug)}`，TTL 600s。slug 來自網址，
+  先雜湊才當 key（長度與字元可控，掃不存在的 slug 也不會寫出奇怪的 key）。查不到
+  **不寫 cache**——`Cache::remember()` 存 null 下次 `get()` 仍是 miss，只是白寫一個 key。
+  舊 slug（alias）命中時也用同一套 key 快取。
 - 寫入後清快取：`Restaurant`／`RestaurantConfidenceScore` 兩個 model 都掛了 Observer，
-  存檔／刪除時 `Cache::forget("restaurant:{id}")` + `Cache::tags(['restaurants'])->flush()`，
-  不做全域 `Cache::flush()`（會清掉跟餐廳無關的 cache，例如 geocode 結果）。
+  存檔／刪除時 `Cache::forget("restaurant:{id}")` + slug 與**所有 alias** 各自那份
+  + `Cache::tags(['restaurants'])->flush()`，不做全域 `Cache::flush()`（會清掉跟餐廳
+  無關的 cache，例如 geocode 結果）。alias 是 FK cascade 刪的，所以刪除那條路徑
+  是在 `deleting` 就先清一次——`deleted` 時那些列已經查不到了。
 
 ## Rate Limiting
 

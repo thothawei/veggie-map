@@ -25,6 +25,7 @@ erDiagram
     RESTAURANTS ||--o{ FAVORITES : "favorited in"
     USERS ||--o{ FAVORITES : has
     RESTAURANTS ||--o{ REVIEWS : has
+    RESTAURANTS ||--o{ RESTAURANT_SLUG_ALIASES : "old urls"
     USERS ||--o{ REVIEWS : writes
 
     RESTAURANTS {
@@ -152,7 +153,7 @@ erDiagram
 |---|---|---|
 | id | bigint unsigned, PK | |
 | name | varchar(255) | |
-| slug | varchar(255), unique | URL 用，供 `/restaurants/{slug}`。漢字店名用拼音（`qing-xin-shu-shi`），`Str::slug()` 轉不出來才退回 `{source}-{source_id}` |
+| slug | varchar(255), unique | URL 用，供 `/restaurants/{slug}`。漢字段落用拼音（`qing-xin-shu-shi`），其餘走 `Str::slug()`，兩邊都轉不出來才退回 `{source}-{source_id}`。只在 create 時產生，換掉時舊值要留進 `restaurant_slug_aliases` |
 | description | text, nullable | |
 | address | varchar(255) | |
 | city | varchar(100) | |
@@ -188,6 +189,25 @@ erDiagram
 半徑搜尋策略：先用經緯度算出的 Bounding Box 做 `MBRContains`/範圍過濾（能吃到 Spatial Index），
 再對縮小後的候選集用 `ST_Distance_Sphere` 算精確距離並排序——避免對全表直接跑
 `ST_Distance_Sphere`（那樣即使有 Spatial Index 也無法被使用，等同全表掃描）。
+
+### `restaurant_slug_aliases`
+
+曾經有效、現在已被換掉的 slug。slug 一旦分享出去就是別人手上的網址，改名等於讓那條
+連結 404；`GET /restaurants/{idOrSlug}` 查不到正牌 slug 時會往這張表找。
+
+由 `php artisan restaurants:backfill-slugs --force` 寫入（拼音上線前匯入的中文店名
+仍是 `osm-node-123`，那支指令把它們換成拼音並把舊值留在這裡）。
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| id | bigint unsigned, PK | |
+| restaurant_id | FK → restaurants, cascade delete | 店刪掉，別名跟著消失 |
+| slug | varchar(255), unique | 舊 slug。unique：一個舊網址只能有一個主人，否則轉址是不確定的 |
+| created_at | timestamp | |
+
+新店產生 slug 時**也要避開這張表**（`RestaurantSyncService::uniqueSlug()`），
+否則同一個網址會同時是 A 的別名與 B 的正牌 slug。
+
 
 **座標軸順序陷阱（Phase 2 實測過）**：MySQL 8 對 SRID 4326 強制套用 EPSG:4326 定義的軸順序
 （緯度在前、經度在後），跟一般「經度, 緯度」的直覺相反。正確寫法是先用笛卡兒座標建立
