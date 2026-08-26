@@ -43,6 +43,13 @@
           QueryPerformanceLogger::handle() 驗證邏輯，不靠這個監聽器。
         -->
         <env name="VEGGIEMAP_SLOW_QUERY_MS" value="0"/>
+        <!--
+          慢請求門檻在測試裡拉高但**不關掉**。測試環境的 QUEUE_CONNECTION=sync，
+          會把 CalculateRestaurantScoreJob 這種工作直接跑在請求裡（實測
+          admin/reports/approve 因此要 1.2 秒），那是測試設定造成的、不是端點本身慢。
+          留 5 秒當哨兵：真的有端點跑超過五秒，那就是卡住了，值得看見。
+        -->
+        <env name="VEGGIEMAP_SLOW_REQUEST_MS" value="5000"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

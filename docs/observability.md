@@ -30,6 +30,10 @@ middleware group 的最前面。
   有使用者搜尋的關鍵字與座標，屬於個人資料。
 - 刻意不寫進資料表：那需要一張會無限成長的表與清理排程。要接 Laravel Pulse／APM
   也是換這一層。
+- **測試環境把門檻拉到 5 秒但不關掉**（`phpunit.xml`）。測試的
+  `QUEUE_CONNECTION=sync` 會把 `CalculateRestaurantScoreJob` 這種工作直接跑在請求裡
+  （實測 `admin/reports/approve` 因此要 1.2 秒），那是測試設定造成的、不是端點本身慢。
+  留 5 秒當哨兵：真的有端點跑超過五秒就是卡住了，值得看見。
 
 ## Queue Failures
 
