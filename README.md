@@ -10,6 +10,25 @@ Backend Engineer 系統設計能力」為目標的作品專案，不是一個簡
 搜尋建議（自動完成）、素食可信度篩選／排序。詳細進度見
 [docs/progress.md](docs/progress.md)，剩餘規劃見 [docs/todo.md](docs/todo.md)。
 
+## 兩分鐘看懂這個專案
+
+如果你只有兩分鐘（例如在面試前掃一眼），這幾條路徑最能看出設計決策：
+
+| 想看什麼 | 去哪裡 |
+|---|---|
+| **「不知道」不等於「打烊」** | [`app/Support/OpeningHours.php`](app/Support/OpeningHours.php)：OSM 營業時間只解析可信的子集，其餘一律回 `null`，一路誠實傳到 UI 顯示「營業時間未知」 |
+| **搜尋為什麼是這樣排的** | [`app/Repositories/Search/KeywordSearch.php`](app/Repositories/Search/KeywordSearch.php)：WHERE 與相關性運算式放在同一個類別，因為兩者用同一組欄位，拆開遲早漂移 |
+| **第三方掛掉怎麼辦** | [`app/Services/External/CircuitBreaker.php`](app/Services/External/CircuitBreaker.php)：狀態存 Redis 而不是程序記憶體，因為排程是五個獨立的 artisan 程序 |
+| **文件會不會說謊** | [`tests/Feature/OpenApiContractTest.php`](tests/Feature/OpenApiContractTest.php)：比對「實際註冊的路由」與「OpenAPI 寫了什麼」，第一次跑就抓到 26 支沒寫進規格的端點 |
+| **踩過哪些坑、怎麼發現的** | [`docs/progress.md`](docs/progress.md)：每一則都寫「症狀 → 真因 → 為什麼這樣修」，包含好幾次反向驗證抓到自己寫的假保護 |
+| **效能是量出來的還是講出來的** | [`docs/database.md`](docs/database.md#效能實測2026-08-26開發環境)：p50／p95、EXPLAIN 輸出，以及誠實的擴展極限與觸發改動的條件 |
+
+跑起來之後最能感受到差別的三個操作：
+
+1. 首頁搜尋框打「拉麵」——不是地點，但找得到有拉麵的素食店，卡片會說「命中菜色」
+2. 篩選裡點「營業中」——依**該店所在地的當地時間**判斷（台北與東京差一小時）
+3. 點任一家店 → 詳情頁看「素食可信度 40／100」下面列出這 40 分**憑什麼**
+
 ## Features
 
 - **地理空間搜尋**：MySQL `POINT SRID 4326` + Spatial Index，兩段式查詢（Bounding Box 過濾 →
