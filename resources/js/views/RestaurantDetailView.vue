@@ -234,6 +234,20 @@ watch(() => props.id, load, { immediate: true });
                     <dd>{{ restaurant.phone }}</dd>
                 </div>
             </dl>
+            <section v-if="restaurant.confidence_score" class="confidence">
+                <h2>素食可信度 {{ restaurant.confidence_score }}／100</h2>
+                <!--
+                  只給一個數字的話，使用者沒辦法判斷要不要相信它——「管理員已查證」
+                  跟「OSM 標示」是很不一樣的證據。
+                -->
+                <ul v-if="restaurant.confidence_breakdown?.length">
+                    <li v-for="item in restaurant.confidence_breakdown" :key="item.code">
+                        {{ item.label }}<span class="points">+{{ item.score }}</span>
+                    </li>
+                </ul>
+                <p v-else class="unknown">目前沒有有效的查證紀錄。</p>
+            </section>
+
             <section class="hours">
                 <h2>營業時間</h2>
                 <p
@@ -533,5 +547,25 @@ header {
 .nearby .distance {
     color: #718096;
     font-size: 0.85rem;
+}
+
+.confidence ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.25rem;
+    font-size: 0.9rem;
+}
+
+.confidence .points {
+    margin-left: 0.5rem;
+    color: #2f855a;
+    font-variant-numeric: tabular-nums;
+}
+
+.confidence .unknown {
+    color: #718096;
+    font-size: 0.9rem;
 }
 </style>

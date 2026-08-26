@@ -101,6 +101,8 @@ export interface Restaurant {
     menu_items?: MenuItem[];
     menu_empty_message?: string | null;
     confidence_score?: number | null;
+    /** 這個分數憑什麼——每一種已成立的驗證各取最高分（只有詳情才有）。 */
+    confidence_breakdown?: Array<{ code: string; label: string; score: number }>;
     /**
      * 這家店為什麼出現在搜尋結果裡——命中的菜色名稱（最多三個）。只有店名／地址
      * 以外的東西命中時才會出現；店名本身就命中時不需要解釋。

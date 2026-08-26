@@ -11,6 +11,9 @@ const post = vi.fn();
 let nearbyPayload: { data: unknown[] } = { data: [] };
 let nearbyFails = false;
 
+/** 蓋在 `/restaurants/1` 詳情回應上的欄位，讓各測試只寫自己在乎的那幾個。 */
+let detailOverrides: Record<string, unknown> = {};
+
 const get = vi.fn((url: string) => {
     if (url === '/restaurants') {
         return nearbyFails
@@ -65,6 +68,7 @@ const get = vi.fn((url: string) => {
                         { id: 12, name: '牛肉麵', diet_type: 'non_vegetarian', diet_label: '葷食', price: 150, is_available: true },
                     ],
                     website: 'javascript:alert(1)',
+                    ...detailOverrides,
                 },
             },
         });
@@ -146,6 +150,7 @@ describe('RestaurantDetailView', () => {
         vi.clearAllMocks();
         resetVenueScopeMeta();
         nearbyPayload = { data: [] };
+        detailOverrides = {};
     });
 
     it('飲食與特色顯示中文標籤，不是 raw code', async () => {
@@ -280,6 +285,7 @@ describe('RestaurantDetailView 附近的素食餐廳', () => {
         resetVenueScopeMeta();
         nearbyPayload = { data: [] };
         nearbyFails = false;
+        detailOverrides = {};
     });
 
     it('列出附近的店，並把自己濾掉', async () => {
@@ -316,5 +322,48 @@ describe('RestaurantDetailView 附近的素食餐廳', () => {
         expect(wrapper.find('.nearby').exists()).toBe(false);
         expect(wrapper.text()).toContain('第一家');
         expect(wrapper.find('.error').exists()).toBe(false);
+    });
+});
+
+describe('RestaurantDetailView 可信度依據', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        resetVenueScopeMeta();
+        nearbyPayload = { data: [] };
+        nearbyFails = false;
+        detailOverrides = {};
+    });
+
+    it('列出每一種驗證與它貢獻的分數', async () => {
+        detailOverrides = {
+            confidence_score: 40,
+            confidence_breakdown: [
+                { code: 'admin_verified', label: '管理員已查證', score: 30 },
+                { code: 'external_source', label: '外部資料來源（OpenStreetMap）標示', score: 10 },
+            ],
+        };
+
+        const { wrapper } = await mountDetail('1');
+
+        const text = wrapper.find('.confidence').text();
+        expect(text).toContain('素食可信度 40／100');
+        expect(text).toContain('管理員已查證');
+        expect(text).toContain('+30');
+    });
+
+    it('有分數但沒有有效查證時照實說，不留空白', async () => {
+        detailOverrides = { confidence_score: 10, confidence_breakdown: [] };
+
+        const { wrapper } = await mountDetail('1');
+
+        expect(wrapper.find('.confidence .unknown').text()).toBe('目前沒有有效的查證紀錄。');
+    });
+
+    it('沒有分數時整段不顯示', async () => {
+        detailOverrides = { confidence_score: null };
+
+        const { wrapper } = await mountDetail('1');
+
+        expect(wrapper.find('.confidence').exists()).toBe(false);
     });
 });

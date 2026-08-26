@@ -6,6 +6,7 @@ use App\Models\Restaurant;
 use App\Support\CuisineCatalog;
 use App\Support\DietCatalog;
 use App\Support\OpeningStatus;
+use App\Support\VerificationCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -93,6 +94,12 @@ class RestaurantResource extends JsonResource
                 fn () => $this->matched_menu_items,
             ),
             'confidence_score' => $this->whenLoaded('confidenceScore', fn () => $this->confidenceScore?->score),
+            // 「這個分數憑什麼」。只有一個數字的話，使用者沒辦法判斷要不要相信它——
+            // 「管理員已查證」跟「OSM 標示」是很不一樣的證據。
+            'confidence_breakdown' => $this->whenLoaded(
+                'verifications',
+                fn () => VerificationCatalog::breakdown($this->verifications),
+            ),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

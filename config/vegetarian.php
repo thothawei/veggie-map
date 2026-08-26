@@ -37,6 +37,28 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | 驗證類型的顯示標籤
+    |--------------------------------------------------------------------------
+    |
+    | 餐廳詳情的「可信度依據」列出每一種已成立的驗證。標籤放這裡而不是 Vue：
+    | 類型清單是後端定義的（verification_weights 的 key），兩邊各寫一份遲早對不上。
+    |
+    | 說明用「這一分是怎麼來的」的語氣寫，不是把 code 翻成中文就算——使用者要判斷
+    | 的是「我能不能相信這家店是素食」，而不是我們內部怎麼分類。
+    |
+    */
+
+    'verification_labels' => [
+        'restaurant_claim' => '店家自己標示為素食',
+        'menu_verified' => '菜單經人工查證',
+        'user_report' => '有使用者到過現場並回報',
+        'photo_verified' => '有照片佐證',
+        'external_source' => '外部資料來源（OpenStreetMap）標示',
+        'admin_verified' => '管理員已查證',
+    ],
+
     'admin_verifiable_types' => [
         ['code' => 'admin_verified', 'label' => 'Admin 已查證'],
         ['code' => 'menu_verified', 'label' => '菜單已查證'],

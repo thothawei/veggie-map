@@ -146,6 +146,14 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 （沒有分數列的餐廳算 0 分排在最後，不是被濾掉）。列表回應現在也帶 `confidence_score`，
 不必點進詳情才看得到。
 
+**詳情另外帶 `confidence_breakdown`**：每一種已成立的驗證各取最高分
+（`[{code, label, score}]`，分數高的在前）。只給一個數字的話，使用者沒辦法判斷要不要
+相信它——「管理員已查證」跟「OSM 標示」是很不一樣的證據。
+
+明細的取分規則跟 `CalculateRestaurantScoreJob` 完全一致（同類型多筆只算最高的那筆、
+過期的不算），否則畫面上加起來會跟總分對不上，那比不顯示明細更傷信任。
+標籤放 `config/vegetarian.php` 的 `verification_labels`，不在 Vue 寫第二份。
+
 門檻選項（值與標籤）來自 `config/vegetarian.php` 的 `confidence_filters`，經
 `GET /diets` 的 `meta.confidence_filters` 給前端。前端不決定「幾分算有查證」——那是
 產品判斷，會跟著 `verification_weights` 一起調整。

@@ -3326,3 +3326,40 @@ C 要在第 2 層。這條有測試。
 
 後端 523 → **526 個測試全綠 ＋ 4 skipped**，前端 281 → **283 個全綠**。
 Pint PASS、PHPStan 0 error、OpenAPI lint 0 error。
+
+---
+
+## 2026-08-26 — 可信度說明「憑什麼」
+
+詳情頁只有一個 `confidence_score: 40`。使用者沒辦法判斷要不要相信它——
+「管理員已查證 +30」跟「OSM 標示 +10」是很不一樣的證據，加起來也是 40。
+
+`confidence_breakdown` 列出每一種已成立的驗證與它貢獻的分數。這跟上一批的
+「命中菜色」是同一個原則：**結果要解釋自己**。
+
+### 明細的取分規則必須跟總分一致
+
+`CalculateRestaurantScoreJob` 的規則是「同一類型各取最高分再加總、過期的不算」
+（同一家店每天 sync 各寫一筆 `external_source`，每筆都加會把可信度灌到 100）。
+
+`VerificationCatalog::breakdown()` 用同一套規則。兩邊不一致的話，畫面上的明細加起來
+會跟總分對不上——那比不顯示明細更傷信任。兩條測試分別守著「同類型多筆只算一次」
+與「過期的不算」。
+
+標籤放 `config/vegetarian.php` 的 `verification_labels`，不在 Vue 寫第二份——
+類型清單是後端定義的（`verification_weights` 的 key），兩邊各寫一份遲早對不上。
+文案用「這一分是怎麼來的」的語氣（「有使用者到過現場並回報」），不是把 code
+翻成中文（「使用者回報」）——使用者要判斷的是能不能相信這家店是素食，
+不是我們內部怎麼分類。
+
+**列表刻意不帶明細**：那裡不顯示，多撈一張表沒有意義。有測試守著。
+
+### 驗證
+
+後端 526 → **530 個測試全綠 ＋ 4 skipped**，前端 283 → **286 個全綠**。
+真實資料實測：台中亭園素食回 `score: 10` ＋
+`[{external_source, 外部資料來源（OpenStreetMap）標示, 10}]`。
+
+PHPStan 擋下一個：`expires_at` 的 datetime cast 沒有被推斷出來，
+`$verification->expires_at->greaterThan()` 被當成對字串呼叫方法。補上 model 的
+`@property` 註解——順便把「到期後不再計入可信度」這件事寫在欄位旁邊。

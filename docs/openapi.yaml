@@ -1401,6 +1401,18 @@ components:
           type: string
           nullable: true
           description: 一句說明，文案來自 config/diet.php copy
+        confidence_breakdown:
+          type: array
+          description: >
+            這個分數憑什麼——每一種已成立的驗證各取最高分，分數高的在前。
+            只有詳情才有。取分規則與 CalculateRestaurantScoreJob 一致
+            （同類型多筆只算最高那筆、過期的不算）。
+          items:
+            type: object
+            properties:
+              code: { type: string, example: admin_verified }
+              label: { type: string, example: 管理員已查證 }
+              score: { type: integer, example: 30 }
         matched_menu_items:
           type: array
           items: { type: string }

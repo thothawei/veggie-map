@@ -4,6 +4,7 @@ namespace Tests\Feature\Api;
 
 use App\Models\Restaurant;
 use App\Models\RestaurantConfidenceScore;
+use App\Models\RestaurantVerification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -111,5 +112,96 @@ class RestaurantConfidenceSearchTest extends TestCase
         sort($seen);
         sort($expected);
         $this->assertSame($expected, $seen, '有店家在翻頁時被漏掉');
+    }
+
+    /**
+     * 只有一個數字的話，使用者沒辦法判斷要不要相信它——「管理員已查證」跟
+     * 「OSM 標示」是很不一樣的證據。
+     */
+    public function test_detail_explains_where_the_confidence_score_comes_from(): void
+    {
+        $restaurant = Restaurant::factory()->create();
+
+        RestaurantVerification::create([
+            'restaurant_id' => $restaurant->id,
+            'verification_type' => 'external_source',
+            'score' => 10,
+            'verified_at' => now(),
+        ]);
+        RestaurantVerification::create([
+            'restaurant_id' => $restaurant->id,
+            'verification_type' => 'admin_verified',
+            'score' => 30,
+            'verified_at' => now(),
+        ]);
+
+        $breakdown = $this->getJson("/api/v1/restaurants/{$restaurant->id}")
+            ->assertOk()
+            ->json('data.confidence_breakdown');
+
+        // 分數高的排前面。
+        $this->assertSame('admin_verified', $breakdown[0]['code']);
+        $this->assertSame(30, $breakdown[0]['score']);
+        $this->assertSame('管理員已查證', $breakdown[0]['label']);
+        $this->assertCount(2, $breakdown);
+    }
+
+    /**
+     * 同一類型多筆是重複證據（每日 sync 各寫一筆 external_source）。明細必須跟
+     * `CalculateRestaurantScoreJob` 用同一套規則取最高分——不然畫面上加起來會跟
+     * 總分對不上，那比不顯示明細更傷信任。
+     */
+    public function test_repeated_verifications_of_the_same_type_count_once(): void
+    {
+        $restaurant = Restaurant::factory()->create();
+
+        foreach (range(1, 3) as $ignored) {
+            RestaurantVerification::create([
+                'restaurant_id' => $restaurant->id,
+                'verification_type' => 'external_source',
+                'score' => 10,
+                'verified_at' => now(),
+            ]);
+        }
+
+        $breakdown = $this->getJson("/api/v1/restaurants/{$restaurant->id}")->json('data.confidence_breakdown');
+
+        $this->assertCount(1, $breakdown);
+        $this->assertSame(10, $breakdown[0]['score']);
+    }
+
+    public function test_expired_verifications_are_left_out(): void
+    {
+        $restaurant = Restaurant::factory()->create();
+
+        RestaurantVerification::create([
+            'restaurant_id' => $restaurant->id,
+            'verification_type' => 'user_report',
+            'score' => 10,
+            'verified_at' => now()->subYears(3),
+            // 「三年前有人回報過」不該一直撐著分數。
+            'expires_at' => now()->subYear(),
+        ]);
+
+        $breakdown = $this->getJson("/api/v1/restaurants/{$restaurant->id}")->json('data.confidence_breakdown');
+
+        $this->assertSame([], $breakdown);
+    }
+
+    public function test_list_does_not_carry_the_breakdown(): void
+    {
+        $restaurant = Restaurant::factory()->create();
+        RestaurantVerification::create([
+            'restaurant_id' => $restaurant->id,
+            'verification_type' => 'admin_verified',
+            'score' => 30,
+            'verified_at' => now(),
+        ]);
+
+        // 列表不顯示明細，多撈一張表沒有意義。
+        $this->assertArrayNotHasKey(
+            'confidence_breakdown',
+            $this->getJson('/api/v1/restaurants')->json('data.0'),
+        );
     }
 }

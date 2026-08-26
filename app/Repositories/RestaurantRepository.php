@@ -100,7 +100,8 @@ class RestaurantRepository
     {
         return Restaurant::query()
             ->where('status', 'active')
-            ->with(['dietTypes', 'features', 'menuItems', 'confidenceScore', 'openingHours']);
+            // verifications 只在詳情載入：列表不顯示明細，多撈一張表沒有意義。
+            ->with(['dietTypes', 'features', 'menuItems', 'confidenceScore', 'openingHours', 'verifications']);
     }
 
     /**
