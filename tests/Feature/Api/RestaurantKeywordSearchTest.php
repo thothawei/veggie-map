@@ -116,4 +116,33 @@ class RestaurantKeywordSearchTest extends TestCase
 
         $this->assertSame([$match->id], $this->search('keyword=蔬食&price_level=1'));
     }
+
+    public function test_cursor_pagination_under_relevance_sort_never_repeats_or_skips(): void
+    {
+        // 全部命中同一個關鍵字、店名形狀相同＝相關性同分，這是最容易翻頁翻壞的情況。
+        $expected = [];
+
+        foreach (range(1, 11) as $i) {
+            $expected[] = Restaurant::factory()->create(['name' => "蔬食小館 {$i}"])->id;
+        }
+
+        $seen = [];
+        $cursor = null;
+
+        do {
+            $url = '/api/v1/restaurants?keyword=蔬食&per_page=4'.($cursor ? "&cursor={$cursor}" : '');
+            $response = $this->getJson($url)->assertOk();
+
+            foreach ($response->json('data') as $row) {
+                $seen[] = $row['id'];
+            }
+
+            $cursor = $response->json('meta.next_cursor');
+        } while ($cursor !== null);
+
+        $this->assertSame(count($seen), count(array_unique($seen)), '有店家被重複列出');
+        sort($seen);
+        sort($expected);
+        $this->assertSame($expected, $seen, '有店家在翻頁時被漏掉');
+    }
 }

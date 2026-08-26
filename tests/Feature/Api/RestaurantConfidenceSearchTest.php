@@ -78,4 +78,38 @@ class RestaurantConfidenceSearchTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('success', false);
     }
+
+    /**
+     * cursor 分頁的排序欄位是 SELECT 出來的計算欄位（`confidence`／`relevance`），
+     * 不是資料表欄位。這種情況最容易出現「翻頁時同一家店出現兩次或整個消失」——
+     * 尤其是分數大量相同時（OSM 匯入的店全部都是 10 分）。
+     */
+    public function test_cursor_pagination_under_confidence_sort_never_repeats_or_skips(): void
+    {
+        $expected = [];
+
+        foreach (range(1, 12) as $i) {
+            // 前六家同分，逼出「同分時靠什麼決定順序」那條路徑。
+            $expected[] = $this->restaurantWithScore("店 {$i}", $i <= 6 ? 40 : 10 + $i)->id;
+        }
+
+        $seen = [];
+        $cursor = null;
+
+        do {
+            $url = '/api/v1/restaurants?sort=confidence&per_page=5'.($cursor ? "&cursor={$cursor}" : '');
+            $response = $this->getJson($url)->assertOk();
+
+            foreach ($response->json('data') as $row) {
+                $seen[] = $row['id'];
+            }
+
+            $cursor = $response->json('meta.next_cursor');
+        } while ($cursor !== null);
+
+        $this->assertSame(count($seen), count(array_unique($seen)), '有店家被重複列出');
+        sort($seen);
+        sort($expected);
+        $this->assertSame($expected, $seen, '有店家在翻頁時被漏掉');
+    }
 }
