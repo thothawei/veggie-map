@@ -9,6 +9,7 @@ use App\AiOffice\Models\Project;
 use App\AiOffice\Models\Task;
 use App\AiOffice\Models\TaskRun;
 use App\AiOffice\Services\ActivityRecorder;
+use App\AiOffice\Services\AgentMessenger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -27,6 +28,7 @@ class AgentOrchestrator
         private readonly AgentSelector $selector,
         private readonly TaskGraph $graph,
         private readonly ActivityRecorder $activities,
+        private readonly AgentMessenger $messenger,
     ) {}
 
     public function planProject(Project $project): void
@@ -143,6 +145,10 @@ class AgentOrchestrator
             'reason' => $reason ?? "AgentSelector: role={$role}",
         ]);
 
+        // 規格第 34 節：CEO → 承接的 Agent。派工在這之前只留下 assignment 一列，
+        // 沒有任何「誰通知了誰」的紀錄。
+        $this->messenger->taskAssigned($task, $agent);
+
         return true;
     }
 
@@ -203,6 +209,11 @@ class AgentOrchestrator
             $this->handleFailure($task);
         }
 
+        // 完成回報：執行的 Agent → CEO（規格第 34 節的 Backend → CEO）。
+        if (in_array($task->status, Task::TERMINAL_SUCCESS_STATUSES, true)) {
+            $this->messenger->taskCompleted($task);
+        }
+
         $this->dispatchReadyTasks($project);
         $this->refreshProjectStatus($project->fresh() ?? $project);
     }
@@ -237,6 +248,10 @@ class AgentOrchestrator
             $ceo,
             ['retry_count' => $task->retry_count],
         );
+
+        // 上面那則 Activity 說「通知 CEO」，但在這之前沒有任何東西真的送到 CEO
+        // 手上——這是規格第 34 節最明顯的缺口。
+        $this->messenger->taskPermanentlyFailed($task);
     }
 
     public function retry(Task $task): void

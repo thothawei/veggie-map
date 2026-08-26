@@ -3166,3 +3166,52 @@ markers 渲染時丟例外，`loading` 卡在 true。症狀是「badge 顯示載
 
 後端 504 → **511 個測試全綠 ＋ 4 skipped**，前端 269 → **270 個全綠**。
 Pint PASS、PHPStan 0 error。
+
+---
+
+## 2026-08-26 — `messages` 表終於有人寫（AI Office 規格第 34 節）
+
+`ai_office_messages` 從 Phase 2 就建好了，Model 有、migration 有、index 有，
+**一行寫入都沒有**。規格第 34 節舉的四個例子（CEO→Backend 派工、Backend→QA、
+QA→Backend 回報 bug、Backend→CEO 回報完成）一個都沒發生過。
+
+最能說明問題的是這段既有的程式碼：
+
+```php
+$this->activities->record('TaskPermanentlyFailed', "「{$task->title}」已達最大重試次數，通知 CEO", ...);
+```
+
+寫著「通知 CEO」，但**沒有任何東西真的送到 CEO 手上**。
+
+### Message 與 Activity 的分工
+
+- **Activity**「系統發生了什麼」——給人看的稽核軌跡，沒有收件人（`TaskStarted`
+  不是說給誰聽的）
+- **Message**「誰對誰說了什麼」——有明確的收發雙方，是協作的紀錄
+
+兩者刻意不合併：硬塞在一起會得到一張兩邊都不好查的表。但訊息**也會**產生一則
+`MessageSent` 活動，不然使用者得同時盯兩個面板才知道發生了什麼。
+
+### 三個寫入點
+
+派工（CEO → 承接的 Agent）、完成回報（執行者 → CEO）、重試用完（執行者 → CEO，
+帶上最後一次的錯誤前 200 字——不帶的話 CEO 得自己去翻）。
+
+**收發任一邊不存在就不寫**（例如 seeder 沒有建 CEO），自己寄給自己也不寫。
+訊息的意義來自「誰對誰」，缺一邊的紀錄留著只會讓這張表變成第二份 Activity。
+有一條測試同時確認「不寫訊息」與「派工本身仍然成立」——訊息是附加的紀錄，
+不是前置條件。
+
+### 端點只有讀
+
+開放 API 寫入等於讓人偽造 Agent 的發言，那會讓這條時間軸失去它唯一的價值。
+
+內容目前是**樣板字串**而不是 LLM 生成的自然語言：讓 Agent 互相寫信要多花一輪
+token，而這裡真正要的是「誰在什麼時候通知了誰」這條線索。之後要接 LLM，換的是
+`content` 怎麼來，不是這張表的形狀。
+
+### 驗證
+
+後端 511 → **520 個測試全綠 ＋ 4 skipped**，前端 270 → **273 個全綠**。
+Pint PASS、PHPStan 0 error（過程中補了四個關聯的 `@return BelongsTo<...>` 泛型註解，
+不然 `$message->sender->name` 在 PHPStan 眼裡是存取 `Model` 的未定義屬性）。

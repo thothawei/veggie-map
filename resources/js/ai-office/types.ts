@@ -179,3 +179,19 @@ export interface AiOfficeDashboard {
     projects: Record<string, number>;
     approvals: { pending: number };
 }
+
+/** 規格第 34 節：Agent 之間的訊息。 */
+export interface AiOfficeMessageParty {
+    id: number;
+    name: string;
+    role: string;
+}
+
+export interface AiOfficeMessage {
+    id: number;
+    task_id: number | null;
+    content: string;
+    from: AiOfficeMessageParty | null;
+    to: AiOfficeMessageParty | null;
+    created_at: string;
+}

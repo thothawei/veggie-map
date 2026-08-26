@@ -3,11 +3,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AiOfficeShell from '../components/AiOfficeShell.vue';
 import ActivityFeed from '../components/dashboard/ActivityFeed.vue';
+import MessageFeed from '../components/dashboard/MessageFeed.vue';
 import TaskBoard from '../components/task/TaskBoard.vue';
 import TaskDetail from '../components/task/TaskDetail.vue';
 import StatisticsPanel from '../components/dashboard/StatisticsPanel.vue';
 import OfficeMap from '../components/office/OfficeMap.vue';
 import { useActivityStream } from '../composables/useActivityStream';
+import { listMessages } from '../api/messages';
+import type { AiOfficeMessage } from '../types';
 import { useAgentsStore } from '../stores/agents';
 import { useProjectsStore } from '../stores/projects';
 import { useTasksStore } from '../stores/tasks';
@@ -95,7 +98,27 @@ async function cancelTask(taskId: number) {
     }
 }
 
+/**
+ * Agent 之間的訊息（規格第 34 節）。跟著事件流一起更新——訊息本身也會產生一則
+ * `MessageSent` 活動，所以有新活動時就去補新訊息，不用另外開一條 SSE。
+ */
+const messages = ref<AiOfficeMessage[]>([]);
+
+async function loadMessages() {
+    try {
+        const lastId = messages.value[messages.value.length - 1]?.id ?? 0;
+        const fresh = await listMessages(projectId.value, lastId);
+
+        messages.value = lastId > 0 ? [...messages.value, ...fresh] : fresh;
+    } catch {
+        // 輔助面板，失敗就維持現狀，不打斷主畫面。
+    }
+}
+
+watch(() => activities.value.length, () => void loadMessages());
+
 onMounted(() => {
+    void loadMessages();
     void projects.fetchOne(projectId.value);
     void tasks.fetchForProject(projectId.value);
     void agents.fetchAll();
@@ -144,6 +167,8 @@ onUnmounted(() => stopStream());
                 @cancel="cancelTask"
             />
         </div>
+
+        <MessageFeed class="panel feed" :messages="messages" />
 
         <ActivityFeed
             class="panel feed"

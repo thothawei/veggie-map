@@ -5,6 +5,7 @@ use App\AiOffice\Http\Controllers\AgentController as AiOfficeAgentController;
 use App\AiOffice\Http\Controllers\ApprovalController as AiOfficeApprovalController;
 use App\AiOffice\Http\Controllers\DashboardController as AiOfficeDashboardController;
 use App\AiOffice\Http\Controllers\HealthController as AiOfficeHealthController;
+use App\AiOffice\Http\Controllers\MessageController as AiOfficeMessageController;
 use App\AiOffice\Http\Controllers\ProjectController as AiOfficeProjectController;
 use App\AiOffice\Http\Controllers\TaskController as AiOfficeTaskController;
 use App\AiOffice\Http\Controllers\TaskDependencyController as AiOfficeTaskDependencyController;
@@ -97,6 +98,10 @@ Route::middleware('throttle:api')->group(function () {
             // 事件流（規格第 35／36 節）。SSE 本身在 auth:sanctum 群組外面另外掛，
             // 因為 EventSource 帶不了 Authorization 標頭，改用這裡發的一次性票。
             Route::get('/projects/{project}/activities', [AiOfficeActivityController::class, 'index']);
+
+            // 規格第 34 節：Agent 之間的往來訊息。唯讀——開放寫入等於讓人偽造
+            // Agent 的發言，這條時間軸就失去它唯一的價值。
+            Route::get('/projects/{project}/messages', [AiOfficeMessageController::class, 'index']);
             Route::post('/projects/{project}/events/ticket', [AiOfficeActivityController::class, 'ticket']);
 
             Route::get('/approvals', [AiOfficeApprovalController::class, 'index']);
