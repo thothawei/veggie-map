@@ -491,3 +491,73 @@ describe('RestaurantListView 詳情連結', () => {
         expect(router.currentRoute.value.path).toBe('/restaurants/7');
     });
 });
+
+describe('RestaurantListView 排序', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+        listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+    });
+
+    it('沒有關鍵字時預設最新收錄，且不提供相關性選項', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taipei');
+
+        expect(lastRestaurantCall().sort).toBe('newest');
+
+        const options = wrapper.findAll('#sort-select option').map((o) => o.text());
+        expect(options).not.toContain('相關性');
+        expect(options).toContain('素食可信度');
+    });
+
+    it('有關鍵字時預設相關性，並多出相關性選項', async () => {
+        const { wrapper } = await mountList('/restaurants?keyword=拉麵');
+
+        expect(lastRestaurantCall().sort).toBe('relevance');
+        expect(wrapper.findAll('#sort-select option').map((o) => o.text())).toContain('相關性');
+    });
+
+    it('選排序會寫進網址並重新查詢', async () => {
+        const { wrapper, router } = await mountList('/restaurants?city=taipei');
+
+        await wrapper.find('#sort-select').setValue('confidence');
+        await flushPromises();
+        // router.push → computed sort → watch(searchScope) → 非同步查詢，
+        // 一次 flush 只推進到路由更新。
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.sort).toBe('confidence');
+        expect(restaurantCalls.map((c) => c.sort)).toContain('confidence');
+    });
+
+    /**
+     * 把 `?sort=relevance` 的連結分享給沒有帶關鍵字的人，原封不動送出去後端會回
+     * 422，整個列表變成「載入失敗」——那是使用者無從理解的錯誤。
+     */
+    it('網址帶了當下不可用的排序時退回預設，不是送出去讓後端 422', async () => {
+        await mountList('/restaurants?city=taipei&sort=relevance');
+
+        expect(lastRestaurantCall().sort).toBe('newest');
+    });
+});
+
+describe('RestaurantListView 空結果的建議', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+        listPayload = { data: [], meta: { next_cursor: null } };
+    });
+
+    it('開著「營業中」而沒有結果時，明說很多店家沒有營業時間資料', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taipei&open_now=1');
+
+        expect(wrapper.text()).toContain('關掉「營業中」');
+    });
+
+    it('可信度門檻造成沒有結果時建議降低門檻', async () => {
+        const { wrapper } = await mountList('/restaurants?city=taipei&confidence_min=60');
+
+        expect(wrapper.text()).toContain('降低素食可信度門檻');
+    });
+});

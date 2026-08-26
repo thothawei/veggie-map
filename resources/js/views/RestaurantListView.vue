@@ -27,6 +27,51 @@ const keywordDraft = ref('');
 /** 網址才是「現在正在搜什麼」的真相來源——重新整理、分享連結、上一頁因此都對。 */
 const committedKeyword = computed(() => (typeof route.query.keyword === 'string' ? route.query.keyword : ''));
 
+/**
+ * 排序選項。
+ *
+ * 沒有 `distance`：列表頁用 bbox 收窄而不是中心點＋半徑（見下方 bbox 的說明），
+ * 沒有中心點就算不出距離，後端也會回 422。地圖頁才有距離排序。
+ *
+ * `relevance` 只在有關鍵字時出現——沒有關鍵字時它沒有意義，後端同樣回 422。
+ */
+const SORT_OPTIONS = [
+    { value: 'relevance', label: '相關性', needsKeyword: true },
+    { value: 'confidence', label: '素食可信度', needsKeyword: false },
+    { value: 'rating', label: '評分', needsKeyword: false },
+    { value: 'newest', label: '最新收錄', needsKeyword: false },
+] as const;
+
+type SortValue = (typeof SORT_OPTIONS)[number]['value'];
+
+const availableSorts = computed(() =>
+    SORT_OPTIONS.filter((option) => !option.needsKeyword || committedKeyword.value !== ''),
+);
+
+/** 沒指定就跟後端同一套預設：有關鍵字＝相關性，否則最新收錄。 */
+const defaultSort = computed<SortValue>(() => (committedKeyword.value ? 'relevance' : 'newest'));
+
+const sort = computed<SortValue>(() => {
+    const fromUrl = route.query.sort;
+    const isAvailable = availableSorts.value.some((option) => option.value === fromUrl);
+
+    // 網址上帶了一個當下不可用的排序（例如把 relevance 的連結分享出去、對方沒有
+    // 關鍵字），退回預設而不是原封不動送出去讓後端回 422 變成「載入失敗」。
+    return isAvailable ? (fromUrl as SortValue) : defaultSort.value;
+});
+
+function selectSort(value: string) {
+    const query = { ...route.query };
+
+    if (value === defaultSort.value) {
+        delete query.sort;
+    } else {
+        query.sort = value;
+    }
+
+    router.push({ query });
+}
+
 // 篩選條件跟 city／keyword 一樣以網址為真相來源。
 const filters = useFilterQuery();
 const nextCursor = ref<string | null>(null);
@@ -63,9 +108,7 @@ async function search(reset = true) {
             params: {
                 keyword: committedKeyword.value || undefined,
                 bbox: bbox.value,
-                // 有關鍵字就交給後端的相關性排序（店名 > 菜色／料理 > 地區），
-                // 寫死 newest 的話，最符合的那家店可能排在第 40 名。
-                sort: committedKeyword.value ? 'relevance' : 'newest',
+                sort: sort.value,
                 per_page: 20,
                 cursor: reset ? undefined : (nextCursor.value ?? undefined),
                 ...apiFilterParams(filters.value),
@@ -133,6 +176,10 @@ const emptySuggestions = computed(() => {
     const suggestions: string[] = [];
 
     if (committedKeyword.value) suggestions.push('換個關鍵字');
+    // 這兩個條件最常把結果篩成 0，而且使用者未必記得自己開了：「營業中」在深夜
+    // 幾乎會清空整份清單，可信度門檻則會濾掉所有還沒有人查證過的店。
+    if (filters.value.open_now) suggestions.push('關掉「營業中」（很多店家沒有營業時間資料）');
+    if (filters.value.confidence_min) suggestions.push('降低素食可信度門檻');
     if (hasActiveFilters.value) suggestions.push('清掉篩選條件');
     if (activeCity.value && bbox.value) suggestions.push('切換到其他城市');
 
@@ -151,7 +198,7 @@ const hasActiveFilters = computed(
 const searchScope = computed(() => {
     if (citiesLoading.value) return null;
 
-    return JSON.stringify([bbox.value ?? ALL_CITIES, committedKeyword.value, filterQueryKey(filters.value)]);
+    return JSON.stringify([bbox.value ?? ALL_CITIES, committedKeyword.value, sort.value, filterQueryKey(filters.value)]);
 });
 
 watch(searchScope, (scope) => {
@@ -185,6 +232,15 @@ watch(committedKeyword, (value) => {
             <button v-if="committedKeyword" type="button" class="clear-keyword" @click="clearKeyword">清除</button>
         </div>
         <FilterDrawer v-model:filters="filters" />
+
+        <div class="sort-bar">
+            <label for="sort-select">排序</label>
+            <select id="sort-select" :value="sort" @change="selectSort(($event.target as HTMLSelectElement).value)">
+                <option v-for="option in availableSorts" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                </option>
+            </select>
+        </div>
 
         <p v-if="searchIsGlobal" class="global-hint" role="status">
             搜尋「{{ committedKeyword }}」時會跨全部城市，不受目前選的「{{ activeCity?.label }}」限制。
@@ -370,5 +426,23 @@ li button:hover {
 .confidence {
     color: #2c5282;
     font-size: 0.85rem;
+}
+
+.sort-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    font-size: 0.9rem;
+    color: #4a5568;
+}
+
+.sort-bar select {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.9rem;
 }
 </style>
