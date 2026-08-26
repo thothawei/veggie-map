@@ -28,6 +28,7 @@ vi.mock('leaflet', () => ({
         tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
         markerClusterGroup: vi.fn(() => clusterStub),
         marker: vi.fn(() => ({ bindPopup, on: vi.fn() })),
+        divIcon: vi.fn((options: unknown) => options),
     },
 }));
 vi.mock('leaflet.markercluster', () => ({}));
@@ -316,5 +317,50 @@ describe('RestaurantMap bounds 事件', () => {
         const wrapper = mountMap();
 
         expect(wrapper.emitted('bounds-changed')).toBeUndefined();
+    });
+});
+
+describe('RestaurantMap marker 樣式', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    /**
+     * 純素食店與素食友善是這張地圖上最重要的區別：前者整間都能吃，後者是葷素都有。
+     * 全部長一樣的話，使用者得逐個點開才知道——而那正是他要用地圖的原因。
+     */
+    it('依 venue_kind 給不同的 marker 樣式', async () => {
+        const L = (await import('leaflet')).default;
+
+        mount(RestaurantMap, {
+            props: {
+                restaurants: [
+                    { id: 1, name: '純素店', latitude: 25, longitude: 121, venue_kind: 'exclusive' },
+                    { id: 2, name: '友善店', latitude: 25.1, longitude: 121.1, venue_kind: 'friendly' },
+                ] as unknown as Restaurant[],
+                center: [25.033, 121.5654] as [number, number],
+                zoom: 13,
+            },
+        });
+
+        const icons = vi.mocked(L.divIcon).mock.calls.map(([options]) => (options as { html: string }).html);
+
+        expect(icons[0]).toContain('data-kind="exclusive"');
+        expect(icons[1]).toContain('data-kind="friendly"');
+    });
+
+    it('沒有 venue_kind 時退回中性樣式，不猜成其中一種', async () => {
+        const L = (await import('leaflet')).default;
+
+        mount(RestaurantMap, {
+            props: {
+                restaurants: [{ id: 3, name: '未知', latitude: 25, longitude: 121 }] as unknown as Restaurant[],
+                center: [25.033, 121.5654] as [number, number],
+                zoom: 13,
+            },
+        });
+
+        const [options] = vi.mocked(L.divIcon).mock.calls[0];
+        expect((options as { html: string }).html).toContain('data-kind="unknown"');
     });
 });

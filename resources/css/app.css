@@ -15,3 +15,33 @@
 .leaflet-popup-content .open-status[data-state='closed'] {
     color: #718096;
 }
+
+/*
+ * 地圖 marker 的顏色（見 RestaurantMap 的 markerIcon）。Leaflet 的 divIcon 內容
+ * 由 JS 插進 DOM，元件的 scoped style 套不到，所以放全域。
+ *
+ * 純素食店＝實心綠（整間都能吃）；素食友善＝空心橘（葷素都有，菜單有無肉選項）。
+ * 刻意不只用顏色區分：實心／空心讓色覺辨識有困難的人也分得出來。
+ */
+.veggie-marker {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.veggie-marker[data-kind='exclusive'] {
+    background: #2f855a;
+    border: 3px solid #fff;
+}
+
+.veggie-marker[data-kind='friendly'] {
+    background: #fff;
+    border: 4px solid #dd6b20;
+}
+
+.veggie-marker[data-kind='unknown'] {
+    background: #a0aec0;
+    border: 3px solid #fff;
+}

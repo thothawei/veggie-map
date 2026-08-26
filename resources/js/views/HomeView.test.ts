@@ -64,6 +64,7 @@ vi.mock('leaflet', () => ({
         markerClusterGroup: vi.fn(() => ({ clearLayers: vi.fn(), addLayer: vi.fn() })),
         latLngBounds: vi.fn((points: unknown) => points),
         marker: vi.fn(() => ({ bindPopup: vi.fn().mockReturnThis(), on: vi.fn() })),
+        divIcon: vi.fn((options: unknown) => options),
     },
 }));
 vi.mock('leaflet.markercluster', () => ({}));

@@ -3087,3 +3087,29 @@ Redis 的 `INFO stats` 只有全域數字，混了 session、rate limit、queue�
 PHPStan 擋下一個：`request()` 在 console 情境下仍然存在（不是 null），
 `request()?->` 的 `?.` 是多餘的——但 `route()` 才真的可能是 null，改成
 `request()->route()?->uri()`。
+
+---
+
+## 2026-08-26 — 地圖 marker 分辨純素食店與素食友善
+
+地圖上所有 marker 長得一模一樣，使用者得逐個點開才知道是「整間都能吃」還是
+「葷素都有、菜單有無肉選項」——而那正是他要用地圖的原因。這是這個產品最重要的
+一個區別，卻沒有出現在最主要的畫面上。
+
+- **實心綠＝純素食店，空心橘＝素食友善。** 形狀也不同，不是只靠顏色——色覺辨識
+  有困難的人一樣分得出來。marker 的 `alt` 也帶了文字說明給螢幕閱讀器。
+- 用 `L.divIcon`（CSS 畫的圓點）而不是兩張 png：不必新增圖檔、換配色只改 CSS，
+  retina 螢幕也不會糊。
+- **沒有 `venue_kind` 時退回中性灰**，不猜成其中一種（那個欄位只有後端 eager load
+  過 `dietTypes` 時才有）。
+- 加了圖例：沒有圖例的顏色編碼等於猜謎。
+
+過程中 `HomeView.test.ts` 紅了兩條——它自己的 leaflet stub 沒有 `divIcon`，
+markers 渲染時丟例外，`loading` 卡在 true。症狀是「badge 顯示載入中…」而不是
+任何看起來跟 marker 有關的訊息，值得記一下：**元件的 stub 是測試的一部分，
+元件多用一個 API，所有 stub 它的測試都要跟著補。**
+
+### 驗證
+
+前端 267 → **269 個測試全綠**（含「依 venue_kind 給不同樣式」與「沒有 kind 時退回
+中性樣式」）。瀏覽器上用真實資料確認 DOM 裡同時有 exclusive 與 friendly 兩種 marker。

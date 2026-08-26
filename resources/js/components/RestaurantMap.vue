@@ -48,12 +48,41 @@ function emitBounds() {
     });
 }
 
+/**
+ * marker 依「純素食店 / 素食友善」上色。
+ *
+ * 這是這張地圖上最重要的一個區別：純素食店整間都能吃，素食友善店是葷素都有、
+ * 菜單有無肉選項。全部長一樣的話，使用者得逐個點開才知道——而那正是他要用地圖
+ * 的原因。
+ *
+ * 用 divIcon（CSS 畫的圓點）而不是兩張 png：不必新增圖檔、換配色只改 CSS，
+ * 而且 retina 螢幕不會糊。
+ *
+ * `venue_kind` 只有在後端 eager load 過 dietTypes 時才有；沒有就退回中性樣式，
+ * 不猜成其中一種。
+ */
+function markerIcon(restaurant: Restaurant): L.DivIcon {
+    const kind = restaurant.venue_kind ?? 'unknown';
+
+    return L.divIcon({
+        className: '',
+        html: `<span class="veggie-marker" data-kind="${kind}"></span>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+        popupAnchor: [0, -9],
+    });
+}
+
 function renderMarkers() {
     if (!map || !clusterGroup) return;
     clusterGroup.clearLayers();
 
     for (const restaurant of props.restaurants) {
-        const marker = L.marker([restaurant.latitude, restaurant.longitude]);
+        const marker = L.marker([restaurant.latitude, restaurant.longitude], {
+            icon: markerIcon(restaurant),
+            // 圖示帶顏色但顏色本身不是資訊——螢幕閱讀器與色盲使用者靠這個。
+            alt: `${restaurant.name}（${restaurant.venue_badge ?? '素食餐廳'}）`,
+        });
         const address = formatAddress(restaurant) ?? '地址未提供';
         const cuisines = formatCuisines(restaurant.cuisines);
         const distance = formatDistance(restaurant.distance_meters);

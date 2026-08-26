@@ -265,6 +265,15 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                 <span v-else>目前沒有可顯示的城市。</span>
             </div>
 
+            <!--
+              沒有圖例的顏色編碼等於猜謎。實心綠＝整間都能吃，空心橘＝葷素都有、
+              菜單有無肉選項；形狀也不同，不是只靠顏色（色覺辨識有困難的人也分得出來）。
+            -->
+            <ul class="map-legend" aria-label="地圖圖例">
+                <li><span class="veggie-marker" data-kind="exclusive" aria-hidden="true"></span>純素食店</li>
+                <li><span class="veggie-marker" data-kind="friendly" aria-hidden="true"></span>素食友善</li>
+            </ul>
+
             <p v-if="loading" class="map-badge" role="status">載入中…</p>
             <p v-else-if="loadFailed" class="map-badge error" role="alert">
                 載入失敗，移動地圖可重新嘗試。
@@ -537,5 +546,38 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 .confidence {
     color: #2c5282;
     font-size: 0.85rem;
+}
+
+.map-legend {
+    position: absolute;
+    left: 0.75rem;
+    bottom: 0.75rem;
+    z-index: 500;
+    display: flex;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    list-style: none;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: #2d3748;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.map-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.map-legend .veggie-marker {
+    width: 12px;
+    height: 12px;
+    box-shadow: none;
+}
+
+.map-legend .veggie-marker[data-kind='friendly'] {
+    border-width: 3px;
 }
 </style>
