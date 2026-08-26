@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { isAxiosError } from 'axios';
 import client from '@/api/client';
 import RestaurantMap from '@/components/RestaurantMap.vue';
 import SearchBox from '@/components/SearchBox.vue';
@@ -32,6 +33,9 @@ const restaurants = ref<Restaurant[]>([]);
 const recommended = ref<Restaurant[]>([]);
 const loading = ref(false);
 const loadFailed = ref(false);
+
+/** 條件本身不合法（422），跟連線失敗分開講——後者才值得重試。 */
+const invalidFilters = ref(false);
 const hasMore = ref(false);
 // 篩選條件跟 city 一樣以網址為真相來源，重新整理與分享連結才留得住。
 const filters = useFilterQuery();
@@ -60,6 +64,7 @@ async function loadByBounds() {
     const seq = ++requestSeq;
     loading.value = true;
     loadFailed.value = false;
+    invalidFilters.value = false;
 
     try {
         const midLat = (currentBounds.minLat + currentBounds.maxLat) / 2;
@@ -114,7 +119,11 @@ async function loadByBounds() {
             loadFailed.value = false;
             fitToKeywordResults();
         } else {
-            loadFailed.value = true;
+            // 422 代表條件本身不合法（網址被改過、或貼了舊連結），跟連線失敗
+            // 不一樣——後者才值得「移動地圖重試」。
+            invalidFilters.value = isAxiosError(restaurantsResult.reason)
+                && restaurantsResult.reason.response?.status === 422;
+            loadFailed.value = ! invalidFilters.value;
             restaurants.value = [];
             hasMore.value = false;
         }
@@ -169,6 +178,15 @@ function handlePlaceSelected(place: GeocodedPlace) {
  */
 async function handleKeywordSearch(value: string) {
     await router.push({ query: { ...route.query, keyword: value || undefined } });
+}
+
+/**
+ * 一次清掉所有可能造成 422 的東西。使用者不知道是哪一個條件不合法，
+ * 逐項猜對他沒有意義。城市留著——那是「我在看哪裡」，不是搜尋條件。
+ */
+function clearAllFilters() {
+    const query = activeCity.value ? { city: activeCity.value.slug } : {};
+    router.push({ query });
 }
 
 function clearKeyword() {
@@ -275,6 +293,10 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
             </ul>
 
             <p v-if="loading" class="map-badge" role="status">載入中…</p>
+            <p v-else-if="invalidFilters" class="map-badge error" role="alert">
+                這組搜尋條件無效（可能是網址被改過）。
+                <button type="button" class="inline-clear" @click="clearAllFilters">清除條件</button>
+            </p>
             <p v-else-if="loadFailed" class="map-badge error" role="alert">
                 載入失敗，移動地圖可重新嘗試。
             </p>
@@ -583,5 +605,15 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 
 .map-legend .veggie-marker[data-kind='friendly'] {
     border-width: 3px;
+}
+
+.inline-clear {
+    margin-left: 0.4rem;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: inherit;
 }
 </style>

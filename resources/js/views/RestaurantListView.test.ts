@@ -594,3 +594,65 @@ describe('RestaurantListView 命中原因', () => {
         expect(wrapper.find('.match-reason').exists()).toBe(false);
     });
 });
+
+describe('RestaurantListView 無效條件', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+        listPayload = { data: [], meta: { next_cursor: null } };
+    });
+
+    /**
+     * 使用者把網址的 `?diet=` 改成不存在的值（或貼了一個舊連結）時後端回 422。
+     * 那跟「網路壞了」不一樣——叫他「再試一次」，再試一百次也一樣。
+     */
+    it('條件不合法時說清楚，並給一個清掉條件的入口', async () => {
+        get.mockImplementation((url: string) => {
+            if (url === '/restaurants') {
+                return Promise.reject({ isAxiosError: true, response: { status: 422, data: {} } });
+            }
+            if (url === '/cities') return Promise.resolve({ data: { data: cities } });
+
+            return Promise.resolve({ data: { data: [] } });
+        });
+
+        const { wrapper } = await mountList('/restaurants?city=taipei&diet=not_a_diet');
+
+        expect(wrapper.text()).toContain('這組搜尋條件無效');
+        expect(wrapper.text()).not.toContain('載入失敗，請再試一次');
+        expect(wrapper.find('.inline-clear').exists()).toBe(true);
+    });
+
+    it('清除條件會把網址上的篩選拿掉，只留城市', async () => {
+        get.mockImplementation((url: string) => {
+            if (url === '/restaurants') {
+                return Promise.reject({ isAxiosError: true, response: { status: 422, data: {} } });
+            }
+            if (url === '/cities') return Promise.resolve({ data: { data: cities } });
+
+            return Promise.resolve({ data: { data: [] } });
+        });
+
+        const { wrapper, router } = await mountList('/restaurants?city=taipei&diet=not_a_diet&keyword=abc');
+
+        await wrapper.find('.inline-clear').trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query).toEqual({ city: 'taipei' });
+    });
+
+    it('連線失敗仍然說「再試一次」——那個才值得重試', async () => {
+        get.mockImplementation((url: string) => {
+            if (url === '/restaurants') return Promise.reject(new Error('network'));
+            if (url === '/cities') return Promise.resolve({ data: { data: cities } });
+
+            return Promise.resolve({ data: { data: [] } });
+        });
+
+        const { wrapper } = await mountList('/restaurants?city=taipei');
+
+        expect(wrapper.text()).toContain('載入失敗，請再試一次');
+        expect(wrapper.text()).not.toContain('這組搜尋條件無效');
+    });
+});

@@ -675,8 +675,12 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 ### P3 — 要產品決定才能動（不要擅自選）
 
-- [ ] **`wheelchair` 是否加入 `features`**
-      東京＋台中 OSM 共 52 筆，是目前最豐富卻沒用的標籤。`features` 表沒有對應項。
+- [x] **`wheelchair` 是否加入 `features`** ✅ 2026-08-26 產品決定：加入。
+      收 `yes`／`limited`／`designated`（`limited` 是「部分無障礙」，對需要的人仍然
+      有用）。重跑台灣四市同步後 **129 家**有這個標籤——比原本估的 52 筆多，因為
+      當時只看了兩個城市而且沒算 `limited`。
+      **東京還沒帶進來**：重跑時 Overpass 連兩次 HTTP 504（外部服務忙碌，fallback
+      正確地回 0 筆而不是炸掉），等每日排程補。
 - [ ] ~~**`vegan=only` 是否自動掛 `vegetarian`**~~
       改由 P0 `config/diet.php` 的 `implies[]` 處理，預設關、用設定打開，不當寫死規則。
 - [ ] ~~**台南要不要從 `only` 放寬成 `yes`**~~

@@ -392,3 +392,45 @@ describe('HomeView 關鍵字搜尋', () => {
         expect(call.latitude).toBeDefined();
     });
 });
+
+describe('HomeView 無效條件', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        restaurantsPayload = { data: [] };
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('422 時說條件無效，不是叫人移動地圖重試', async () => {
+        get.mockImplementation((url: string) => {
+            if (url === '/cities') return Promise.resolve({ data: { data: cities } });
+            if (url === '/restaurants') {
+                return Promise.reject({ isAxiosError: true, response: { status: 422, data: {} } });
+            }
+
+            return Promise.resolve({ data: { data: [] } });
+        });
+
+        const { wrapper } = await mountHome('/?city=taipei&diet=not_a_diet');
+
+        expect(wrapper.text()).toContain('這組搜尋條件無效');
+        expect(wrapper.text()).not.toContain('移動地圖可重新嘗試');
+    });
+
+    it('連線失敗仍然叫人移動地圖重試——那個才值得重試', async () => {
+        get.mockImplementation((url: string) => {
+            if (url === '/cities') return Promise.resolve({ data: { data: cities } });
+            if (url === '/restaurants') return Promise.reject(new Error('network'));
+
+            return Promise.resolve({ data: { data: [] } });
+        });
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.text()).toContain('移動地圖可重新嘗試');
+        expect(wrapper.text()).not.toContain('這組搜尋條件無效');
+    });
+});

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { isAxiosError } from 'axios';
 import { useRoute, useRouter } from 'vue-router';
 import client from '@/api/client';
 import FilterDrawer from '@/components/FilterDrawer.vue';
@@ -63,6 +64,15 @@ const sort = computed<SortValue>(() => {
     return isAvailable ? (fromUrl as SortValue) : defaultSort.value;
 });
 
+/**
+ * 一次清掉所有可能造成 422 的東西：篩選、關鍵字、排序。使用者不知道是哪一個
+ * 條件不合法（他可能只是貼了一個舊連結），逐項猜對他沒有意義。
+ */
+function clearAll() {
+    keywordDraft.value = '';
+    router.push({ query: activeSlug.value ? { city: activeSlug.value } : {} });
+}
+
 function selectSort(value: string) {
     const query = { ...route.query };
 
@@ -80,6 +90,9 @@ const filters = useFilterQuery();
 const nextCursor = ref<string | null>(null);
 const loading = ref(false);
 const loadFailed = ref(false);
+
+/** 條件本身不合法（422），跟連線失敗要分開講——後者才值得「再試一次」。 */
+const invalidFilters = ref(false);
 
 /**
  * 城市用 bbox 收窄而不是 `city` 欄位：實測 592 筆匯入資料裡 59% 的 `city` 是空的，
@@ -105,6 +118,7 @@ async function search(reset = true) {
     const seq = ++requestSeq;
     loading.value = true;
     loadFailed.value = false;
+    invalidFilters.value = false;
 
     try {
         const response = await client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
@@ -122,10 +136,13 @@ async function search(reset = true) {
 
         restaurants.value = reset ? response.data.data : [...restaurants.value, ...response.data.data];
         nextCursor.value = (response.data.meta?.next_cursor as string | null) ?? null;
-    } catch {
+    } catch (error: unknown) {
         if (seq !== requestSeq) return;
 
-        loadFailed.value = true;
+        // 422 代表送出去的條件本身不合法（例如使用者把網址的 `?diet=` 改成不存在
+        // 的值）。跟「網路壞了」不一樣：叫他「再試一次」再試一百次也一樣。
+        invalidFilters.value = isAxiosError(error) && error.response?.status === 422;
+        loadFailed.value = ! invalidFilters.value;
 
         if (reset) {
             restaurants.value = [];
@@ -281,7 +298,11 @@ watch(committedKeyword, (value) => {
             </li>
         </ul>
 
-        <p v-if="loadFailed" class="notice error" role="alert">載入失敗，請再試一次。</p>
+        <p v-if="invalidFilters" class="notice error" role="alert">
+            這組搜尋條件無效（可能是網址被改過）。
+            <button type="button" class="inline-clear" @click="clearAll">清除條件</button>
+        </p>
+        <p v-else-if="loadFailed" class="notice error" role="alert">載入失敗，請再試一次。</p>
         <p v-else-if="!loading && restaurants.length === 0" class="notice">
             {{ emptyMessage }}
             <span v-if="emptySuggestions.length">{{ emptySuggestions.join('，或') }}。</span>
@@ -455,5 +476,15 @@ li button:hover {
 .match-reason {
     color: #2f855a;
     font-size: 0.85rem;
+}
+
+.inline-clear {
+    margin-left: 0.5rem;
+    border: none;
+    background: none;
+    color: #2f855a;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: inherit;
 }
 </style>
