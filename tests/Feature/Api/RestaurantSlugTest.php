@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Restaurant;
 use App\Repositories\RestaurantRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -88,5 +89,65 @@ class RestaurantSlugTest extends TestCase
             'restaurant:slug:'.md5($weird),
             RestaurantRepository::slugCacheKey($weird),
         );
+    }
+
+    /**
+     * 只測 helper 會過、但 findForDetailBySlug 若改回直接串 slug，HTTP 路徑照樣把
+     * 網址寫進 key。這條走真正的請求，拔掉雜湊就會紅。
+     */
+    public function test_detail_cache_is_stored_under_the_hashed_key_not_the_raw_slug(): void
+    {
+        Restaurant::factory()->create(['slug' => 'shi-fang-zhai']);
+
+        $this->getJson('/api/v1/restaurants/shi-fang-zhai')->assertOk();
+
+        $this->assertTrue(Cache::has(RestaurantRepository::slugCacheKey('shi-fang-zhai')));
+        $this->assertFalse(Cache::has('restaurant:slug:shi-fang-zhai'));
+    }
+
+    /**
+     * Cache::remember 把 null 當 miss：寫進去的 404 下次 get 還是 null，等於
+     * 每次 404 都打 DB、還白寫一個 key。找不到就不寫 cache。
+     */
+    public function test_unknown_slug_is_not_written_to_cache(): void
+    {
+        $this->getJson('/api/v1/restaurants/does-not-exist')->assertNotFound();
+
+        $this->assertFalse(Cache::has(RestaurantRepository::slugCacheKey('does-not-exist')));
+    }
+
+    /**
+     * Invalidator 在 saved 之後才查目前的 slug，改名後只清得到新 key。
+     * 舊 slug 那份還會把已不存在的網址吐 600 秒。
+     */
+    public function test_old_slug_cache_is_forgotten_when_the_slug_changes(): void
+    {
+        $restaurant = Restaurant::factory()->create(['slug' => 'old-slug', 'name' => '十方齋']);
+
+        $this->getJson('/api/v1/restaurants/old-slug')
+            ->assertOk()
+            ->assertJsonPath('data.name', '十方齋');
+
+        $restaurant->update(['slug' => 'new-slug']);
+
+        $this->getJson('/api/v1/restaurants/old-slug')->assertNotFound();
+        $this->getJson('/api/v1/restaurants/new-slug')
+            ->assertOk()
+            ->assertJsonPath('data.name', '十方齋');
+    }
+
+    /**
+     * deleted 當下 DB 列已經沒了。Invalidator 若再 `whereKey()->value('slug')`
+     * 會拿到 null，slug 那份快取就清不到——刪掉的店還能用舊網址看 600 秒。
+     */
+    public function test_slug_cache_is_forgotten_when_the_restaurant_is_deleted(): void
+    {
+        $restaurant = Restaurant::factory()->create(['slug' => 'shi-fang-zhai']);
+
+        $this->getJson('/api/v1/restaurants/shi-fang-zhai')->assertOk();
+
+        $restaurant->delete();
+
+        $this->getJson('/api/v1/restaurants/shi-fang-zhai')->assertNotFound();
     }
 }

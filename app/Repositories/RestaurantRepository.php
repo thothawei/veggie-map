@@ -92,11 +92,22 @@ class RestaurantRepository
             return null;
         }
 
-        return Cache::remember(
-            self::slugCacheKey($slug),
-            600,
-            fn () => $this->detailQuery()->where('slug', $slug)->first(),
-        );
+        $key = self::slugCacheKey($slug);
+        $cached = Cache::get($key);
+
+        if ($cached instanceof Restaurant) {
+            return $cached;
+        }
+
+        $restaurant = $this->detailQuery()->where('slug', $slug)->first();
+
+        // 找不到不寫 cache。Cache::remember(null) 看起來像快取了 404，但 get() 拿到
+        // null 會當成 miss，下次還是打 DB，只是白寫一個 key。
+        if ($restaurant !== null) {
+            Cache::put($key, $restaurant, 600);
+        }
+
+        return $restaurant;
     }
 
     /**

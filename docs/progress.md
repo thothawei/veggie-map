@@ -3718,3 +3718,30 @@ Overpass 的使用政策明確要求節制，而且這很可能就是手動重�
 ### 驗證
 
 後端 545 → **547 個測試全綠 ＋ 4 skipped**。
+
+---
+
+## 2026-08-26 — slug cache：雜湊了 key，但 404 與失效都沒做對
+
+Claude 把 slug 雜湊進 cache key 之後，自我複查發現兩件真正會讓使用者看到錯資料的事：
+
+### 1. 改 slug／刪除之後，舊網址還是 200
+
+`RestaurantCacheInvalidator` 在 observer 裡只拿 restaurant id，再 `whereKey()->value('slug')`。
+
+- **改 slug**：查到的是新值，舊 key 清不到。`/restaurants/old-slug` 繼續吐 600 秒的快取。
+- **刪除**：列已經不在 DB，查到 null，slug 那份完全不清。刪掉的店用舊網址還看得到。
+
+slug 快取沒走 `Cache::tags(['restaurants'])`（那是搜尋列表用的），所以 flush tags 救不了詳情。
+
+修法：observer 把 `getOriginal('slug')` 與目前的 `slug` 一併傳進 invalidator。`saved` 當下 original 還沒 sync，舊值還在。
+
+### 2. `Cache::remember(null)` 快取不住 404
+
+找不到時 callback 回 `null`。Laravel 的 `remember` 用 `! is_null($value)` 判斷 hit，下次 get 到 null 還是當成 miss——每次 404 照打 DB，只是白寫一個 key。Claude 說「掃不存在的 slug 每次都會寫一個 key」，雜湊沒有停掉這件事。
+
+修法：只有查到餐廳才 `Cache::put`。
+
+### 驗證
+
+兩條測試先紅（改 slug 後舊網址 200、刪除後舊網址 200），修完變綠。`RestaurantSlugTest` 11 條全過，Pint／PHPStan 乾淨。

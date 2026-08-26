@@ -14,17 +14,22 @@ use Illuminate\Support\Facades\Cache;
  */
 class RestaurantCacheInvalidator
 {
-    public static function invalidate(int $restaurantId): void
+    /**
+     * @param  string|null  ...$knownSlugs  呼叫端手上已經有的 slug（含改名前的舊值）。
+     *                                      刪除當下 DB 列已經沒了，不能只靠再查一次。
+     */
+    public static function invalidate(int $restaurantId, ?string ...$knownSlugs): void
     {
         Cache::forget("restaurant:{$restaurantId}");
 
-        // 詳情可以用 id 或 slug 取得（第二十六節），兩者各有一份快取。只清 id 那份
-        // 的話，`/restaurants/{slug}` 會繼續吐 600 秒的舊資料——而那正是前端在用的
-        // 那條路徑，等於快取失效對使用者完全沒生效。
-        $slug = Restaurant::withoutGlobalScopes()->whereKey($restaurantId)->value('slug');
+        $fromDb = Restaurant::withoutGlobalScopes()->whereKey($restaurantId)->value('slug');
 
-        if ($slug !== null) {
-            // 必須用 Repository 那個函式算，兩邊各自拼字串遲早會不一致。
+        $slugs = array_unique(array_filter(
+            [$fromDb, ...$knownSlugs],
+            fn (mixed $slug): bool => is_string($slug) && $slug !== '',
+        ));
+
+        foreach ($slugs as $slug) {
             Cache::forget(RestaurantRepository::slugCacheKey($slug));
         }
 

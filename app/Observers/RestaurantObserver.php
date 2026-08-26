@@ -20,11 +20,26 @@ class RestaurantObserver
 {
     public function saved(Restaurant $restaurant): void
     {
-        RestaurantCacheInvalidator::invalidate($restaurant->id);
+        // saved 時 getOriginal() 還沒 sync，slug 改過的話這裡仍是舊值。
+        RestaurantCacheInvalidator::invalidate(
+            $restaurant->id,
+            self::stringOrNull($restaurant->getOriginal('slug')),
+            $restaurant->slug,
+        );
     }
 
     public function deleted(Restaurant $restaurant): void
     {
-        RestaurantCacheInvalidator::invalidate($restaurant->id);
+        // 列已經不在 DB，slug 只能從記憶體裡的 model 拿。
+        RestaurantCacheInvalidator::invalidate(
+            $restaurant->id,
+            $restaurant->slug,
+            self::stringOrNull($restaurant->getOriginal('slug')),
+        );
+    }
+
+    private static function stringOrNull(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' ? $value : null;
     }
 }
