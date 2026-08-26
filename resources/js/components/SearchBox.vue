@@ -193,7 +193,15 @@ function select(place: GeocodedPlace) {
             @focus="showResults = query.trim().length > 0"
             @blur="handleBlur"
         />
-        <button type="button" :disabled="loading" @click="search">{{ loading ? '搜尋中…' : '搜尋' }}</button>
+        <!--
+            @mousedown.prevent 跟下面每個候選項用的是同一招，理由也一樣：不加的話
+            點按鈕會先讓 input 失焦，handleBlur 在 150ms 後把清單關掉，而 geocode
+            要打外部 Nominatim、回來時清單早就不在了——按鈕看起來完全沒反應
+            （用 Enter 反而正常，因為鍵盤不會觸發 blur）。2026-08-26 在真瀏覽器實測到。
+        -->
+        <button type="button" :disabled="loading" @mousedown.prevent @click="search">
+            {{ loading ? '搜尋中…' : '搜尋' }}
+        </button>
 
         <ul v-if="showResults" class="results">
             <li class="keyword-option" @mousedown.prevent="searchByKeyword">

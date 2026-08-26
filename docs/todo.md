@@ -24,7 +24,7 @@
 第一次盤點只比對了兩份總 Prompt，沒有回頭比對自己產出的 implementation-plan——
 下次盤點三份都要比。
 
-測試：後端 **590**（4 skipped，1639 assertions）、前端 **298**，PHPStan 0 error、Pint PASS、CI 綠
+測試：後端 **590**（4 skipped，1639 assertions）、前端 **299**，PHPStan 0 error、Pint PASS、CI 綠
 （CI 從 Phase 8 起一直是紅的，2026-08-26 修好——真因是一條依賴機器時區的測試，
 以及兩條假設「這台機器沒有 docker」的沙箱測試）。
 

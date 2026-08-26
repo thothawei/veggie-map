@@ -244,7 +244,7 @@ Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:syn
 不是只驗證回應內容，快取那組測試直接斷言重複請求的 DB query 數為 0；測試環境
 `QUEUE_CONNECTION=sync`，Job 仍然同步跑完才斷言結果，不需要真的等 Horizon worker）。
 
-前端 298 個 Vitest 測試（32 個檔案），涵蓋地圖、篩選抽屜、搜尋建議的 debounce
+前端 299 個 Vitest 測試（32 個檔案），涵蓋地圖、篩選抽屜、搜尋建議的 debounce
 與競態、Admin 重複審核、餐廳詳情與 AI Office 面板，以及「未知營業時間不能顯示成已打烊」
 這類產品規則。
 

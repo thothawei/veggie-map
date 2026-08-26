@@ -20,6 +20,19 @@ describe('SearchBox', () => {
         expect(wrapper.find('[role="alert"]').text()).toContain('搜尋地點失敗');
     });
 
+    it('點搜尋按鈕不會讓輸入框失焦，否則候選清單會在 geocode 回來前被關掉', async () => {
+        // 這條測的是 @mousedown.prevent 有沒有掛在按鈕上。jsdom 不會因為點按鈕
+        // 就真的觸發 blur，所以上面那些 trigger('click') 的測試在有 bug 的版本
+        // 也照樣是綠的——真實瀏覽器才看得到「按鈕按下去毫無反應」。
+        // 把 .prevent 拿掉，這條會紅。
+        const wrapper = mount(SearchBox);
+        const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+
+        wrapper.find('button').element.dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(true);
+    });
+
     it('候選清單永遠有「搜尋餐廳」，即使 geocode 一個地點都沒找到', async () => {
         // 「拉麵」在 Nominatim 查不到地點，但後端搜尋得到菜色。舊版這裡是死路。
         get.mockResolvedValueOnce({ data: { data: [] } });
