@@ -79,6 +79,11 @@ Route::middleware('throttle:api')->group(function () {
             Route::get('/tasks/{task}', [AiOfficeTaskController::class, 'show']);
             Route::patch('/tasks/{task}', [AiOfficeTaskController::class, 'update']);
 
+            // 規格第 50 節。PATCH 也改得動狀態，但這兩支有明確語意：retry 只收
+            // 失敗／取消並繞過 max_retries，cancel 對 running 是協作式取消。
+            Route::post('/tasks/{task}/retry', [AiOfficeTaskController::class, 'retry']);
+            Route::post('/tasks/{task}/cancel', [AiOfficeTaskController::class, 'cancel']);
+
             // 只有這條路徑會產生循環相依（新任務沒有下游），環的偵測守在這裡。
             Route::post('/tasks/{task}/dependencies', [AiOfficeTaskDependencyController::class, 'store']);
             Route::delete(

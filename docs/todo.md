@@ -24,7 +24,7 @@
 第一次盤點只比對了兩份總 Prompt，沒有回頭比對自己產出的 implementation-plan——
 下次盤點三份都要比。
 
-測試：後端 **578**（4 skipped，1597 assertions）、前端 **298**，PHPStan 0 error、Pint PASS、CI 綠
+測試：後端 **590**（4 skipped，1639 assertions）、前端 **298**，PHPStan 0 error、Pint PASS、CI 綠
 （CI 從 Phase 8 起一直是紅的，2026-08-26 修好——真因是一條依賴機器時區的測試，
 以及兩條假設「這台機器沒有 docker」的沙箱測試）。
 
@@ -728,11 +728,18 @@ Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是
       **寫的時候實查抓到自己寫錯一段**：原本描述 `AgentSelector` 會擋 `max_concurrency`，
       實際上並行上限在 `AgentOrchestrator`，Selector 只排除 offline 並依忙碌程度排序。
 
-- [ ] **`POST /api/v1/ai-office/tasks/{id}/retry`／`/cancel`（AI Office §50）**
-      端點不存在。功能上走得到——`PATCH /tasks/{id}` 改 `status` 後
-      `TaskController::update()` 會呼叫 `AgentOrchestrator::tryDispatch()` 重新派工——
-      但規格點名的兩支契約沒有，OpenAPI 自然也沒有。要做的話是薄封裝：
-      retry 應該同時處理 `retry_count`，不要只是換個名字打同一段 update。
+- [x] **`POST /api/v1/ai-office/tasks/{id}/retry`／`/cancel`（AI Office §50）✅ 2026-08-26**
+      不是薄封裝，兩支都有 PATCH 給不了的語意：retry 只收 `failed`／`cancelled` 且
+      **不受 `max_retries` 限制**（人按的重試不是無人看管的自動重跑），`retry_count` 不歸零；
+      cancel 對 `running` 是**協作式取消**，回應帶 `stops_after_current_step` 說清楚
+      「已取消 ≠ 此刻已停」。狀態不對一律 422，不靜默回 200。
+
+      **做的時候發現一個真的漏洞**：`AgentRuntime::run()` 的 `startRun()` 會無條件把
+      狀態覆寫成 `running`——只靠 `ExecuteTaskJob` 開頭那道檢查的話，取消會被無聲抹掉。
+      防線補在會被覆寫的那一側（`run()` 開頭丟 `TaskCancelledException`），
+      迴圈裡另有每步檢查。兩道都做過反向驗證：拔掉任一道，對應測試立刻紅。
+
+      前端還沒有按鈕（`TaskDetail` 未接），端點與合約先到位。
 
 - [ ] **`ResourceUsage`：CPU／Memory 監控（AI Office §39、§44、plan L185）**
       元件不存在。全 repo 的 `cpu` 只出現在 `DockerSandboxEngine`／`SandboxManager`

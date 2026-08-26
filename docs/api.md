@@ -347,6 +347,8 @@ Controller 只做「呼叫 Service／回傳 Resource」，不做欄位驗證與�
 | POST | `/ai-office/projects/{id}/tasks` | 建立任務，可帶 `dependencies: [taskId,...]` | admin, manager, developer |
 | GET | `/ai-office/tasks/{id}` | 任務詳情，含 `dependencies_satisfied` 布林值 | 唯讀 |
 | PATCH | `/ai-office/tasks/{id}` | 更新任務（狀態、優先度、指派 Agent） | admin, manager, developer |
+| POST | `/ai-office/tasks/{id}/retry` | 人工重試，只收 `failed`／`cancelled`，不受 `max_retries` 限制 | admin, manager, developer |
+| POST | `/ai-office/tasks/{id}/cancel` | 取消任務，body 可帶 `reason`；`running` 是協作式取消 | admin, manager, developer |
 | POST | `/ai-office/tasks/{id}/dependencies` | 新增相依，body `{ "depends_on_task_ids": [1,2] }` | admin, manager, developer |
 | DELETE | `/ai-office/tasks/{id}/dependencies/{dep}` | 移除相依 | admin, manager, developer |
 | GET | `/ai-office/agents` | Agent 列表（`?role=`、`?status=`），不含 system prompt | 唯讀 |
@@ -464,6 +466,20 @@ context，等於每次請求都要為它付 token。
 ```
 
 ### 循環相依
+
+### 重試與取消的語意（第 50 節）
+
+`PATCH /ai-office/tasks/{id}` 也改得動狀態，但這兩支端點有明確語意，行為並不等價：
+
+- **retry** 只接受 `failed` 與 `cancelled`，其餘狀態回 422（不是靜默回 200 說成功卻
+  什麼都沒發生）。它**不受 `max_retries` 限制**：自動重試的上限是為了擋住無人看管的
+  無限重跑，人明確按下重試時再擋，等於在最需要那顆按鈕的時刻把它拿掉。
+  `retry_count` 不歸零——失敗過幾次是事實，不因為換人按而消失。
+- **cancel** 接受尚未結束的狀態。對 `running` 的任務是**協作式取消**：沒有辦法從外面
+  砍掉別的 process 裡跑到一半的 LLM 請求，所以做法是先寫下狀態，`AgentRuntime`
+  在下一個步進點看到就收手，並且不會把 `cancelled` 覆寫回 `completed`／`failed`。
+  回應中的 `data.stops_after_current_step` 就是在說這件事：「已取消」不等於
+  「此刻已經停了」。已經寫出去的檔案不會回滾。
 
 `POST /ai-office/tasks/{id}/dependencies` 會在寫入前做 DFS 偵測，擋掉自環、直接互指與
 間接繞回（A→B→C→A）。命中時回 **422**：

@@ -8,6 +8,7 @@ use App\AiOffice\Models\Agent;
 use App\AiOffice\Models\Project;
 use App\AiOffice\Models\Task;
 use App\AiOffice\Runtime\AgentRuntime;
+use App\AiOffice\Runtime\TaskCancelledException;
 use App\AiOffice\Tools\ToolRegistry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use RuntimeException;
@@ -157,6 +158,60 @@ class AgentRuntimeTest extends TestCase
 
         $this->expectException(RuntimeException::class);
         $this->runtime()->run($task);
+    }
+
+    /**
+     * 防線一：已取消的任務不該開跑。ExecuteTaskJob 開頭也擋，但 startRun() 下一步
+     * 就會把狀態覆寫成 running——防線必須也長在會覆寫的這一側，否則取消被無聲抹掉。
+     */
+    public function test_running_an_already_cancelled_task_is_refused(): void
+    {
+        $agent = $this->agent();
+        $task = $this->task($agent);
+        $task->update(['status' => 'cancelled']);
+
+        $this->llm->pushText('做完了');
+
+        $this->expectException(TaskCancelledException::class);
+
+        try {
+            $this->runtime()->run($task);
+        } finally {
+            $this->assertSame('cancelled', $task->fresh()->status);
+            // 連模型都沒被呼叫：那則排好的回覆還躺在佇列裡。
+            $this->assertSame(1, $this->llm->pendingCount());
+            $this->assertDatabaseCount('ai_office_task_runs', 0);
+        }
+    }
+
+    /**
+     * 防線二：協作式取消（規格第 50 節）。取消發生在任務跑到一半時（這裡用工具
+     * 執行當下改狀態來模擬），runtime 要在下一個步進點收手，而且**不能**把
+     * cancelled 覆寫成 completed——否則使用者會看到自己按過取消的任務顯示成完成。
+     */
+    public function test_a_task_cancelled_mid_run_stops_at_the_next_step(): void
+    {
+        $agent = $this->agent(['read_file' => 'allow'], ['file']);
+        $task = $this->task($agent);
+
+        $tool = new RecordingTool(onExecute: function () use ($task) {
+            // 模擬另一個請求在這個瞬間打了 POST /tasks/{id}/cancel。
+            Task::query()->whereKey($task->id)->update(['status' => 'cancelled']);
+        });
+        $this->registry->register($tool);
+
+        $this->llm->pushToolCall('read_file', ['path' => 'a.php']);
+        // 沒有取消檢查的話，第二輪會消費這則並把任務標成 completed。
+        $this->llm->pushText('做完了');
+
+        $run = $this->runtime()->run($task);
+
+        $this->assertSame('cancelled', $run->status);
+        $this->assertSame('cancelled', $task->fresh()->status);
+        $this->assertSame('idle', $agent->fresh()->status);
+        // 工具已經跑過一次（那是取消前的事，不可逆），但第二輪的模型呼叫沒有發生。
+        $this->assertSame(1, $tool->callCount());
+        $this->assertSame(1, $this->llm->pendingCount());
     }
 
     public function test_an_allowed_tool_is_executed_and_its_result_goes_back_to_the_model(): void

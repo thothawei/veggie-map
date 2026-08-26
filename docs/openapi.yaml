@@ -1061,6 +1061,46 @@ paths:
       responses:
         "200": { description: OK }
 
+  /ai-office/tasks/{task}/retry:
+    post:
+      operationId: retryAiOfficeTask
+      tags: [AI Office]
+      summary: 人工重試（只收 failed／cancelled，不受 max_retries 限制）
+      description: >-
+        與 PATCH status=assigned 不同：這支有明確語意，而且不受 max_retries 限制——
+        自動重試的上限是為了擋住無人看管的無限重跑，人明確要求時再擋，等於在最需要
+        它的時候（任務已永久失敗）拿掉這顆按鈕。retry_count 不歸零。
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: task, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: 已重新排入佇列 }
+        "403": { description: viewer 沒有寫入權限 }
+        "422": { description: 任務狀態不是 failed／cancelled }
+
+  /ai-office/tasks/{task}/cancel:
+    post:
+      operationId: cancelAiOfficeTask
+      tags: [AI Office]
+      summary: 取消任務（running 是協作式取消）
+      description: >-
+        running 的任務不會當場中斷——沒有辦法從外面砍掉別的 process 裡跑到一半的
+        LLM 請求。回應的 data.stops_after_current_step 為 true 時，表示執行中的那一輪
+        會在下一個步進點停下；已經寫出去的檔案不會回滾。
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: task, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 1000, description: 取消原因，會寫進 task.error }
+      responses:
+        "200": { description: 已取消 }
+        "403": { description: viewer 沒有寫入權限 }
+        "422": { description: 任務已結束，不能取消 }
+
   /ai-office/tasks/{task}/dependencies:
     post:
       operationId: addAiOfficeTaskDependency

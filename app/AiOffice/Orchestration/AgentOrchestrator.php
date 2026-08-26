@@ -254,15 +254,26 @@ class AgentOrchestrator
         $this->messenger->taskPermanentlyFailed($task);
     }
 
-    public function retry(Task $task): void
+    /**
+     * $manual = true 是「人在 UI 按了重試」（規格第 50 節），與自動重試有兩點不同：
+     *
+     *  1. 不受 max_retries 限制。自動重試的上限是為了擋住無人看管的無限重跑；
+     *     人明確要求時再擋，等於在最需要那顆按鈕的時候（任務已永久失敗）拿掉它。
+     *  2. 連 cancelled 也收。取消是人的決定，反悔也是。
+     *
+     * retry_count 不歸零：那是這個任務失敗過幾次的事實，不該因為換人按而消失。
+     */
+    public function retry(Task $task, bool $manual = false): void
     {
         $task->refresh();
 
-        if ($task->status !== 'failed') {
+        $acceptable = $manual ? Task::RETRYABLE_STATUSES : ['failed'];
+
+        if (! in_array($task->status, $acceptable, true)) {
             return;
         }
 
-        if ($task->retry_count >= $task->max_retries) {
+        if (! $manual && $task->retry_count >= $task->max_retries) {
             return;
         }
 
@@ -277,6 +288,53 @@ class AgentOrchestrator
         }
 
         $this->tryDispatch($task);
+    }
+
+    /**
+     * 取消任務（規格第 50 節的 POST /tasks/{id}/cancel）。
+     *
+     * running 的任務**不會**當場中斷——沒有辦法從外面砍掉別的 process 裡跑到一半的
+     * LLM 請求。這裡只寫下狀態，AgentRuntime 在下一個步進點看到就收手，
+     * 而且不會把 cancelled 覆寫回 completed／failed。所以取消 running 的語意是
+     * 「不要再往下做了」，不是「當作沒發生過」：已經寫出去的檔案還在。
+     *
+     * 已排隊但還沒被 worker 撈到的任務更單純：ExecuteTaskJob 開頭就會因為狀態
+     * 不是 pending／assigned 而直接 return。
+     */
+    public function cancel(Task $task, ?string $reason = null): void
+    {
+        $task->refresh();
+
+        if (! in_array($task->status, Task::CANCELLABLE_STATUSES, true)) {
+            return;
+        }
+
+        $wasRunning = $task->status === 'running';
+
+        $task->update([
+            'status' => 'cancelled',
+            'error' => $reason,
+        ]);
+
+        // Agent 卡在 working／waiting_review 的話要放它走，否則它的並行額度
+        // 被一個已經取消的任務永久佔著，之後什麼都派不進去。
+        $agent = $task->agent;
+        if ($agent !== null && ! $wasRunning && in_array($agent->status, ['working', 'waiting_review'], true)) {
+            $agent->update(['status' => 'idle']);
+        }
+
+        $this->activities->record(
+            'TaskCancelled',
+            "「{$task->title}」已取消".($wasRunning ? '，執行中的那一輪會在下一個步進點停下' : ''),
+            $task,
+            $agent,
+            ['was_running' => $wasRunning],
+        );
+
+        $project = $task->project;
+        if ($project !== null) {
+            $this->refreshProjectStatus($project);
+        }
     }
 
     public function refreshProjectStatus(Project $project): void

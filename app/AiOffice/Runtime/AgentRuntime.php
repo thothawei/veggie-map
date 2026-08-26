@@ -55,6 +55,13 @@ class AgentRuntime
             throw new RuntimeException("Task #{$task->id} 沒有指派 Agent，無法執行。");
         }
 
+        // 已取消的任務不該開跑。ExecuteTaskJob 開頭也擋了一次，但那道防線只在
+        // 「經由佇列進來」時有效——runtime 是公開方法，而且 startRun() 下一步就會
+        // 把狀態覆寫成 running，取消會被無聲地抹掉。防線要長在會被覆寫的那一側。
+        if ($task->status === 'cancelled') {
+            throw new TaskCancelledException("Task #{$task->id} 已取消，不執行。");
+        }
+
         $agent->loadMissing(['permissions', 'tools']);
 
         // prompt 只組一次，startRun 記進 task_runs.input 的與真正送出去的是同一份
@@ -86,6 +93,13 @@ class AgentRuntime
 
         while ($guard->canTakeStep()) {
             $guard->recordStep();
+
+            // 協作式取消（規格第 50 節的 POST /tasks/{id}/cancel）。沒有辦法從外面
+            // 砍掉這個 process 裡跑到一半的 LLM 請求，所以取消的做法是「下一個步進點
+            // 就收手」。每輪只多查一欄，相對於一次 LLM 往返可以忽略。
+            if ($this->cancelledElsewhere($task)) {
+                return $this->cancelRun($task, $agent, $taskRun, $guard);
+            }
 
             $response = $this->provider->send(new LlmRequest(
                 systemPrompt: $agent->system_prompt,
@@ -290,6 +304,36 @@ class AgentRuntime
             'run_number' => $taskRun->run_number,
             'tokens' => $guard->tokens(),
         ]);
+
+        return $taskRun->refresh();
+    }
+
+    private function cancelledElsewhere(Task $task): bool
+    {
+        return Task::query()->whereKey($task->id)->value('status') === 'cancelled';
+    }
+
+    /**
+     * 被取消時收尾。**不寫 task.status**——它已經是 cancelled，覆寫回
+     * completed／failed 會讓取消變成假的（使用者按了取消、畫面卻顯示完成）。
+     */
+    private function cancelRun(
+        Task $task,
+        Agent $agent,
+        TaskRun $taskRun,
+        AgentLoopGuard $guard,
+    ): TaskRun {
+        $this->finishRun($taskRun, 'cancelled', $guard, error: '任務在執行中被取消。');
+
+        $agent->update(['status' => 'idle']);
+
+        $this->activities->record(
+            'TaskCancelled',
+            "{$agent->name} 在取消後停下「{$task->title}」",
+            $task,
+            $agent,
+            ['run_number' => $taskRun->run_number, 'steps' => $guard->steps()],
+        );
 
         return $taskRun->refresh();
     }

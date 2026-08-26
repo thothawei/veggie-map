@@ -22,6 +22,8 @@ class RecordingTool implements ToolInterface
         private readonly string $toolset = 'file',
         private readonly string $riskLevel = 'low',
         private readonly bool $shouldThrow = false,
+        /** 執行當下要做的額外動作，用來模擬「工具跑的時候外面發生了別的事」。 */
+        private readonly ?\Closure $onExecute = null,
     ) {}
 
     public function name(): string
@@ -56,6 +58,10 @@ class RecordingTool implements ToolInterface
     public function execute(array $input, ToolContext $context): array
     {
         $this->calls[] = $input;
+
+        if ($this->onExecute !== null) {
+            ($this->onExecute)($input, $context);
+        }
 
         if ($this->shouldThrow) {
             throw new RuntimeException('工具壞掉了');

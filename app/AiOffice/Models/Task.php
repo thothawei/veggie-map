@@ -30,6 +30,23 @@ class Task extends Model
     /** 相依已滿足、可以真的開跑的終點狀態。 */
     public const TERMINAL_SUCCESS_STATUSES = ['completed', 'approved'];
 
+    /**
+     * 人工重試接受的狀態（規格第 50 節的 POST /tasks/{id}/retry）。
+     *
+     * `cancelled` 在裡面是刻意的：取消是人的決定，反悔也是。已經 completed／approved
+     * 的不給重試——那要的是「再跑一次」而不是「重試」，語意不同，會把 retry_count
+     * 的意義弄髒。
+     */
+    public const RETRYABLE_STATUSES = ['failed', 'cancelled'];
+
+    /**
+     * 可以取消的狀態。`running` 在裡面，但那是**協作式取消**：先標記，
+     * AgentRuntime 在下一個步進點才會真的停下來（見 AgentRuntime::loop()）。
+     * 已經結束的任務（completed／approved／rejected／failed／cancelled）不給取消
+     * ——那不是取消，是改寫歷史。
+     */
+    public const CANCELLABLE_STATUSES = ['pending', 'planning', 'assigned', 'running', 'waiting_review'];
+
     protected $table = 'ai_office_tasks';
 
     protected $fillable = [
