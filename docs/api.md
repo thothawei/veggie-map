@@ -58,6 +58,15 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 | GET | `/admin/verification-types` | 可手動寫入的驗證類型（code／label／分數，來自 `config/vegetarian.php`） | 必須（admin） |
 | POST | `/admin/restaurants/{id}/verifications` | 手動記錄一筆驗證，寫完立刻重算素食可信度 | 必須（admin） |
 
+## API 文件頁
+
+`GET /docs`（Redoc）與 `GET /docs/openapi.yaml`。規格檔直接送 repo 裡的
+`docs/openapi.yaml` 本人，不複製到 `public/`——複製就會有「文件更新了但網站上還是
+舊的」這種漂移。
+
+預設只在非 production 註冊路由（`VEGGIEMAP_DOCS_ENABLED`）。關掉不是為了保密
+（規格本來就是公開的 REST API），而是不要在正式站放一個沒有人維護的頁面。
+
 ## `GET /restaurants/suggest` 搜尋建議（自動完成）
 
 `?q=關鍵字&city=台中市`（`city` 選填）。回三種型別的建議，每類最多 5 筆：
@@ -79,6 +88,8 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 - **行政區**直接查 `restaurants` 的既有值，不是寫死清單：涵蓋範圍由匯入資料決定。
 - Redis cache 60s（`restaurants:suggest:{hash}`，tag `restaurants`）。自動完成是
   逐字打出來的，同一個前綴會被反覆查詢，正是 cache 最有效的形狀。
+- **限流另計**（`throttle:suggest`，預設 180/分鐘）：自動完成每打幾個字就是一次請求，
+  跟其他端點共用 60/分鐘的話，正常打字幾輪就會撞 429、建議整個消失。
 
 ## `GET /restaurants` 查詢參數
 

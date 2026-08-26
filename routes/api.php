@@ -30,7 +30,11 @@ Route::middleware('throttle:api')->group(function () {
     Route::get('/restaurants', [RestaurantController::class, 'index']);
     Route::get('/restaurants/recommended', [RestaurantController::class, 'recommended']);
     // 必須排在 /restaurants/{restaurant} 前面，否則會被當成一家 id=suggest 的餐廳。
-    Route::get('/restaurants/suggest', [RestaurantController::class, 'suggest']);
+    // 自動完成另外掛一個比較寬的限流（見 AppServiceProvider）——`throttle:api` 的
+    // 60/分鐘會讓正常打字幾輪就撞 429。兩個 middleware 疊著，兩邊都要過。
+    Route::get('/restaurants/suggest', [RestaurantController::class, 'suggest'])
+        ->middleware('throttle:suggest')
+        ->withoutMiddleware('throttle:api');
     Route::get('/restaurants/{restaurant}', [RestaurantController::class, 'show']);
     Route::get('/restaurants/{restaurant}/reviews', [ReviewController::class, 'index']);
 

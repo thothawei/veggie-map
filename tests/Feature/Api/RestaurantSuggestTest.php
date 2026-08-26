@@ -135,4 +135,21 @@ class RestaurantSuggestTest extends TestCase
 
         $this->assertSame([$located->id, $nameless->id], $ids);
     }
+
+    /**
+     * 自動完成每打幾個字就是一次請求。跟一般 API 共用 60/分鐘的話，正常打字幾輪
+     * 就會撞 429、建議整個消失——所以它有自己的（比較寬的）額度。
+     */
+    public function test_suggest_has_its_own_rate_limit_higher_than_the_general_api(): void
+    {
+        config(['veggiemap.search.suggest_rate_limit' => 70]);
+
+        // 先把一般 API 的 60/分鐘打滿。
+        foreach (range(1, 61) as $ignored) {
+            $this->getJson('/api/v1/cities');
+        }
+
+        $this->getJson('/api/v1/cities')->assertStatus(429);
+        $this->getJson('/api/v1/restaurants/suggest?q=素食')->assertOk();
+    }
 }

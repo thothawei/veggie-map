@@ -79,5 +79,14 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
+
+        // 自動完成天生就會比一般端點多打很多次：使用者每打幾個字就是一次請求
+        // （前端已經 debounce 250ms，但打一句話仍然是好幾發）。跟一般 API 共用
+        // 60/分鐘的話，正常打字幾輪就會撞上 429，搜尋建議整個消失。
+        // 額度另外開，但仍然有上限——這條端點不帶認證，一樣會被打。
+        RateLimiter::for('suggest', function (Request $request) {
+            return Limit::perMinute((int) config('veggiemap.search.suggest_rate_limit', 180))
+                ->by($request->user()?->id ?: $request->ip());
+        });
     }
 }

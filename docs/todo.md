@@ -576,8 +576,8 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 - [ ] **可瀏覽的 API 文件掛在 `/docs`（最終完成標準）**
       有 `docs/openapi.yaml`，lint 過。網站上沒有 Swagger UI／Redoc，clone 下來看不到
-      「http://localhost:8080/docs」。最小做法：用 `darkaonline/l5-swagger` 或靜態
-      Redoc 頁吃同一份 yaml，production 可選擇只在 local 開。
+      ✅ **已完成 2026-08-26**：`GET /docs`（Redoc，CDN 載入）＋`/docs/openapi.yaml`
+      直接送 repo 裡那份檔案。預設只在非 production 註冊路由。
 
 - [x] **Circuit breaker（第二十節）✅ 2026-08-26**
       `App\Services\External\CircuitBreaker`，狀態存 Redis（跨程序共用，因為排程是

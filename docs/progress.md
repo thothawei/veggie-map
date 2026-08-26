@@ -3010,3 +3010,35 @@ Pint PASS、PHPStan 0 error、OpenAPI lint 0 error。
 
 前端 262 → **265 個測試全綠**，vue-tsc／ESLint 乾淨，`npm run build` 通過，
 並在瀏覽器上用真實資料看過。
+
+---
+
+## 2026-08-26 — `/docs` 文件頁與自動完成的獨立限流
+
+### `/docs`（總 Prompt 的「最終完成標準」列了這個路徑）
+
+`GET /docs` 用 Redoc 渲染，`GET /docs/openapi.yaml` **直接送 repo 裡那份檔案**——
+複製一份到 `public/` 就會有「文件更新了但網站上還是舊的」這種漂移，那比沒有文件頁
+更糟。Redoc 從 CDN 載入而不是打包進前端 bundle：這頁跟 SPA 是兩件事，沒有理由讓
+每個使用者都下載一份文件工具的 JS。代價是這頁需要外網，所以 `docs/openapi.yaml`
+本身仍然是可以直接讀、可以匯進 Swagger UI／Postman 的純文字。
+
+路由**只有在 `veggiemap.docs.enabled` 為真時才註冊**，預設非 production 才開。
+關掉不是為了保密（規格本來就是公開的 REST API），而是不要在正式站放一個沒有人
+維護的頁面。
+
+### 自動完成撞得到限流——這是我前面自己引進的問題
+
+`/restaurants/suggest` 原本跟其他端點共用 `throttle:api` 的 60/分鐘。但自動完成
+每打幾個字就是一次請求（前端已經 debounce 250ms，打一句話仍然是好幾發），正常
+使用幾輪就會撞 429、建議整個消失，而且**畫面上什麼都不會說**（建議失敗是刻意
+安靜略過的）。
+
+改成獨立的 `throttle:suggest`（預設 180/分鐘，config 可調），並用
+`withoutMiddleware('throttle:api')` 把原本那層拿掉——不拿掉的話兩層疊著，寬的那層
+形同虛設。測試把一般 API 打到 429 之後，再確認 suggest 仍然回 200。
+
+### 驗證
+
+後端 495 → **499 個測試全綠 ＋ 4 skipped**，Pint PASS、PHPStan 0 error。
+`/docs` 在瀏覽器上真的渲染出全部端點。
