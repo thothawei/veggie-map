@@ -16,6 +16,29 @@ class ScheduleTest extends TestCase
      * @param  array<int, array{bbox: string, diet: string}>  $regions
      * @return array<int, string>
      */
+    /**
+     * 同上，但回傳 cron 運算式而不是指令字串——驗「排在什麼時候」用的。
+     *
+     * @param  array<int, array{bbox: string, diet: string}>  $regions
+     * @return array<int, string>
+     */
+    private function scheduledExpressions(array $regions): array
+    {
+        config(['services.sync_regions' => $regions]);
+
+        $schedule = new Schedule;
+        $this->app->instance(Schedule::class, $schedule);
+        Facade::clearResolvedInstance(Schedule::class);
+
+        require base_path('routes/console.php');
+
+        return collect($schedule->events())
+            ->filter(fn ($event) => str_contains($event->command, 'restaurants:sync'))
+            ->map(fn ($event) => $event->expression)
+            ->values()
+            ->all();
+    }
+
     private function scheduledCommands(array $regions): array
     {
         config(['services.sync_regions' => $regions]);
@@ -103,5 +126,34 @@ class ScheduleTest extends TestCase
             DietCatalog::syncModeIncludes($region['diet'], 'yes'),
             "東京的收錄模式 [{$region['diet']}] 必須含 osm value yes，否則友善店進不來"
         );
+    }
+
+    /**
+     * 五個城市不能在同一秒一起打 Overpass。理由不是我們自己的效能——Overpass 是
+     * 免費的社群服務，使用政策明確要求節制；2026-08-26 手動重跑時東京（最大的
+     * bbox）就連續拿到兩次 HTTP 504。
+     */
+    public function test_regions_are_staggered_so_they_do_not_hit_overpass_at_once(): void
+    {
+        $expressions = $this->scheduledExpressions([
+            ['bbox' => 'a', 'diet' => 'yes'],
+            ['bbox' => 'b', 'diet' => 'yes'],
+            ['bbox' => 'c', 'diet' => 'yes'],
+        ]);
+
+        $this->assertSame(['0 1 * * *', '10 1 * * *', '20 1 * * *'], $expressions);
+        $this->assertCount(3, array_unique($expressions), '每個城市要有自己的時間，不能重疊');
+    }
+
+    public function test_many_regions_roll_over_into_the_next_hour_instead_of_colliding(): void
+    {
+        // 城市數量變多時不能繞回同一分鐘（`% 60` 沒有配上小時進位的話，第七個
+        // 城市會跟第一個撞在一起）。
+        $regions = array_map(fn (int $i) => ['bbox' => "bbox-{$i}", 'diet' => 'yes'], range(1, 8));
+
+        $expressions = $this->scheduledExpressions($regions);
+
+        $this->assertCount(8, array_unique($expressions));
+        $this->assertContains('0 2 * * *', $expressions, '第七個要滾到 02:00，不是繞回 01:00');
     }
 }

@@ -148,6 +148,13 @@ Overpass／Nominatim 都是「免費但不保證 SLA」的公開服務，因此�
 
 ---
 
+## 排程節制
+
+五個城市的 `restaurants:sync` **錯開 10 分鐘**（01:00、01:10、01:20…），不在同一秒
+一起打 Overpass。理由不是我們自己的效能——Overpass 是免費的社群服務，使用政策明確
+要求節制；2026-08-26 手動重跑時東京（最大的 bbox）連續拿到兩次 HTTP 504。
+錯開之後單一失敗也不會連帶影響其他城市。
+
 ## 失敗處理與斷路器
 
 每次外部呼叫都寫一筆 `external_api_logs`（provider／endpoint／status／
