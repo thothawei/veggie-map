@@ -24,6 +24,8 @@ let map: L.Map | null = null;
 let clusterGroup: L.MarkerClusterGroup | null = null;
 const mapEl = ref<HTMLDivElement | null>(null);
 
+let resizeObserver: ResizeObserver | null = null;
+
 function emitBounds() {
     if (!map) return;
     const b = map.getBounds();
@@ -149,9 +151,23 @@ onMounted(() => {
     map.on('moveend', emitBounds);
     renderMarkers();
     emitBounds();
+
+    // 容器在掛載當下可能還沒有寬高（見 emitBounds 的退化 bbox 判斷）。只是「不送」
+    // 還不夠——`moveend` 不會因為容器變大而觸發，那次載入就永遠不會補回來，畫面
+    // 停在空地圖（2026-08-26 實測，這正是加上退化判斷之後引進的回歸）。
+    // 尺寸一確定就叫 Leaflet 重新量測，並補送一次 bbox。
+    resizeObserver = new ResizeObserver(() => {
+        if (!map) return;
+
+        map.invalidateSize();
+        emitBounds();
+    });
+    resizeObserver.observe(mapEl.value as HTMLDivElement);
 });
 
 onBeforeUnmount(() => {
+    resizeObserver?.disconnect();
+    resizeObserver = null;
     map?.remove();
     map = null;
 });

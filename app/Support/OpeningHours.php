@@ -15,6 +15,8 @@ namespace App\Support;
  *   24/7
  *   Mo-Fr 11:00-14:00,17:00-21:00
  *   Mo,We,Fr 09:00-18:00; Sa 10:00-14:00; Su off
+ *   Mo, We-Fr 11:00-14:00, 17:00-21:00   （逗號後有空白）
+ *   Mo-Su 11:00-14:00, Mo-Fr 16:00-19:00 （逗號分隔兩條完整規則）
  *   11:00-21:00                （沒有星期＝每天）
  *   Mo-Su 17:00-02:00          （跨午夜，切成兩段）
  *   PH off / PH 09:00-12:00    （節慶規則直接忽略，不影響其他規則）
@@ -69,7 +71,7 @@ final class OpeningHours
         $byDay = [];
         $matchedAnyRule = false;
 
-        foreach (explode(';', $normalized) as $rule) {
+        foreach (self::splitRules($normalized) as ['text' => $rule, 'additive' => $additive]) {
             $rule = trim($rule);
 
             if ($rule === '') {
@@ -94,8 +96,11 @@ final class OpeningHours
             [$days, $intervals] = $parsed;
 
             foreach ($days as $day) {
-                // OSM 語意是「後面的規則覆蓋前面的」，所以整天重設而不是累加。
-                $byDay[$day] = $intervals;
+                // `;` 分隔＝後面的規則覆蓋前面的（`Mo-Su 09:00-18:00; Su off` 的週日
+                // 要真的公休）；`,` 分隔＝additive，兩段都算。
+                $byDay[$day] = $additive
+                    ? [...($byDay[$day] ?? []), ...$intervals]
+                    : $intervals;
             }
         }
 
@@ -104,6 +109,35 @@ final class OpeningHours
         }
 
         return self::flatten($byDay);
+    }
+
+    /**
+     * 拆成一條一條規則。
+     *
+     * 分隔符號通常是 `;`，但 OSM 實際資料裡也有用逗號接兩條完整規則的：
+     * `Mo-Su 11:00-14:00, Mo-Fr 16:00-19:00`（2026-08-26 台中同步的真實資料）。
+     * 判斷方式是「逗號前面是時間、後面是星期」——這個組合不可能是同一條規則裡的
+     * 時段列表（那會是 `11:00-14:00,17:00-21:00`），也不可能是星期列表
+     * （那會是 `Mo,We`，前面不是數字）。
+     *
+     * @return list<array{text: string, additive: bool}>
+     */
+    private static function splitRules(string $normalized): array
+    {
+        $rules = [];
+
+        foreach (explode(';', $normalized) as $chunk) {
+            $parts = preg_split('/(?<=\d),\s*(?=(?:Mo|Tu|We|Th|Fr|Sa|Su)\b)/', $chunk) ?: [$chunk];
+
+            foreach ($parts as $index => $part) {
+                // OSM 的兩個分隔符號語意不同：`;` 是「後面覆蓋前面」，`,` 是「再加一條」。
+                // `Mo-Su 11:00-14:00, Mo-Fr 16:00-19:00` 的平日**兩段都營業**；
+                // 一律覆蓋的話會把中午那段吃掉——這是拿真實資料回來測才發現的。
+                $rules[] = ['text' => $part, 'additive' => $index > 0];
+            }
+        }
+
+        return $rules;
     }
 
     /**
@@ -116,7 +150,8 @@ final class OpeningHours
         $days = range(0, 6);
         $timePart = $rule;
 
-        if (preg_match('/^((?:Mo|Tu|We|Th|Fr|Sa|Su)(?:[-,](?:Mo|Tu|We|Th|Fr|Sa|Su))*)\s*(.*)$/', $rule, $m) === 1) {
+        // 分隔符號前後允許空白：真實資料裡 `Mo, We-Fr 11:00-14:00` 很常見。
+        if (preg_match('/^((?:Mo|Tu|We|Th|Fr|Sa|Su)(?:\s*[-,]\s*(?:Mo|Tu|We|Th|Fr|Sa|Su))*)\s*(.*)$/', $rule, $m) === 1) {
             $days = self::parseDays($m[1]);
             $timePart = trim($m[2]);
 
@@ -167,7 +202,7 @@ final class OpeningHours
     {
         $days = [];
 
-        foreach (explode(',', $spec) as $part) {
+        foreach (explode(',', str_replace(' ', '', $spec)) as $part) {
             if (str_contains($part, '-')) {
                 [$from, $to] = explode('-', $part, 2);
 

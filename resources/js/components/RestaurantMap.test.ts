@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { triggerResize } from '@/test/setup';
 import type { Restaurant } from '@/types';
 
 const mapStub = {
@@ -15,6 +16,7 @@ const mapStub = {
         getNorth: () => 25.1,
         getEast: () => 121.7,
     })),
+    invalidateSize: vi.fn(),
 };
 
 const clusterStub = { clearLayers: vi.fn(), addLayer: vi.fn() };
@@ -275,6 +277,34 @@ describe('RestaurantMap bounds 事件', () => {
      * 2026-08-26 瀏覽器實測：首次渲染時容器還沒量到寬度，east === west，
      * 算出來的 bbox 是一條線，後端回 422，畫面閃一下「載入失敗」。
      */
+    /**
+     * 2026-08-26 實測到的回歸：只是「不送」會讓那次載入永遠補不回來——`moveend`
+     * 不會因為容器變大而觸發，畫面停在空地圖，一筆 /restaurants 請求都不會發。
+     */
+    it('尺寸確定後會補送一次 bbox', () => {
+        mapStub.getBounds.mockReturnValue({
+            getSouth: () => 25.0,
+            getWest: () => 121.56,
+            getNorth: () => 25.06,
+            getEast: () => 121.56,
+        });
+
+        const wrapper = mountMap();
+        expect(wrapper.emitted('bounds-changed')).toBeUndefined();
+
+        // 容器量到尺寸了。
+        mapStub.getBounds.mockReturnValue({
+            getSouth: () => 24.9,
+            getWest: () => 121.4,
+            getNorth: () => 25.1,
+            getEast: () => 121.7,
+        });
+        triggerResize();
+
+        expect(wrapper.emitted('bounds-changed')).toHaveLength(1);
+        expect(mapStub.invalidateSize).toHaveBeenCalled();
+    });
+
     it('容器還沒有寬度時不送退化的 bbox', () => {
         mapStub.getBounds.mockReturnValue({
             getSouth: () => 25.0,

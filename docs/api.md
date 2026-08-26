@@ -137,8 +137,15 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 「已打烊」會誤導使用者。同理，`open_now=1` **不會**把未知的店算進來。
 
 解析只支援 OSM `opening_hours` 的常見子集（`24/7`、`Mo-Fr 11:00-14:00,17:00-21:00`、
+逗號後有空白的 `Mo, We-Fr ...`、逗號接兩條規則的 `Mo-Su 11:00-14:00, Mo-Fr 16:00-19:00`、
 跨午夜、`PH off`）；月份區間、週序、日出日落等寫法一律視為無法解析，見
 `app/Support/OpeningHours.php`。
+
+**`;` 與 `,` 語意不同**：`;` 是「後面覆蓋前面」（`Mo-Su 09:00-18:00; Su off` 的週日
+真的公休），`,` 是「再加一條」（上面那個例子平日中午與傍晚兩段都營業）。
+
+解析器改版後可以用 `php artisan restaurants:reparse-opening-hours` 拿**已存下來的原始
+字串**重新產生時段列，不必重打 Overpass（`--dry-run` 先看會變成什麼）。
 
 `GET /diets` 每筆有 `kind`／`group_label`，`meta.venue_scope` 是篩選參數名、預設值與選項，
 `meta.menu_item_diets` 是菜單層 `diet_type` 的 code／label（詳情頁分組與寫入驗證都讀這份，

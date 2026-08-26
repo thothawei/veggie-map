@@ -119,6 +119,33 @@ class OpeningHoursTest extends TestCase
         ];
     }
 
+    /**
+     * 以下五個字串是 2026-08-26 同步台中 bbox 之後，實際解析失敗的那 5 筆
+     * （共 73 筆有 opening_hours）。全部是同一個形狀：逗號後面有空白。
+     * 拿真實資料回來補測試，比自己想像 OSM 會長什麼樣子可靠。
+     */
+    #[DataProvider('realWorldValuesThatUsedToFail')]
+    public function test_real_world_values_from_the_taichung_sync(string $raw, int $expectedRows): void
+    {
+        $rows = OpeningHours::parse($raw);
+
+        $this->assertNotNull($rows, "應該要解析得出來：{$raw}");
+        $this->assertCount($expectedRows, $rows);
+    }
+
+    public static function realWorldValuesThatUsedToFail(): array
+    {
+        return [
+            // 逗號接兩條完整規則：全週 11:00-14:00（7）＋ 平日 16:00-19:00（5）
+            '天慈素食' => ['Mo-Su 11:00-14:00, Mo-Fr 16:00-19:00', 12],
+            // 逗號後有空白的星期列表＋兩個時段：(Mo,We,Th,Fr) × 2 ＋ Sa × 2 ＋ Su × 2
+            '韓閣蔬食' => ['Mo, We-Fr 11:00-14:00, 17:00-21:00; Sa 11:00-14:30, 17:00-21:00; Su 11:00-15:00, 17:00-21:00', 12],
+            '陶米健康素' => ['Tu-Su 11:00-14:30, Tu-Su 17:00-21:30', 12],
+            '小莊素食' => ['Mo-Tu,Th-Sa, Su 06:00-10:00', 6],
+            '梅香源艾草麵線' => ['Mo, We-Fr 10:00-19:00; Sa 10:30-19:00; Su 09:00-19:00', 6],
+        ];
+    }
+
     public function test_null_input_returns_null(): void
     {
         $this->assertNull(OpeningHours::parse(null));
