@@ -20,6 +20,9 @@ namespace App\Support;
  *   11:00-21:00                （沒有星期＝每天）
  *   Mo-Su 17:00-02:00          （跨午夜，切成兩段）
  *   PH off / PH 09:00-12:00    （節慶規則直接忽略，不影響其他規則）
+ *   Mo-Su 11:00-26:00          （OSM 允許超過 24:00 表示延續到隔天）
+ *   11:30-14:30 16:30-20:00    （時段之間用空白而不是逗號）
+ *   11:00–14:00                （en dash，看起來一樣但不是 ASCII 的 -）
  *
  * 不支援（整串視為無法解析）：
  *   Apr-Oct ...、week 1-53、sunrise-sunset、Mo[1] ...、"by appointment"、09:00+
@@ -50,6 +53,16 @@ final class OpeningHours
         }
 
         $normalized = preg_replace('/\s+/', ' ', $value) ?? '';
+
+        // en dash／em dash 在畫面上跟 `-` 幾乎一樣，OSM 上真的有人這樣填
+        // （2026-08-26 同步到的「季旭小吃 => 11:00–14:00 17:00–19:30」）。
+        // 只正規化這兩個：全形的「～」只出現在中文自由文字裡（「8點～售完」），
+        // 那種本來就該被拒絕。
+        $normalized = str_replace(['–', '—'], '-', $normalized);
+
+        // 時段之間用空白而不是逗號（「11:30-14:30 16:30-20:00」）。只在「前面是
+        // 時間、後面也是時間」時補逗號——星期與時間之間的空白不能動。
+        $normalized = preg_replace('/(?<=\d) (?=\d{1,2}:\d{2}-)/', ',', $normalized) ?? $normalized;
         $lower = mb_strtolower($normalized);
 
         if ($lower === '24/7') {
@@ -183,8 +196,16 @@ final class OpeningHours
             $opens = ((int) $t[1]) * 60 + (int) $t[2];
             $closes = ((int) $t[3]) * 60 + (int) $t[4];
 
-            if ($opens > 1440 || $closes > 1440 || (int) $t[2] > 59 || (int) $t[4] > 59) {
+            // OSM 允許結束時間超過 24:00 表示延續到隔天（「Mo-Su 11:00-26:00」＝
+            // 開到凌晨兩點）。上限取 48:00：再大就不是「延續到隔天」而是填錯了。
+            if ($opens > 1440 || $closes > 2880 || (int) $t[2] > 59 || (int) $t[4] > 59) {
                 return null;
+            }
+
+            // 超過 24:00 換算成「比開店時間小」的形式，交給下面既有的跨午夜切段
+            // 邏輯處理，不必為它另寫一條路徑。
+            if ($closes > 1440) {
+                $closes -= 1440;
             }
 
             $intervals[] = [$opens, $closes];

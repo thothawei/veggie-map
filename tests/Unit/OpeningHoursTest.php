@@ -146,6 +146,65 @@ class OpeningHoursTest extends TestCase
         ];
     }
 
+    /**
+     * 2026-08-26 同步五個城市（458 筆有 opening_hours）之後，解析失敗的 9 筆裡有
+     * 三筆是 OSM 的合法寫法，只是我沒支援。這三個字串是真實資料。
+     */
+    public function test_hours_beyond_midnight_use_extended_notation(): void
+    {
+        // 鼎王麻辣鍋：26:00 ＝ 隔天凌晨兩點。
+        $rows = OpeningHours::parse('Mo-Su 11:00-26:00');
+
+        $this->assertNotNull($rows);
+        // 七天各切成「當日 11:00-24:00」與「隔日 00:00-02:00」，隔日那段會疊在
+        // 另一天上，所以總共 14 列。
+        $this->assertCount(14, $rows);
+
+        $monday = array_values(array_filter($rows, fn (array $row) => $row['day'] === 0));
+        $this->assertContains(['day' => 0, 'opens_at' => 0, 'closes_at' => 120], $monday);
+        $this->assertContains(['day' => 0, 'opens_at' => 660, 'closes_at' => 1440], $monday);
+    }
+
+    public function test_time_spans_separated_by_a_space_instead_of_a_comma(): void
+    {
+        // 貞甘單：中午與晚上兩段，中間只有一個空白。
+        $rows = OpeningHours::parse('11:30-14:30 16:30-20:00');
+
+        $this->assertNotNull($rows);
+        $this->assertCount(14, $rows, '七天 × 兩段');
+    }
+
+    public function test_en_dash_is_treated_as_a_hyphen(): void
+    {
+        // 季旭小吃：畫面上看起來一樣，但不是 ASCII 的 -。
+        $rows = OpeningHours::parse('11:00–14:00 17:00–19:30');
+
+        $this->assertNotNull($rows);
+        $this->assertCount(14, $rows);
+    }
+
+    /**
+     * 這幾筆也是真實資料，但它們**應該**被拒絕——自由文字、隔週公休、打錯的
+     * 時間格式，猜錯的代價是把打烊的店標成營業中。
+     */
+    #[DataProvider('realWorldValuesThatShouldStayUnparsed')]
+    public function test_real_world_free_text_is_still_rejected(string $raw): void
+    {
+        $this->assertNull(OpeningHours::parse($raw));
+    }
+
+    public static function realWorldValuesThatShouldStayUnparsed(): array
+    {
+        return [
+            'free text' => ['"check schedule"'],
+            'every other sunday' => ['Mo-Sa 07:00-20:30; Su 07:00-20:30 closed "Every other sunday"'],
+            'chinese note' => ['08:00~14:00 星期四公休'],
+            'chinese free text' => ['"早上8點～售完"'],
+            'holidays keyword' => ['Mo-Fr 11:30-14:30 17:30-21:30 Holidays 11:30-14:30 17:30-22:00'],
+            'typo in time' => ['Mo 11:00-14:30,1630:-21:20'],
+        ];
+    }
+
     public function test_null_input_returns_null(): void
     {
         $this->assertNull(OpeningHours::parse(null));
