@@ -114,6 +114,12 @@ docker compose exec app php artisan cache:stats --day=2026-08-25
 
 選應用層而不是 MySQL 的 slow query log：後者要有伺服器存取權才看得到，而且無法把
 「是哪一個端點打的」關聯進去。兩者不衝突，正式環境兩個都開最好。MySQL 那邊仍然沒開。
+
+**測試環境關掉**（`phpunit.xml` 的 `VEGGIEMAP_SLOW_QUERY_MS=0`）：實測跑完整套件會
+產生 69 筆 warning，全部是 migration 的 `drop table`、`RefreshDatabase`、以及併發
+測試刻意製造的鎖等待——沒有一筆是應用程式的問題。留著只會把真正的慢查詢埋掉。
+`ObservabilityTest` 直接呼叫 `QueryPerformanceLogger::handle()` 驗證邏輯，
+不依賴這個監聽器。
 [`docs/database.md`](database.md) 記錄了 Index 設計的理由，`RestaurantRepository::search()`
 的兩段式查詢（Bounding Box 過濾 → `ST_Distance_Sphere` 精算）是唯一經過 `EXPLAIN` 手動驗證過
 的查詢（見 [docs/progress.md](progress.md) Phase 3），但那是開發時的一次性驗證，不是持續監控。

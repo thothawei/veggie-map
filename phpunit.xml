@@ -35,6 +35,14 @@
         <env name="DB_PASSWORD" value="veggiemap"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
+        <!--
+          慢查詢 log 在測試裡幾乎全是雜訊：migration 的 drop table、RefreshDatabase、
+          以及併發測試刻意製造的鎖等待都會超過門檻（實測 69 筆裡沒有一筆是應用程式
+          的問題）。留著只會把真正的慢查詢埋掉，還讓每次測試多做一堆 Log::warning。
+          0 以下＝關掉（見 config/veggiemap.php）。ObservabilityTest 直接呼叫
+          QueryPerformanceLogger::handle() 驗證邏輯，不靠這個監聽器。
+        -->
+        <env name="VEGGIEMAP_SLOW_QUERY_MS" value="0"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

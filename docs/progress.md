@@ -3670,3 +3670,24 @@ Overpass 的使用政策明確要求節制，而且這很可能就是手動重�
 
 後端 543 → **545 個測試全綠 ＋ 4 skipped**。`schedule:list` 確認實際排程是
 01:00／01:10／01:20／01:30／01:40。
+
+---
+
+## 2026-08-26 — 自己加的 log 在測試裡是雜訊
+
+加完慢查詢記錄之後去看 `storage/logs/laravel.log`：**69 筆 `Slow database query`，
+全部是 `testing.WARNING`**。內容是 migration 的 `drop table`（465ms）、
+`RefreshDatabase`、以及 `ReviewServiceConcurrencyTest` 刻意製造的鎖等待（930ms）。
+
+沒有一筆是應用程式的問題。留著的後果是**真正的慢查詢會被埋在裡面**——這正好是
+這個功能要解決的問題的反面。
+
+`phpunit.xml` 加 `VEGGIEMAP_SLOW_QUERY_MS=0` 關掉監聽器（config 本來就支援 0＝關閉）。
+`ObservabilityTest` 是直接呼叫 `QueryPerformanceLogger::handle()` 驗證邏輯的，
+不依賴監聽器，所以測試覆蓋沒有變少。
+
+驗證方式：先數 69 筆，跑完 `ReviewServiceConcurrencyTest`（先前每跑一次多兩筆）
+與完整套件之後**仍然是 69 筆**。
+
+這類問題只有真的去看產出的東西才會發現——測試全綠、功能也對，但它在自己的
+輸出裡製造了噪音。
