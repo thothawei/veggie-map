@@ -508,6 +508,8 @@ describe('RestaurantListView 排序', () => {
         const options = wrapper.findAll('#sort-select option').map((o) => o.text());
         expect(options).not.toContain('相關性');
         expect(options).toContain('素食可信度');
+        // 這個產品不做評分評論制度，開一個永遠等於「隨機排序」的選項比不開更糟。
+        expect(options).not.toContain('評分');
     });
 
     it('有關鍵字時預設相關性，並多出相關性選項', async () => {

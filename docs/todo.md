@@ -385,8 +385,9 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 「寫進規格、後來擱置或只做半套」的項目。下面依「規劃有沒有明寫」整理，不是憑空加功能。
 完成一項就打勾＋更新 [progress.md](progress.md)，不要一次全做。
 
-**下一批產品工作**：P1 閉環（重複審核、回報 `closed` 核准後要不要下架）。P0 Phase A／B／C、
-可信度寫入路徑、`open_now`／營業時間已完成。
+**下一批產品工作**：只剩下面 P3 那幾個「要產品決定才能動」的項目
+（`closed` 回報核准後要不要下架、`wheelchair` 要不要納入 features）。
+2026-08-26 的搜尋強化批次與規格缺口盤點見 progress.md。
 
 ## 2026-08-26 搜尋強化批次（依使用者指示：不做會員／評分評論，集中在搜尋）
 
@@ -585,9 +586,7 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       **仍未做**：中文店名的 slug 還是 `osm-node-123` 這種形狀（`Str::slug()` 音譯不了
       中文）。要有真正可讀的中文別名得接拼音轉換，那是另一件事，不在這次範圍。
 
-- [ ] **可瀏覽的 API 文件掛在 `/docs`（最終完成標準）**
-      有 `docs/openapi.yaml`，lint 過。網站上沒有 Swagger UI／Redoc，clone 下來看不到
-      ✅ **已完成 2026-08-26**：`GET /docs`（Redoc，CDN 載入）＋`/docs/openapi.yaml`
+- [x] **可瀏覽的 API 文件掛在 `/docs`（最終完成標準）** ✅ **已完成 2026-08-26**：`GET /docs`（Redoc，CDN 載入）＋`/docs/openapi.yaml`
       直接送 repo 裡那份檔案。預設只在非 production 註冊路由。
 
 - [x] **Circuit breaker（第二十節）✅ 2026-08-26**
@@ -595,18 +594,19 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       五個獨立 artisan 程序）。Overpass 與 Nominatim 都接上：開路期間直接短路並寫
       一筆 `CIRCUIT_OPEN` 的 `ExternalApiLog`。門檻／冷卻在 `config/services.php`。
 
-- [ ] **搜尋 UI 沒接上的 API 參數（第八、二十八節）**
-      後端有 `price_level`、`rating_min`、`district`，前端 FilterDrawer 只有 diet＋
-      features。首頁規劃的晶片是「全素／蛋奶素／**素食友善**／寵物友善／停車／營業中」。
-      「素食友善」改由上面 **P0 Phase A** 的 `venue_scope`＋`/diets` 分組處理，不要
-      在這裡另做一顆寫死的 chip。價位／評分是加分項；`open_now` 仍見營業時間那項。
-      `district` 因 OSM 資料品質差，維持 API-only 即可。
+- [x] **搜尋 UI 沒接上的 API 參數（第八、二十八節）✅ 2026-08-26**
+      FilterDrawer 現在有：venue_scope／diet（多選）／價位／**素食可信度**／**營業中**／
+      特色（依 `/features` 動態渲染）；列表頁另有排序選單。
+      **`rating_min` 刻意不做**：依使用者指示不做評分評論制度，開一個沒有人評分的
+      篩選只會永遠回 0 筆。`district` 因 OSM 資料品質差（59% 是空的），維持 API-only。
 
-- [ ] **`/profile` 極簡（第二十六節）**
+- [~] **`/profile` 極簡（第二十六節）— 依使用者指示不做（2026-08-26）**
+      「不要有會員、評分評論制度」，所以不擴充個人頁。原始說明保留備查：
       頁面在，只能看 name／email／role，不能改資料或密碼。規劃寫了「使用者」頁，沒寫
       編輯範圍。最小：改 display name＋改密碼（FormRequest＋現有密碼確認）。
 
-- [ ] **使用者改／刪自己的評論（第二十五節）**
+- [~] **使用者改／刪自己的評論（第二十五節）— 依使用者指示不做（2026-08-26）**
+      同上，不擴充評論功能。原始說明保留備查：
       Policy 原文是「不能改別人的 Review」，暗示自己的可以。`ReviewPolicy` 目前只有
       `create`／`moderate`，沒有 PATCH／DELETE 端點。重新送一則會覆蓋（hidden 舊的），
       所以「改」有曲線；「刪」完全沒有。若做，才需要 `update`／`delete` Policy。
@@ -658,7 +658,8 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 ### P2 — 測試缺口（已判定過 ROI，仍列出來備查）
 
-- [ ] `RestaurantDetailView` 仍無元件測試（`SearchBox` 已於 2026-08-26 補、`AdminView` 補了重複審核那一段）
+- [x] ~~`SearchBox`／`AdminView`／`RestaurantDetailView` 仍無元件測試~~ ✅ 2026-08-26
+      三個都有了（`RestaurantDetailView` 17 條、`SearchBox` 10 條、`AdminView` 5 條）
 - [ ] 沒有 Playwright／真瀏覽器 E2E（Phase 10 判斷這個規模 ROI 偏低，維持）
 - [x] **OpenAPI contract test ✅ 2026-08-26**：`OpenApiContractTest` 比對「實際註冊的
       `/api/v1` 路由」與「openapi.yaml 寫了哪些 path+method」，兩個方向都比。

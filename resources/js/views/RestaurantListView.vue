@@ -34,11 +34,14 @@ const committedKeyword = computed(() => (typeof route.query.keyword === 'string'
  * 沒有中心點就算不出距離，後端也會回 422。地圖頁才有距離排序。
  *
  * `relevance` 只在有關鍵字時出現——沒有關鍵字時它沒有意義，後端同樣回 422。
+ *
+ * **沒有「評分」**：這個產品不做評分評論制度（2026-08-26 產品決定），1159 筆
+ * 匯入資料裡只有 1 筆有評分。開一個永遠等於「隨機排序」的選項比不開更糟——
+ * 使用者會以為自己排過了。後端的 `sort=rating` 保留給有評分資料的使用端。
  */
 const SORT_OPTIONS = [
     { value: 'relevance', label: '相關性', needsKeyword: true },
     { value: 'confidence', label: '素食可信度', needsKeyword: false },
-    { value: 'rating', label: '評分', needsKeyword: false },
     { value: 'newest', label: '最新收錄', needsKeyword: false },
 ] as const;
 
