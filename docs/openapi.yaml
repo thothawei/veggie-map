@@ -924,6 +924,300 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  # ---------------------------------------------------------------------------
+  # AI Office 子系統（見 docs/implementation-plan.md）
+  #
+  # 整段掛 `ai-office` 中介層：只有 admin／manager／developer／viewer 進得來，
+  # 一般消費者角色 `user` 註冊過也看不到。所有端點都需要 Bearer token。
+  #
+  # 回應主體一律是 {success, data, meta?} 這個統一信封（見 SuccessEnvelope），
+  # 這裡只描述 path/method/參數與權限——各 resource 的完整欄位見
+  # app/AiOffice/Http/Resources/。
+  # ---------------------------------------------------------------------------
+
+  /cities:
+    get:
+      operationId: listCities
+      tags: [Lookups]
+      summary: 地圖可切換的城市（來源是 config/cities.php，不是從餐廳資料歸納）
+      security: []
+      responses:
+        "200": { description: OK }
+
+  /ai-office/health:
+    get:
+      operationId: aiOfficeHealth
+      tags: [AI Office]
+      summary: 子系統就緒檢查（DB／Redis／workspace／LLM provider）
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+        "503": { description: 有元件未就緒 }
+
+  /ai-office/dashboard:
+    get:
+      operationId: aiOfficeDashboard
+      tags: [AI Office]
+      summary: 今日統計（完成／等待處理／錯誤／執行中）＋各狀態分佈
+      description: meta.timezone 說明「今日」是用哪個時區算的。
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+
+  /ai-office/projects:
+    get:
+      operationId: listAiOfficeProjects
+      tags: [AI Office]
+      summary: 專案列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+    post:
+      operationId: createAiOfficeProject
+      tags: [AI Office]
+      summary: 建立專案（會 dispatch PlanProjectJob，由 CEO Agent 規劃）
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Created }
+        "403": { description: viewer 不能建立 }
+        "422": { description: 驗證失敗 }
+
+  /ai-office/projects/{project}:
+    get:
+      operationId: getAiOfficeProject
+      tags: [AI Office]
+      summary: 專案詳情
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: project, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+        "404": { description: 不存在 }
+    put:
+      operationId: replaceAiOfficeProject
+      tags: [AI Office]
+      summary: 整筆更新專案
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: project, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+    patch:
+      operationId: updateAiOfficeProject
+      tags: [AI Office]
+      summary: 部分更新專案
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: project, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+    delete:
+      operationId: deleteAiOfficeProject
+      tags: [AI Office]
+      summary: 刪除專案
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: project, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "204": { description: 已刪除 }
+
+  /ai-office/projects/{project}/tasks:
+    get:
+      operationId: listAiOfficeTasks
+      tags: [AI Office]
+      summary: 專案的任務列表
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: project, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+    post:
+      operationId: createAiOfficeTask
+      tags: [AI Office]
+      summary: 手動建立任務
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: project, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "201": { description: Created }
+
+  /ai-office/tasks/{task}:
+    get:
+      operationId: getAiOfficeTask
+      tags: [AI Office]
+      summary: 任務詳情（含執行紀錄與工具呼叫）
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: task, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+    patch:
+      operationId: updateAiOfficeTask
+      tags: [AI Office]
+      summary: 更新任務（取消／改優先度）
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: task, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+
+  /ai-office/tasks/{task}/dependencies:
+    post:
+      operationId: addAiOfficeTaskDependency
+      tags: [AI Office]
+      summary: 新增相依（會擋住造成循環的組合）
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: task, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "201": { description: Created }
+        "422": { description: 會造成循環相依 }
+
+  /ai-office/tasks/{task}/dependencies/{dependency}:
+    delete:
+      operationId: removeAiOfficeTaskDependency
+      tags: [AI Office]
+      summary: 移除相依
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: task, in: path, required: true, schema: { type: integer } }
+        - { name: dependency, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: 已移除 }
+
+  /ai-office/agents:
+    get:
+      operationId: listAiOfficeAgents
+      tags: [AI Office]
+      summary: Agent 列表（唯讀——開放建立等於開放任意設定 system prompt 與權限）
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+
+  /ai-office/agents/{agent}:
+    get:
+      operationId: getAiOfficeAgent
+      tags: [AI Office]
+      summary: Agent 詳情（技能、工具、權限、效能）
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: agent, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+
+  /ai-office/agents/{agent}/memories:
+    get:
+      operationId: listAiOfficeAgentMemories
+      tags: [AI Office]
+      summary: Agent 的記憶（規格 §41）
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: agent, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+
+  /ai-office/usage:
+    get:
+      operationId: aiOfficeUsage
+      tags: [AI Office]
+      summary: Token 用量與成本（唯讀，viewer 也看得到）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: project_id, in: query, schema: { type: integer } }
+        - { name: agent_id, in: query, schema: { type: integer } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        "200": { description: OK }
+
+  /ai-office/stats/agents:
+    get:
+      operationId: aiOfficeAgentStats
+      tags: [AI Office]
+      summary: Agent 效能（成功率、平均耗時）
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+
+  /ai-office/projects/{project}/activities:
+    get:
+      operationId: listAiOfficeActivities
+      tags: [AI Office]
+      summary: 事件流的分頁讀取（斷線重連時用 after_id 補齊漏掉的事件）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: project, in: path, required: true, schema: { type: integer } }
+        - { name: after_id, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: task_id, in: query, schema: { type: integer } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200": { description: OK }
+
+  /ai-office/projects/{project}/messages:
+    get:
+      operationId: listAiOfficeMessages
+      tags: [AI Office]
+      summary: Agent 之間的往來訊息（規格 §34）
+      description: >
+        唯讀。開放 API 寫入等於讓人偽造 Agent 的發言，這條時間軸會失去它唯一的價值。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: project, in: path, required: true, schema: { type: integer } }
+        - { name: after_id, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: task_id, in: query, schema: { type: integer } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200": { description: OK }
+
+  /ai-office/projects/{project}/events/ticket:
+    post:
+      operationId: createAiOfficeStreamTicket
+      tags: [AI Office]
+      summary: 換一張 SSE 一次性票
+      description: >
+        EventSource 帶不了 Authorization 標頭，所以串流端點改用這張短效票認證。
+        串流本身（GET /ai-office/projects/{project}/events）是 text/event-stream 的
+        長連線，刻意不寫進這份規格——OpenAPI 描述不好它，硬寫一份比沒有更誤導。
+        用法見 docs/api.md。
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: project, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "201": { description: Created }
+
+  /ai-office/approvals:
+    get:
+      operationId: listAiOfficeApprovals
+      tags: [AI Office]
+      summary: 核准項目列表
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: status, in: query, schema: { type: string, enum: [pending, approved, rejected, expired] } }]
+      responses:
+        "200": { description: OK }
+
+  /ai-office/approvals/{approval}:
+    get:
+      operationId: getAiOfficeApproval
+      tags: [AI Office]
+      summary: 核准項目詳情
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: approval, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+
+  /ai-office/approvals/{approval}/approve:
+    post:
+      operationId: approveAiOfficeApproval
+      tags: [AI Office]
+      summary: 批准（只有 admin／manager）
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: approval, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+        "403": { description: 沒有核准權限 }
+        "409": { description: 這筆已經不是 pending }
+
+  /ai-office/approvals/{approval}/reject:
+    post:
+      operationId: rejectAiOfficeApproval
+      tags: [AI Office]
+      summary: 拒絕（只有 admin／manager）
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: approval, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+        "403": { description: 沒有核准權限 }
+        "409": { description: 這筆已經不是 pending }
+
 components:
   securitySchemes:
     bearerAuth:

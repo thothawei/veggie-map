@@ -660,7 +660,11 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 - [ ] `RestaurantDetailView` 仍無元件測試（`SearchBox` 已於 2026-08-26 補、`AdminView` 補了重複審核那一段）
 - [ ] 沒有 Playwright／真瀏覽器 E2E（Phase 10 判斷這個規模 ROI 偏低，維持）
-- [ ] OpenAPI 沒有 contract test（Dredd／Schemathesis）；寫規格時只手動抽測過部分端點
+- [x] **OpenAPI contract test ✅ 2026-08-26**：`OpenApiContractTest` 比對「實際註冊的
+      `/api/v1` 路由」與「openapi.yaml 寫了哪些 path+method」，兩個方向都比。
+      **第一次跑就抓到整個 AI Office 子系統（26 支端點）從來沒寫進規格**，
+      連 `/cities` 也漏了。不驗每個欄位的 schema（那需要另一套工具，維護成本會
+      超過它抓到的問題），只守住最容易漂移、也最誤導人的那一層。
 
 ### P3 — 要產品決定才能動（不要擅自選）
 
