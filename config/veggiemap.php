@@ -64,6 +64,27 @@ return [
         'enabled' => (bool) env('VEGGIEMAP_DOCS_ENABLED', env('APP_ENV', 'production') !== 'production'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | 儀表板存取（Horizon／Telescope）
+    |--------------------------------------------------------------------------
+    |
+    | 誰能在非 local 環境開 `/horizon`／`/telescope`。以逗號分隔的 email 清單，
+    | **預設空的＝沒有人**——這兩個頁面看得到佇列內容、SQL 與請求內文，開錯人等於
+    | 把整個系統的內部狀態送出去。要用就在部署環境設 DASHBOARD_ALLOWED_EMAILS。
+    |
+    | 刻意不寫死在程式碼裡：這個 repo 是公開的，把個人 email commit 進去等於公開
+    | 一個聯絡方式，而且換人維護要改程式碼重新部署才生效。
+    |
+    */
+
+    'dashboards' => [
+        'allowed_emails' => array_values(array_filter(array_map(
+            trim(...),
+            explode(',', (string) env('DASHBOARD_ALLOWED_EMAILS', '')),
+        ), fn (string $email): bool => $email !== '')),
+    ],
+
     'search' => [
         'keyword_max_terms' => 5,
         'keyword_min_length' => 2,

@@ -50,16 +50,17 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
     }
 
     /**
-     * Register the Telescope gate.
-     *
-     * This gate determines who can access Telescope in non-local environments.
+     * 誰能在非 local 環境開 `/telescope`。白名單與 Horizon 共用同一份設定
+     * （`DASHBOARD_ALLOWED_EMAILS`），預設空的＝沒有人。Telescope 記得到請求內文
+     * 與 SQL bindings，比 Horizon 更敏感。
      */
     protected function gate(): void
     {
-        Gate::define('viewTelescope', function (User $user) {
-            return in_array($user->email, [
-                //
-            ]);
+        Gate::define('viewTelescope', function (User $user): bool {
+            /** @var list<string> $allowed */
+            $allowed = config('veggiemap.dashboards.allowed_emails', []);
+
+            return in_array($user->email, $allowed, true);
         });
     }
 }

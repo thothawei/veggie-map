@@ -719,8 +719,9 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       讀取端本來就多半兩邊都擋，只有 TS 型別與 OpenAPI 要放寬。見 progress.md。
 - [ ] **要不要加 `LICENSE` 檔**
       OpenAPI 曾寫 MIT 被拿掉，因為 repo 根本沒有授權條款。
-- [ ] **Horizon／Telescope production gate 白名單**
-      目前空陣列＝production 沒人能看儀表板。真要部署再填 admin email。
+- [x] **Horizon／Telescope production gate 白名單** ✅ 2026-08-26 改成環境變數
+      `DASHBOARD_ALLOWED_EMAILS`（逗號分隔）。預設仍是空的＝沒有人，那是安全預設；
+      email 不寫進程式碼（repo 是公開的）。見 progress.md 與 deployment.md。
 - [ ] **Sanctum token 永不過期**
       MVP 可接受；正式營運要 expiry／refresh。
 - [ ] **`FoodDataProviderInterface`／OpenFoodFacts（第十九節）**

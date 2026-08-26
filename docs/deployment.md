@@ -12,7 +12,7 @@ credentials，也沒有使用者確認要真的花錢起 infra，依照總 promp
 |---|---|---|
 | `composer audit` 仍報 `CVE-2026-48019` 等三則 laravel/framework 公告 | 修補版本是 12.61.1+／13.12+，本專案在 11.56，屬於 major upgrade | **已緩解、未根治**：所有吃 email 的 FormRequest 都掛 `App\Rules\SafeEmail` 擋控制字元（實測過預設 `email` 規則會放行 `"user\r\n"@example.com` 這種 quoted local part）。要真的清掉 audit 就得升 major，那是獨立的工作 |
 | Nominatim 商業使用政策偏保留（見 [external-apis.md](external-apis.md)） | 公開營運的地址搜尋流量可能違反 Nominatim 使用政策 | 真的要公開營運，評估換付費 Geocoding 服務 |
-| Horizon／Telescope 的 production gate 白名單是空陣列 | production 沒有人能看儀表板 | 要看就填 admin email，見 `config/horizon.php`／`config/telescope.php` |
+| Horizon／Telescope 的白名單預設是空的 | production 沒有人能看儀表板（這是刻意的安全預設） | 要看就設 `DASHBOARD_ALLOWED_EMAILS`，逗號分隔 |
 | Sanctum token 永不過期 | MVP 可接受，正式營運要 expiry／refresh | 依營運需求決定 |
 | Cache hit/miss 與 DB 慢查詢沒有追蹤 | 效能問題只能靠使用者回報 | 非阻塞；API response time 已有（見 [observability.md](observability.md)） |
 
@@ -134,8 +134,17 @@ docker compose exec app php artisan users:promote you@example.com
 
 Laravel Horizon 已安裝，Job 都走 `dispatch()` 進 Redis 佇列。production 需要一個
 supervisor 管理的 `php artisan horizon` process（`docker-compose.yml` 裡已有 `horizon`
-service 可以參考）。`config/horizon.php` 的 gate 白名單目前是空的——要在 production
-開儀表板就把 admin email 填進去。
+service 可以參考）。
+
+`/horizon` 與 `/telescope` 在非 local 環境由 Gate 守著，白名單來自環境變數
+**`DASHBOARD_ALLOWED_EMAILS`**（逗號分隔的 email），**預設空的＝沒有人**。
+這兩個頁面看得到佇列 job 的 payload、SQL bindings 與請求內文，所以預設是關的，
+不是「忘了填」。刻意不寫死在程式碼裡——這個 repo 是公開的，而且換人維護不該
+需要改程式碼重新部署。
+
+```bash
+DASHBOARD_ALLOWED_EMAILS=ops@example.com,dev@example.com
+```
 
 ### 9. 排程
 

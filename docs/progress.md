@@ -3839,3 +3839,29 @@ OpenAPI 的 `address` 補 `nullable: true`。
 實測：`/api/v1/restaurants/33` 三欄回 `null`（不是 `""`）；列表 API 20 筆裡 9 筆
 `address: null`；瀏覽器上沒地址的店顯示「地址未提供」、有地址的照常顯示完整地址。
 `migrate:rollback` 有 `down()` 可以還原成空字串。
+
+## 2026-08-26 — Horizon／Telescope 白名單改成環境變數
+
+P3 清單上「production gate 白名單」那一項。原本是 Laravel 的預設樣板：程式碼裡一個
+空陣列，加人要改程式碼重新部署。
+
+改成讀 `config/veggiemap.php` 的 `dashboards.allowed_emails`（env
+`DASHBOARD_ALLOWED_EMAILS`，逗號分隔），**預設仍然是空的＝沒有人**——這是安全預設，
+不是待辦。`/horizon` 看得到佇列 job 的 payload、`/telescope` 記得到請求內文與 SQL
+bindings，開錯人是資料外洩。
+
+刻意不把 email 寫進程式碼：這個 repo 是公開的，commit 一個 email 進去等於公開一個
+聯絡方式，而且換人維護要改程式碼重新部署才生效。
+
+五條測試鎖住的是「放行條件」而不是畫面：空白名單時連 admin 也不過、列在名單上的
+過、沒列的 admin 不過、未登入不過、逗號分隔的字串要 trim 掉空白（`a@b.c, d@e.f`
+的第二個若沒 trim 會變成 ` d@e.f`，本人反而進不去）。
+
+**寫壞又修掉的一條測試**：解析那條原本在測試裡重寫一遍同樣的運算式，把
+`config/veggiemap.php` 刪掉也不會紅。改成直接 `require config_path('veggiemap.php')`，
+拔掉 trim/filter 就會紅。
+
+（`in_array` 一併補上 strict flag，但誠實說：PHP 8 的字串比較已經不會讓 null 命中
+非空字串，這是寫法衛生，不是修掉一個可利用的漏洞。）
+
+後端 578 綠、PHPStan 0、Pint PASS。
