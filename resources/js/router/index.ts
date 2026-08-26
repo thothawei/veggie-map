@@ -55,6 +55,16 @@ const router = createRouter({
             component: () => import('@/views/AdminView.vue'),
             meta: { requiresAuth: true, requiresAdmin: true },
         },
+        /*
+         * catch-all 必須放在最後：Vue Router 會依註冊順序比對，放前面會把所有
+         * 路徑都吃掉。沒有這條的話，打錯的網址會渲染出一片空白——只有導覽列，
+         * 中間什麼都沒有，使用者看不出是打錯了還是網站壞了（2026-08-26 實測）。
+         */
+        {
+            path: '/:pathMatch(.*)*',
+            name: 'not-found',
+            component: () => import('@/views/NotFoundView.vue'),
+        },
     ],
 });
 
