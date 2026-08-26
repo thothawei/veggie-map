@@ -3808,3 +3808,29 @@ slug 快取沒走 `Cache::tags(['restaurants'])`（那是搜尋列表用的）�
 **剩下 43 筆仍是 `osm-*`**：東京的片假名店名（`エクセルシオール カフェ`）。拼音只處理
 漢字，`Str::slug()` 音譯不了假名，照設計退回來源 ID。要讓它們也有可讀網址得再接一套
 日文羅馬字轉換，目前沒做。
+
+## 2026-08-26 — `city`／`district`／`address` 從空字串改成 NULL
+
+P3 清單上「語意上 NULL 較正確」那一項。開發庫 1159 家裡 address 618 筆、city 627 筆、
+district 676 筆是空字串——超過一半。
+
+**為什麼是缺陷而不只是潔癖**：空字串是一個值，等於宣稱「這家店的地址是空的」；
+NULL 才是「不知道」。查詢行為也不同——`WHERE city = ''` 找得到空字串卻找不到 NULL，
+聚合函式只跳過 NULL。
+
+改了三處，其中兩處是真的會寫出空字串的來源：
+
+1. `OsmRestaurantProvider`：`$tags['addr:city'] ?? null` 遇到「標籤存在但值是空字串」
+   的節點會回 `''`。在來源這一層 trim 後正規化成 null。
+2. `RestaurantSyncService`：`$data->address ?? ''` 直接拿掉那個 `?? ''`。
+3. migration：欄位改 nullable，既有空字串轉 NULL。**先改欄位再轉值**——欄位還是
+   NOT NULL 的時候寫不進 NULL。
+
+讀取端幾乎不用動：`RestaurantSuggestionRepository` 本來就用 `?: null` 與
+`COALESCE(col, '')`，前端 `formatAddress`／SearchBox／AdminView 也都用 `||` 或
+optional chaining。只有 TS 的 `Restaurant.address` 從 `string` 放寬成 `string | null`、
+OpenAPI 的 `address` 補 `nullable: true`。
+
+反向：把 provider 與 sync 的兩處改回去，兩條新測試都會紅。
+
+後端 573 綠、前端 298 綠、PHPStan 0、Pint PASS、vue-tsc 無錯。

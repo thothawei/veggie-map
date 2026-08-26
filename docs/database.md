@@ -33,9 +33,9 @@ erDiagram
         string name
         string slug UK
         text description
-        string address
-        string city
-        string district
+        string address "nullable"
+        string city "nullable"
+        string district "nullable"
         decimal latitude
         decimal longitude
         point location "SRID 4326 - spatial index"
@@ -155,9 +155,9 @@ erDiagram
 | name | varchar(255) | |
 | slug | varchar(255), unique | URL 用，供 `/restaurants/{slug}`。漢字段落用拼音（`qing-xin-shu-shi`），其餘走 `Str::slug()`，兩邊都轉不出來才退回 `{source}-{source_id}`。只在 create 時產生，換掉時舊值要留進 `restaurant_slug_aliases` |
 | description | text, nullable | |
-| address | varchar(255) | |
-| city | varchar(100) | |
-| district | varchar(100) | |
+| address | varchar(255), nullable | OSM 沒有這個標籤就是 NULL，不是空字串——空字串是一個值，等於宣稱「這家店的地址是空的」 |
+| city | varchar(100), nullable | 同上。查詢也不同：`WHERE city = ''` 找得到空字串、找不到 NULL |
+| district | varchar(100), nullable | 同上 |
 | latitude | decimal(10,7) | 人類可讀／debug 用，實際查詢走 `location` |
 | longitude | decimal(10,7) | 同上 |
 | location | `POINT SRID 4326` | 空間查詢欄位，由 latitude/longitude 產生，寫入時同步更新 |

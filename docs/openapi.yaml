@@ -1372,7 +1372,7 @@ components:
         name: { type: string }
         slug: { type: string }
         description: { type: string, nullable: true }
-        address: { type: string }
+        address: { type: string, nullable: true }
         city: { type: string, nullable: true }
         district: { type: string, nullable: true }
         latitude: { type: number, format: float }

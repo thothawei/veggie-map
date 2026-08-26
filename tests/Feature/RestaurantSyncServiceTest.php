@@ -578,4 +578,48 @@ class RestaurantSyncServiceTest extends TestCase
         $restaurant = Restaurant::where('source_id', 'node-wc-yes')->firstOrFail();
         $this->assertTrue($restaurant->features->pluck('code')->contains('wheelchair'));
     }
+
+    /**
+     * 來源沒有地址標籤時要寫 NULL，不是空字串。空字串是一個值，等於宣稱「這家店的
+     * 地址是空的」；而且 `WHERE city = ''` 找得到空字串卻找不到 NULL，兩者的查詢
+     * 行為不同。
+     */
+    public function test_missing_locality_is_stored_as_null_not_empty_string(): void
+    {
+        $provider = $this->fakeProvider([
+            new RestaurantData(sourceId: 'node-nowhere', name: '無地址店', latitude: 25.0, longitude: 121.5),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-nowhere')->firstOrFail();
+
+        $this->assertNull($restaurant->address);
+        $this->assertNull($restaurant->city);
+        $this->assertNull($restaurant->district);
+        $this->assertSame(0, Restaurant::where('source_id', 'node-nowhere')->where('city', '')->count());
+    }
+
+    public function test_provided_locality_is_still_stored(): void
+    {
+        $provider = $this->fakeProvider([
+            new RestaurantData(
+                sourceId: 'node-somewhere',
+                name: '有地址店',
+                latitude: 25.0,
+                longitude: 121.5,
+                address: '忠孝東路一段 1 號',
+                city: '台北市',
+                district: '中正區',
+            ),
+        ]);
+
+        $this->service($provider)->sync(new BoundingBox(0, 0, 90, 180));
+
+        $restaurant = Restaurant::where('source_id', 'node-somewhere')->firstOrFail();
+
+        $this->assertSame('忠孝東路一段 1 號', $restaurant->address);
+        $this->assertSame('台北市', $restaurant->city);
+        $this->assertSame('中正區', $restaurant->district);
+    }
 }

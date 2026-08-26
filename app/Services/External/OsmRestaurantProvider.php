@@ -188,8 +188,10 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
                 latitude: (float) $node['lat'],
                 longitude: (float) $node['lon'],
                 address: $this->buildAddress($tags),
-                city: $tags['addr:city'] ?? null,
-                district: $tags['addr:district'] ?? null,
+                // 標籤存在但值是空字串的節點確實有。在來源這一層就正規化成 null，
+                // 免得空字串一路寫進 DB——那是一個值，不是「沒有這個資訊」。
+                city: self::tagOrNull($tags, 'addr:city'),
+                district: self::tagOrNull($tags, 'addr:district'),
                 phone: $tags['phone'] ?? $tags['contact:phone'] ?? null,
                 website: $tags['website'] ?? $tags['contact:website'] ?? null,
                 openingHours: isset($tags['opening_hours']) ? (string) $tags['opening_hours'] : null,
@@ -219,6 +221,16 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
         }
 
         return $codes;
+    }
+
+    /**
+     * @param  array<string, mixed>  $tags
+     */
+    private static function tagOrNull(array $tags, string $key): ?string
+    {
+        $value = trim((string) ($tags[$key] ?? ''));
+
+        return $value === '' ? null : $value;
     }
 
     /**

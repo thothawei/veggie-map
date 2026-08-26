@@ -177,6 +177,32 @@ class OsmRestaurantProviderTest extends TestCase
         $this->assertSame('台中市西區公益路 100', $results[0]->address);
     }
 
+    /**
+     * 標籤存在但值是空字串的節點確實有。在來源這一層就正規化成 null，否則空字串
+     * 一路寫進 DB——那是一個值，不是「沒有這個資訊」。
+     */
+    public function test_blank_locality_tags_become_null_not_empty_string(): void
+    {
+        Http::fake([
+            '*' => Http::response(['elements' => [[
+                'id' => 556,
+                'lat' => 24.14,
+                'lon' => 120.67,
+                'tags' => [
+                    'name' => '標籤是空的',
+                    'diet:vegetarian' => 'only',
+                    'addr:city' => '',
+                    'addr:district' => '   ',
+                ],
+            ]]]),
+        ]);
+
+        $results = (new OsmRestaurantProvider)->fetch($this->bbox());
+
+        $this->assertNull($results[0]->city);
+        $this->assertNull($results[0]->district);
+    }
+
     public function test_cuisine_tag_maps_from_config_and_drops_diet_values(): void
     {
         Http::fake([

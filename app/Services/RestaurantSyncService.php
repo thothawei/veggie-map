@@ -77,9 +77,11 @@ class RestaurantSyncService
 
         $attributes = [
             'name' => $data->name,
-            'address' => $data->address ?? '',
-            'city' => $data->city ?? '',
-            'district' => $data->district ?? '',
+            // 來源沒有這個標籤就是 NULL，不是空字串——空字串是一個值，等於宣稱
+            // 「這家店的地址是空的」。
+            'address' => $data->address,
+            'city' => $data->city,
+            'district' => $data->district,
             'latitude' => $data->latitude,
             'longitude' => $data->longitude,
             'location' => DB::raw("ST_SRID(POINT({$data->longitude}, {$data->latitude}), 4326)"),

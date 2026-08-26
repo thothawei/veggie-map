@@ -714,8 +714,9 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
       建 `restaurant_slug_aliases` 接住舊 slug，`restaurants:backfill-slugs`
       （預設 dry-run）負責換。**開發／正式庫的實際回寫另外執行**，見 progress.md。
 
-- [ ] **匯入的 `city`／`district`／`address` 空字串 vs NULL**
-      語意上 NULL 較正確，改了要連搜尋與前端空值判斷一起看。
+- [x] **匯入的 `city`／`district`／`address` 空字串 vs NULL** ✅ 2026-08-26 改成 NULL。
+      來源層（OSM 空標籤）與 sync 的 `?? ''` 兩處都堵住，既有空字串由 migration 轉。
+      讀取端本來就多半兩邊都擋，只有 TS 型別與 OpenAPI 要放寬。見 progress.md。
 - [ ] **要不要加 `LICENSE` 檔**
       OpenAPI 曾寫 MIT 被拿掉，因為 repo 根本沒有授權條款。
 - [ ] **Horizon／Telescope production gate 白名單**

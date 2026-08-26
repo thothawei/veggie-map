@@ -79,7 +79,7 @@ export interface Restaurant {
     slug: string;
     /** 列表 API 不撈這個欄位（見後端 LIST_COLUMNS），所以是 optional 而不是 null。 */
     description?: string | null;
-    address: string;
+    address: string | null;
     city: string | null;
     district: string | null;
     latitude: number;
