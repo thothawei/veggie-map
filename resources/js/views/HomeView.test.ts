@@ -63,7 +63,14 @@ vi.mock('leaflet', () => ({
         tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
         markerClusterGroup: vi.fn(() => ({ clearLayers: vi.fn(), addLayer: vi.fn() })),
         latLngBounds: vi.fn((points: unknown) => points),
-        marker: vi.fn(() => ({ bindPopup: vi.fn().mockReturnThis(), on: vi.fn() })),
+        // bindTooltip 一定要在：少了它 RestaurantMap 的 renderMarkers 會丟
+        // TypeError，元件渲染整個中斷，而測試看到的症狀是「載入中…」——
+        // 看起來像非同步沒等到，其實是 mock 缺方法。
+        marker: vi.fn(() => ({
+            bindPopup: vi.fn().mockReturnThis(),
+            bindTooltip: vi.fn().mockReturnThis(),
+            on: vi.fn(),
+        })),
         divIcon: vi.fn((options: unknown) => options),
     },
 }));
