@@ -36,3 +36,15 @@ foreach (array_values(config('services.sync_regions')) as $index => $region) {
         '--diet' => $region['diet'],
     ])->dailyAt("{$hour}:{$minute}");
 }
+
+/*
+| 永久歇業偵測（restaurants:check-closed）。
+|
+| 排在 03:00：sync 那批最晚 01:40 開始，跑完才輪到這裡，才不會在同一家店的
+| 資料正在被 upsert 的時候去問它還在不在。
+|
+| 每天只掃一批（config services.business_status.batch_limit），靠 cache 游標
+| 輪替——一次掃完一千多家對免費的 Overpass 不禮貌，用 Google Places 則是
+| 一千多次計費請求。慢慢輪完一圈是刻意的。
+*/
+Schedule::command('restaurants:check-closed')->dailyAt('03:00');

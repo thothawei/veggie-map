@@ -10,10 +10,14 @@ use App\Observers\MenuItemObserver;
 use App\Observers\RestaurantConfidenceScoreObserver;
 use App\Observers\RestaurantObserver;
 use App\Observers\RestaurantVerificationObserver;
+use App\Services\External\BusinessStatusProviderInterface;
 use App\Services\External\GeocodingProviderInterface;
+use App\Services\External\GooglePlacesBusinessStatusProvider;
+use App\Services\External\MockBusinessStatusProvider;
 use App\Services\External\MockRestaurantProvider;
 use App\Services\External\NominatimGeocodingProvider;
 use App\Services\External\OsmRestaurantProvider;
+use App\Services\External\OverpassBusinessStatusProvider;
 use App\Services\External\RestaurantProviderInterface;
 use App\Services\Recommendation\RecommendationServiceInterface;
 use App\Services\Recommendation\RuleBasedRecommendationService;
@@ -47,6 +51,22 @@ class AppServiceProvider extends ServiceProvider
                 'mock' => new MockRestaurantProvider,
                 default => throw new \InvalidArgumentException(
                     "Unknown restaurant provider [{$name}], expected mock or osm."
+                ),
+            };
+        });
+
+        // BUSINESS_STATUS_PROVIDER=overpass｜google_places｜mock。
+        // 同樣未知值就 throw：判斷「要不要把一家店從地圖上拿掉」的來源，
+        // 絕對不能是「設定打錯字所以悄悄換了一個」。
+        $this->app->bind(BusinessStatusProviderInterface::class, function () {
+            $name = config('services.business_status.provider');
+
+            return match ($name) {
+                'overpass' => new OverpassBusinessStatusProvider,
+                'google_places' => new GooglePlacesBusinessStatusProvider,
+                'mock' => new MockBusinessStatusProvider,
+                default => throw new \InvalidArgumentException(
+                    "Unknown business status provider [{$name}], expected overpass, google_places or mock."
                 ),
             };
         });

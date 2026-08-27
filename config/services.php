@@ -94,4 +94,39 @@ return [
         explode(';', (string) env('EXTERNAL_API_SYNC_BBOXES', ''))
     ))),
 
+    /*
+    |--------------------------------------------------------------------------
+    | 永久歇業偵測（restaurants:check-closed）
+    |--------------------------------------------------------------------------
+    |
+    | overpass：免費、不需金鑰，看 OSM 的 disused:／was: 前綴。預設。
+    | google_places：使用者在 Google 地圖上看到的「永久歇業」本尊
+    |                （business_status=CLOSED_PERMANENTLY），但要付費帳號與金鑰。
+    | mock：測試用。
+    |
+    | 未知值要 throw 而不是退回預設——設定打錯字時看起來一切正常、實際上判斷來源
+    | 不是你以為的那個，是最難察覺的錯（跟 EXTERNAL_API_RESTAURANT_PROVIDER 同一個理由）。
+    |
+    */
+    'business_status' => [
+        'provider' => env('BUSINESS_STATUS_PROVIDER', 'overpass'),
+
+        // 一次跑最多檢查幾家。Google Places 逐家計費，所以預設保守；
+        // 用 overpass 時可以在指令上用 --limit 放大。
+        'batch_limit' => (int) env('BUSINESS_STATUS_BATCH_LIMIT', 200),
+
+        /*
+        | 連續幾次判定歇業才真的下架。
+        |
+        | 1 = 一次就下架。設成 2 以上時，第一次只記錄不動手——外部資料來源偶爾
+        | 會有短暫的錯誤狀態，而下架一家還在營業的店，使用者是不會回頭來檢查的。
+        */
+        'confirmations_required' => (int) env('BUSINESS_STATUS_CONFIRMATIONS', 1),
+    ],
+
+    'google_places' => [
+        'key' => env('GOOGLE_PLACES_API_KEY'),
+        'timeout' => (int) env('GOOGLE_PLACES_TIMEOUT', 15),
+    ],
+
 ];

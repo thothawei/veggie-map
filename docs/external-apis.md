@@ -174,3 +174,41 @@ response_time_ms／success／error_code，**不記任何 key 或 query 內容**�
 
 只有 closed／open 兩態，沒有 half-open 的試探請求：冷卻時間到就直接放行下一個
 請求，成功歸零、失敗重新開路。效果接近 half-open，少一套狀態機。
+
+## 永久歇業偵測（2026-08-27）
+
+需求是「使用者從詳情頁點開 Google 地圖、看到永久歇業，就自動把這筆從素食地圖移除」。
+資料來源有兩條路，都做成 `BusinessStatusProviderInterface` 的實作：
+
+| Provider | 來源 | 免費 | 金鑰 | 判斷依據 |
+|---|---|---|---|---|
+| `overpass`（預設） | OpenStreetMap | 是 | 不需要 | `disused:`／`was:` 前綴，**且**沒有現行業態標籤 |
+| `google_places` | Google Places API | 否 | 需要 | `business_status = CLOSED_PERMANENTLY` |
+| `mock` | — | — | — | 測試用 |
+
+**為什麼預設不是 Google**：`business_status` 才是使用者實際看到的那個「永久歇業」，
+但 Places API 需要付費帳號與金鑰，而且沒有批次端點——逐家查一千多家就是一千多次
+計費請求。專案原則是優先用免費、不需付費帳號的來源，所以預設走 OSM，
+要用 Google 的話填 `GOOGLE_PLACES_API_KEY` 並把 `BUSINESS_STATUS_PROVIDER` 改成
+`google_places`（沒填金鑰時建構就丟例外，不會靜默退回別的來源）。
+
+**爬 Google 地圖網頁不在選項內**：違反服務條款，而且頁面結構一改就壞。
+
+### 判斷規則踩到的坑
+
+一開始的規則是「有 `disused:` 前綴就算歇業」。實測台北市中心
+（2026-08-27 查 overpass-api.de）三個 `disused:amenity=restaurant` 節點，
+**兩個同時帶著現行的 `amenity`**——node 299002404 的 `disused:name` 是
+N.Y.Bagels Cafe，`name` 卻是「初泰」：舊店收了、新店進駐同一個點位，生意還在做。
+
+所以規則收成「有 disused／was 前綴 **而且** 沒有 `amenity`／`shop`／`office`／
+`craft`／`tourism`／`leisure`」。少了後半段，被下架的正好是那些換過手、還在營業的店。
+
+### 兩個保守的預設
+
+- **節點消失不算歇業**。node 會因為被合併進 way、改成別的 element 或被誤刪而消失，
+  查不到一律回 `Unknown`、不動手。
+- **`Unknown` 永遠不下架**。查不到、超時、Google 沒收錄都是 `Unknown`。
+  下架一家還在營業的店，使用者不會回頭來檢查地圖上少了誰——兩種錯的代價不對等。
+
+下架是 `status = inactive` 不是刪除，跟回報核准、重複審核的處置一致。

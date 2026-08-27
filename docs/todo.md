@@ -24,7 +24,7 @@
 第一次盤點只比對了兩份總 Prompt，沒有回頭比對自己產出的 implementation-plan——
 下次盤點三份都要比。
 
-測試：後端 **600**（4 skipped，1661 assertions）、前端 **299**，PHPStan 0 error、Pint PASS、CI 綠
+測試：後端 **615**（4 skipped，1692 assertions）、前端 **299**，PHPStan 0 error、Pint PASS、CI 綠
 （CI 從 Phase 8 起一直是紅的，2026-08-26 修好——真因是一條依賴機器時區的測試，
 以及兩條假設「這台機器沒有 docker」的沙箱測試）。
 
@@ -432,6 +432,26 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 - [x] 詳情頁走 slug ✅ 2026-08-26
 
 ---
+
+## 2026-08-27 永久歇業自動下架 ✅ 已完成
+
+需求：「另開 Google 地圖發現永久歇業就移除這筆資料，自動跑、不要手動按」。
+
+`BusinessStatusProviderInterface` ＋ 三個實作（overpass／google_places／mock）、
+`restaurants:check-closed` 指令、每天 03:00 排程。詳見
+[external-apis.md](external-apis.md#永久歇業偵測2026-08-27)。
+
+**實測改了規則**：原本「有 `disused:` 前綴就算歇業」，查真實資料發現台北市中心
+三個 disused 節點裡有兩個同時帶現行 `amenity`（舊店收了、新店進駐同點位），
+規則收成「有前綴且沒有現行業態標籤」。反向驗證過。
+
+試跑：1159 家全掃完、0 家歇業——**這是預期的**，資料是前一天剛從 OSM 同步的，
+同步時抓的本來就是「現在還是餐廳」的節點。這個功能的價值在時間差。
+端到端另外用真實的 disused 節點（node 1501340079 平凡麵館）驗過：
+自動下架 → 地圖 API 不再回傳 → 詳情 404，驗證資料已刪除。
+
+**還沒做**：Google Places 那條路沒有金鑰，沒有對真的 Google API 跑過
+（provider 已實作、沒有金鑰時建構就 throw）。要走那條路得先開通付費帳號。
 
 ## 2026-08-27 搜尋強化：同義詞／別名／錯字容錯 ✅ 已完成
 
