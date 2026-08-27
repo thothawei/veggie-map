@@ -24,7 +24,7 @@
 第一次盤點只比對了兩份總 Prompt，沒有回頭比對自己產出的 implementation-plan——
 下次盤點三份都要比。
 
-測試：後端 **627**（4 skipped，1725 assertions）、前端 **308**，PHPStan 0 error、Pint PASS、CI 綠
+測試：後端 **630**（4 skipped，1728 assertions）、前端 **311**，PHPStan 0 error、Pint PASS、CI 綠
 （CI 從 Phase 8 起一直是紅的，2026-08-26 修好——真因是一條依賴機器時區的測試，
 以及兩條假設「這台機器沒有 docker」的沙箱測試）。
 
@@ -432,6 +432,27 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 - [x] 詳情頁走 slug ✅ 2026-08-26
 
 ---
+
+## 2026-08-27 Google 地圖連結補齊 ＋ 讓地圖 popup 活過來 ✅ 已完成
+
+盤點「另開 Google 地圖」的覆蓋率，發現只有詳情頁與 Admin 審核頁有，其餘四處沒處理：
+
+- [x] **地圖 popup 是死的**（最實質的一個）。`bindPopup` 綁了完整內容，但
+      `marker.on('click')` 立刻導航到詳情頁——popup 使用者永遠看不到，
+      整段程式碼連同 5 條測試都在維護一個沒人看得到的 UI。
+      **產品決定：讓它活過來**。點 marker 改成開 popup，裡面兩個出口：
+      「看詳情」（走 Vue 導航，不是 `<a href>`——那會整頁重載、丟掉地圖狀態）
+      與「在 Google 地圖開啟」。反向驗證過：改回 click 監聽，兩條測試立刻紅。
+- [x] 列表頁卡片：連結放在 `<button>` **外面**（`<a>` 巢狀在 `<button>` 裡是無效
+      HTML，而且點連結會冒泡觸發卡片的進詳情，同時開兩個地方）
+- [x] 詳情頁「附近的素食餐廳」：同理放在 `RouterLink` 外面
+- [x] **URL 格式原本有兩份**（上一輪自己造成的）：前端 `lib/geo.ts` 與
+      `ClosureSignalController` 各拼各的。後端抽成 `App\Support\MapLinks`，
+      兩邊各自單一來源、各有測試釘住格式（跨語言沒辦法共用程式碼，這點誠實寫在註解裡）。
+
+真瀏覽器實測（東京新宿）：點 marker → popup 顯示店名／素食標籤／距離／兩個出口 →
+「看詳情」走 SPA 導航沒有整頁重載 → 詳情頁與附近清單都有連結；
+列表頁 20 張卡片各有一個 `map-link`，全部 `target=_blank` ＋ `noopener noreferrer`。
 
 ## 2026-08-27 疑似歇業標記 ＋ Admin 審核頁 ✅ 已完成
 

@@ -3,7 +3,7 @@ import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
-import { haversineKm } from '@/lib/geo';
+import { googleMapsUrl, haversineKm } from '@/lib/geo';
 import { escapeHtml } from '@/lib/html';
 import type { Restaurant } from '@/types';
 
@@ -98,9 +98,31 @@ function renderMarkers() {
                 (distance ? `<br>${escapeHtml(distance)}` : '') +
                 (openStatus
                     ? `<br><span class="open-status" data-state="${openStatus.state}">${escapeHtml(openStatus.text)}</span>`
-                    : ''),
+                    : '') +
+                /*
+                 * 兩個出口。在這之前 marker 的 click 直接導航到詳情頁，popup 綁了
+                 * 卻永遠沒機會顯示——連同它的測試在維護一個沒人看得到的 UI
+                 * （2026-08-27 實測）。
+                 *
+                 * 「看詳情」不能寫成 <a href>：那會整頁重載，把 SPA 的路由與地圖狀態
+                 * 全部丟掉。用 data 屬性標記，popupopen 時再接上 Vue 的導航。
+                 */
+                '<span class="popup-actions">' +
+                `<button type="button" data-detail="${restaurant.id}">看詳情</button>` +
+                `<a href="${escapeHtml(googleMapsUrl(restaurant))}" target="_blank" rel="noopener noreferrer">在 Google 地圖開啟</a>` +
+                '</span>',
         );
-        marker.on('click', () => emit('select', restaurant));
+
+        /*
+         * 點 marker = 開 popup（Leaflet 的預設行為），不再直接導航。
+         * 導航改由 popup 裡的「看詳情」觸發。
+         */
+        marker.on('popupopen', (event: L.PopupEvent) => {
+            const button = event.popup.getElement()?.querySelector<HTMLButtonElement>('[data-detail]');
+
+            button?.addEventListener('click', () => emit('select', restaurant), { once: true });
+        });
+
         clusterGroup.addLayer(marker);
     }
 }

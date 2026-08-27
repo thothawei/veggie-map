@@ -7,6 +7,7 @@ use App\Http\Requests\ResolveClosureSignalRequest;
 use App\Models\Restaurant;
 use App\Models\RestaurantClosureSignal;
 use App\Services\RestaurantCacheInvalidator;
+use App\Support\MapLinks;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -49,10 +50,9 @@ class ClosureSignalController extends Controller
                     'website' => $signal->restaurant->website,
                     // Admin 要判斷「這家店還在不在」，最快的方式就是自己去 Google
                     // 地圖看一眼。把連結直接給出來，不要逼他複製座標再貼上。
-                    'google_maps_url' => sprintf(
-                        'https://www.google.com/maps/search/?api=1&query=%s,%s',
-                        $signal->restaurant->latitude,
-                        $signal->restaurant->longitude,
+                    'google_maps_url' => MapLinks::googleMaps(
+                        (float) $signal->restaurant->latitude,
+                        (float) $signal->restaurant->longitude,
                     ),
                 ],
             ])->all(),

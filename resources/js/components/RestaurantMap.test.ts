@@ -20,14 +20,17 @@ const mapStub = {
 };
 
 const clusterStub = { clearLayers: vi.fn(), addLayer: vi.fn() };
-const { bindPopup } = vi.hoisted(() => ({ bindPopup: vi.fn().mockReturnThis() }));
+const { bindPopup, markerOn } = vi.hoisted(() => ({
+    bindPopup: vi.fn().mockReturnThis(),
+    markerOn: vi.fn(),
+}));
 
 vi.mock('leaflet', () => ({
     default: {
         map: vi.fn(() => mapStub),
         tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
         markerClusterGroup: vi.fn(() => clusterStub),
-        marker: vi.fn(() => ({ bindPopup, on: vi.fn() })),
+        marker: vi.fn(() => ({ bindPopup, on: markerOn })),
         divIcon: vi.fn((options: unknown) => options),
     },
 }));
@@ -362,5 +365,68 @@ describe('RestaurantMap marker 樣式', () => {
 
         const [options] = vi.mocked(L.divIcon).mock.calls[0];
         expect((options as { html: string }).html).toContain('data-kind="unknown"');
+    });
+});
+
+/**
+ * popup 的兩個出口。
+ *
+ * 在這之前 marker 的 click 直接導航到詳情頁，popup 綁了卻永遠沒機會顯示——
+ * 整段 popup 內容連同它的測試，都在維護一個使用者看不到的 UI（2026-08-27 實測）。
+ */
+describe('RestaurantMap popup 的出口', () => {
+    const restaurant = {
+        id: 42,
+        name: '綠光食堂',
+        address: '台北市大安區',
+        latitude: 25.03,
+        longitude: 121.56,
+        rating: 4,
+        rating_count: 1,
+    } as Restaurant;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    function mountWithRestaurant() {
+        return mount(RestaurantMap, {
+            props: { restaurants: [restaurant], center: [25.033, 121.5654] as [number, number], zoom: 13 },
+        });
+    }
+
+    it('popup 同時給「看詳情」與 Google 地圖，後者擋掉 opener 劫持', () => {
+        mountWithRestaurant();
+
+        const html = String(bindPopup.mock.calls[0][0]);
+        expect(html).toContain('看詳情');
+        expect(html).toContain('google.com/maps');
+        expect(html).toContain('rel="noopener noreferrer"');
+        // 座標不是店名——同名的店會定位到別家。
+        expect(html).toContain('query=25.03,121.56');
+    });
+
+    it('點 marker 不再直接導航，而是開 popup', () => {
+        mountWithRestaurant();
+
+        const events = markerOn.mock.calls.map((call) => call[0]);
+        // 有 click 監聽的話就會在 popup 顯示之前把人帶走。
+        expect(events).not.toContain('click');
+        expect(events).toContain('popupopen');
+    });
+
+    it('popup 裡的「看詳情」走 Vue 導航，不是整頁重載', async () => {
+        const wrapper = mountWithRestaurant();
+
+        // 模擬 Leaflet 開啟 popup：把 popup 的 DOM 交給元件去接事件。
+        const element = document.createElement('div');
+        element.innerHTML = '<button data-detail="42">看詳情</button>';
+        const handler = markerOn.mock.calls.find((call) => call[0] === 'popupopen')?.[1];
+
+        handler({ popup: { getElement: () => element } });
+        element.querySelector('button')!.click();
+
+        expect(wrapper.emitted('select')?.[0]).toEqual([restaurant]);
     });
 });

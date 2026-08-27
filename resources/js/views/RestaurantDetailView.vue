@@ -471,6 +471,13 @@ watch(() => props.id, load, { immediate: true });
                                 :data-state="formatOpenStatus(item)?.state"
                             >{{ formatOpenStatus(item)?.text }}</span>
                         </RouterLink>
+                        <!-- 放在 RouterLink 外面：<a> 不能巢狀在 <a> 裡。 -->
+                        <a
+                            class="map-link"
+                            :href="googleMapsUrl(item)"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >Google 地圖</a>
                     </li>
                 </ul>
             </section>

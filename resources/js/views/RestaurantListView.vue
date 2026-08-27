@@ -8,6 +8,7 @@ import CitySwitcher from '@/components/CitySwitcher.vue';
 import { ALL_CITIES, useCities } from '@/composables/useCities';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
 import { formatAddress, formatConfidence, formatCuisines, formatOpenStatus } from '@/lib/format';
+import { googleMapsUrl } from '@/lib/geo';
 import type { ApiSuccess, Restaurant } from '@/types';
 
 const router = useRouter();
@@ -299,6 +300,16 @@ watch(committedKeyword, (value) => {
                     >{{ formatOpenStatus(restaurant)?.text }}</span>
                     <span class="address">{{ formatAddress(restaurant) ?? '地址未提供' }}</span>
                 </button>
+                <!--
+                    放在 button 外面：<a> 巢狀在 <button> 裡是無效 HTML，而且點連結
+                    會冒泡觸發卡片的「進詳情」，變成同時開兩個地方。
+                -->
+                <a
+                    class="map-link"
+                    :href="googleMapsUrl(restaurant)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >在 Google 地圖開啟</a>
             </li>
         </ul>
 
@@ -319,6 +330,12 @@ watch(committedKeyword, (value) => {
 </template>
 
 <style scoped>
+.map-link {
+    display: inline-block;
+    margin: 0.25rem 0 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+}
+
 .restaurant-list {
     padding: 1.5rem;
     max-width: 800px;

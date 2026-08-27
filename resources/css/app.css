@@ -45,3 +45,29 @@
     background: #a0aec0;
     border: 3px solid #fff;
 }
+
+/*
+ * popup 裡的兩個出口。寫在全域 CSS 而不是元件的 scoped style：popup 的 DOM 由
+ * Leaflet 建在 map pane 上，不帶 Vue 的 scope 屬性，scoped 選不到它
+ * （既有的 .open-status 也是同樣理由放在這裡）。
+ */
+.leaflet-popup-content .popup-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+.leaflet-popup-content .popup-actions button {
+    padding: 0.25rem 0.75rem;
+    border: 1px solid #2f6b4f;
+    border-radius: 0.25rem;
+    background: #2f6b4f;
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+}
+
+.leaflet-popup-content .popup-actions a {
+    white-space: nowrap;
+}
