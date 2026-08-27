@@ -119,7 +119,7 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 
 ### 關鍵字搜尋
 
-`keyword` 比對的欄位：**店名、地址、城市、行政區、描述、菜色名稱、料理種類標籤**。
+`keyword` 比對的欄位：**店名、地址、城市、行政區、描述、菜色名稱、料理種類標籤、飲食類型**。
 之所以不只比店名——素食使用者常用的搜尋詞是「拉麵」「滷味」「泰式」，那些是菜色與
 料理種類。
 
@@ -140,8 +140,14 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 - **`matched_menu_items`**：命中的是菜色時，結果會帶上是哪幾道（最多三個）。
   搜「拉麵」跳出一家店名沒有那兩個字的店時，不說明看起來像 bug。店名本身就命中
   時不會有這個欄位——多一行只是雜訊。
+- **飲食類型**（`diet_types` 的 code 與 label）也在比對範圍內：打「蛋奶素」「奶素」
+  「ovo_lacto」以前一筆都回不來，標籤明明就在資料裡。它的相關性分數是**最低的一級**
+  ——每家店都有 diet 標籤，命中它幾乎不帶資訊。實測搜 `vegan` 時排在最前面的仍然是
+  店名含 vegan 的店（ヴィーガンビストロ、Vegan Ramen UZU…），不是隨機的全素店。
+  代價要知道：寬的 diet 詞（`vegan`、`素食友善`）會回傳幾乎所有符合的店，
+  那本來是篩選器的工作。
 - **`sort=relevance`**：店名完全相同 > 店名開頭 > 店名包含 > 菜色 > 料理種類 >
-  地區 > 描述（權重見 `App\Repositories\Search\KeywordSearch`）。同分時依距離、
+  地區 > 描述 > 飲食類型（權重見 `App\Repositories\Search\KeywordSearch`）。同分時依距離、
   再依 id，避免翻頁時同一家店重複出現或消失。
 - 帶 `keyword` 時**預設就是 `relevance`**；沒帶時維持原本的 `distance`／`newest`。
   `sort=relevance` 沒帶 `keyword` 會回 422，不會悄悄退回其他排序。

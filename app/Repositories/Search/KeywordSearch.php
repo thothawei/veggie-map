@@ -33,6 +33,16 @@ final class KeywordSearch
     private const SCORE_DESCRIPTION = 5;
 
     /**
+     * 飲食類型命中的分數。
+     *
+     * 刻意是最低的一級：每一家店都有 diet 標籤，所以「命中 diet」幾乎不帶資訊——
+     * 搜「素食」會對到全部的店。它的價值在於**讓那些詞不再是死路**
+     * （打「蛋奶素」以前一筆都沒有），而不是把結果排前面。
+     * 排序仍然由店名、菜色、料理種類決定。
+     */
+    private const SCORE_DIET = 2;
+
+    /**
      * 斷詞。
      *
      * 空白／逗號分隔，多詞是 AND（「台中 拉麵」要兩個條件都命中）。中日文沒有
@@ -157,6 +167,14 @@ final class KeywordSearch
                             ->orWhereHas('features', fn (Builder $f) => $f
                                 ->where('label', 'like', $like)
                                 ->orWhere('code', 'like', $like))
+                            // 飲食類型：打「蛋奶素」「vegan」要找得到，在這之前
+                            // 那些詞一筆都回不來——標籤明明就在資料裡。
+                            ->orWhereHas('dietTypes', fn (Builder $d) => $d
+                                ->where('label', 'like', $like)
+                                ->orWhere('code', 'like', $like))
+                            // 飲食類型：打「蛋奶素」「vegan」要找得到，在這之前
+                            // 那些詞一筆都回不來——標籤明明就在資料裡。
+
                             // 完全相同的店名一定要命中，即使它短於斷詞門檻。
                             ->orWhere('restaurants.name', '=', $term);
                     });
@@ -228,6 +246,14 @@ final class KeywordSearch
             $pieces[] = '(CASE WHEN '.self::anyOf('restaurants.description LIKE ?', count($contains))
                 .' THEN '.self::SCORE_DESCRIPTION.' ELSE 0 END)';
             $bindings = [...$bindings, ...$contains];
+
+            $pieces[] = '(CASE WHEN EXISTS (SELECT 1 FROM restaurant_diet_types rdt'
+                .' JOIN diet_types dt ON dt.id = rdt.diet_type_id'
+                .' WHERE rdt.restaurant_id = restaurants.id AND ('
+                .self::anyOf('dt.label LIKE ?', count($contains)).' OR '
+                .self::anyOf('dt.code LIKE ?', count($contains)).')) THEN '
+                .self::SCORE_DIET.' ELSE 0 END)';
+            $bindings = [...$bindings, ...$contains, ...$contains];
         }
 
         return [implode(' + ', $pieces), $bindings];

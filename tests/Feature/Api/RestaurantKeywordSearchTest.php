@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\DietType;
 use App\Models\Feature;
 use App\Models\MenuItem;
 use App\Models\Restaurant;
@@ -74,6 +75,40 @@ class RestaurantKeywordSearchTest extends TestCase
         $response->assertOk();
 
         $this->assertSame(['黑糖奶茶'], $response->json('data.0.matched_menu_items'));
+    }
+
+    public function test_keyword_matches_diet_types(): void
+    {
+        // 「蛋奶素」以前一筆都回不來——標籤明明就在資料裡。
+        $ovoLacto = Restaurant::factory()->create(['name' => '安心食堂']);
+        $ovoLacto->dietTypes()->attach(
+            DietType::factory()->create(['code' => 'ovo_lacto', 'label' => '蛋奶素（Ovo-Lacto）']),
+        );
+
+        Restaurant::factory()->create(['name' => '別家店']);
+
+        $this->assertSame([$ovoLacto->id], $this->search('keyword=蛋奶素&venue_scope=all'));
+        // code 也要收：API 使用者與網址分享會帶 code。
+        $this->assertSame([$ovoLacto->id], $this->search('keyword=ovo_lacto&venue_scope=all'));
+    }
+
+    public function test_diet_match_does_not_outrank_a_name_match(): void
+    {
+        /*
+         * 每一家店都有 diet 標籤，所以命中 diet 幾乎不帶資訊。它的分數刻意是最低的
+         * 一級——不然搜「vegan」時，排在最前面的會是一堆跟關鍵字無關、只是剛好
+         * 標了全素的店，而店名真的叫 Vegan 的反而被埋在後面。
+         */
+        $byDietOnly = Restaurant::factory()->create(['name' => '綠意廚房']);
+        $byName = Restaurant::factory()->create(['name' => 'Vegan 8ablish']);
+        $vegan = DietType::factory()->create(['code' => 'vegan', 'label' => '全素（Vegan）']);
+        $byDietOnly->dietTypes()->attach($vegan);
+        $byName->dietTypes()->attach($vegan);
+
+        $this->assertSame(
+            [$byName->id, $byDietOnly->id],
+            $this->search('keyword=vegan&venue_scope=all&sort=relevance'),
+        );
     }
 
     public function test_keyword_matches_menu_item_names(): void

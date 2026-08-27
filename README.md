@@ -232,7 +232,7 @@ docker compose logs -f horizon   # 確認 queue worker 真的在跑、有沒有 
 docker compose exec app php artisan test
 ```
 
-634 個 Feature/Unit test、1736 個 assertion（＋4 個需要 docker 的整合測試在容器內 skip，
+636 個 Feature/Unit test、1742 個 assertion（＋4 個需要 docker 的整合測試在容器內 skip，
 在 CI 的 ubuntu runner 上會真的跑；2026-08-26 實測），涵蓋所有已實作端點（含 Sanctum 401/token 撤銷、
 Policy 授權、review 覆蓋邏輯、confidence score 計算、`restaurants:sync` 冪等性與去重、
 `RestaurantRepository` bounding box 純數學、`ReviewService` 真實併發競態、
