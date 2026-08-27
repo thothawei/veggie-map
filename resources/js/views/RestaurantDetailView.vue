@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth';
 import { extractApiErrorMessage } from '@/lib/apiError';
 import { applyMenuItemDiets, menuItemDiets } from '@/lib/dietCatalog';
 import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
+import { googleMapsUrl } from '@/lib/geo';
 import { safeHttpUrl } from '@/lib/redirect';
 import type { AdminVerificationType, ApiSuccess, DietType, Feature, MenuItem, MenuItemDiet, Restaurant } from '@/types';
 
@@ -162,6 +163,54 @@ async function loadLookups() {
     }
 }
 
+/**
+ * 回報這家店的問題（總 Prompt 第十二節）。
+ *
+ * 後端從 Phase 7 就收得了，`closed` 經 admin 核准還會自動把餐廳下架
+ * （config/diet.php 的 report_actions），但**畫面上一直沒有入口**——
+ * 使用者在 Google 地圖上看到「永久歇業」，回到這裡沒有地方可以講。
+ *
+ * 下架是 status=inactive 不是刪除：判斷錯了救得回來，reviews／favorites
+ * 的外鍵也不會跟著消失。
+ */
+const REPORT_TYPES = [
+    { code: 'closed', label: '已歇業（永久關閉）' },
+    { code: 'not_vegetarian', label: '不是素食／素食資訊錯誤' },
+    { code: 'menu_changed', label: '菜單已變更' },
+    { code: 'wrong_address', label: '地址錯誤' },
+    { code: 'wrong_hours', label: '營業時間錯誤' },
+    { code: 'wrong_info', label: '其他資訊錯誤' },
+    { code: 'other', label: '其他' },
+] as const;
+
+const newReport = reactive({ type: 'closed' as string, description: '' });
+const savingReport = ref(false);
+const reportError = ref<string | null>(null);
+const reportNotice = ref<string | null>(null);
+
+async function submitReport() {
+    if (!restaurant.value) return;
+
+    savingReport.value = true;
+    reportError.value = null;
+    reportNotice.value = null;
+
+    try {
+        await client.post(`/restaurants/${restaurant.value.id}/reports`, {
+            type: newReport.type,
+            description: newReport.description || undefined,
+        });
+        // 講清楚下一步是什麼：回報不會當場讓店消失，要有人看過。
+        // 不說的話使用者會以為沒有作用，然後重複送好幾次。
+        reportNotice.value = '已送出，管理員審核後會更新地圖。';
+        newReport.description = '';
+    } catch (e: unknown) {
+        reportError.value = extractApiErrorMessage(e, '回報失敗，請稍後再試');
+    } finally {
+        savingReport.value = false;
+    }
+}
+
 /** 可寫的驗證類型只有 admin 拿得到（端點本身擋 403），所以不是 admin 就不打。 */
 async function loadVerificationTypes() {
     if (!auth.isAdmin) return;
@@ -240,7 +289,19 @@ watch(() => props.id, load, { immediate: true });
             <dl class="facts">
                 <div>
                     <dt>地址</dt>
-                    <dd>{{ displayAddress ?? '地址未提供' }}</dd>
+                    <dd>
+                        {{ displayAddress ?? '地址未提供' }}
+                        <!--
+                            rel="noopener noreferrer" 是必要的，不是慣例而已：target="_blank"
+                            會把 window.opener 交給新分頁，對方能把這一頁導去別的網址。
+                        -->
+                        <a
+                            class="map-link"
+                            :href="googleMapsUrl(restaurant)"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >在 Google 地圖開啟</a>
+                    </dd>
                 </div>
                 <div v-if="cuisineLine">
                     <dt>料理</dt>
@@ -309,6 +370,41 @@ watch(() => props.id, load, { immediate: true });
                 <p v-if="verificationError" class="error">{{ verificationError }}</p>
                 <p v-else-if="verificationNotice" role="status" class="notice">{{ verificationNotice }}</p>
             </form>
+
+            <!--
+                只在登入後顯示。2026-08-25 的產品決定是「消費者端不需要帳號」，
+                所以未登入時整個區塊不出現——不要放「登入後可以回報」，那正是
+                當時被移掉的那種把匿名使用者推去註冊的引導。
+                （後端 POST /reports 目前要求登入：restaurant_reports.user_id
+                是 NOT NULL 外鍵，要開放匿名回報得先改 schema。）
+            -->
+            <section v-if="auth.isAuthenticated" class="report">
+                <h2>這家店的資訊有問題？</h2>
+                <form class="report-form" @submit.prevent="submitReport">
+                    <label>
+                        問題類型
+                        <select v-model="newReport.type">
+                            <option v-for="type in REPORT_TYPES" :key="type.code" :value="type.code">
+                                {{ type.label }}
+                            </option>
+                        </select>
+                    </label>
+                    <label>
+                        補充說明（選填）
+                        <textarea
+                            v-model="newReport.description"
+                            rows="2"
+                            maxlength="2000"
+                            placeholder="例如：Google 地圖顯示永久歇業"
+                        ></textarea>
+                    </label>
+                    <button type="submit" :disabled="savingReport">
+                        {{ savingReport ? '送出中…' : '送出回報' }}
+                    </button>
+                    <p v-if="reportError" class="error">{{ reportError }}</p>
+                    <p v-else-if="reportNotice" role="status" class="notice">{{ reportNotice }}</p>
+                </form>
+            </section>
 
             <div v-if="restaurant.diet_types?.length" class="tags">
                 <span v-for="code in restaurant.diet_types" :key="code" class="tag">{{ labelFor(code, dietLabels) }}</span>
@@ -383,6 +479,20 @@ watch(() => props.id, load, { immediate: true });
 </template>
 
 <style scoped>
+.report-form {
+    display: grid;
+    gap: 0.5rem;
+    max-width: 32rem;
+}
+.report-form textarea {
+    width: 100%;
+}
+.map-link {
+    margin-inline-start: 0.5rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
 .restaurant-detail {
     max-width: 720px;
     margin: 0 auto;

@@ -173,6 +173,49 @@ describe('RestaurantDetailView', () => {
         detailOverrides = {};
     });
 
+    it('登入後可以回報已歇業，送出後告訴使用者接下來會發生什麼', async () => {
+        const { wrapper } = await mountDetail('1', 'user');
+
+        const form = wrapper.find('form.report-form');
+        expect(form.exists()).toBe(true);
+        // 預設就是「已歇業」：這是使用者從 Google 地圖看到永久歇業後回來最常做的事。
+        expect((form.find('select').element as HTMLSelectElement).value).toBe('closed');
+
+        await form.find('textarea').setValue('Google 地圖顯示永久歇業');
+        await form.trigger('submit');
+        await flushPromises();
+
+        expect(post).toHaveBeenCalledWith('/restaurants/1/reports', {
+            type: 'closed',
+            description: 'Google 地圖顯示永久歇業',
+        });
+        // 回報不會當場讓店消失。不說清楚的話使用者會以為沒作用而重複送。
+        expect(wrapper.find('[role="status"]').text()).toContain('審核');
+    });
+
+    it('未登入時整個回報區塊不出現，不是換成登入引導', async () => {
+        // 2026-08-25 的產品決定：消費者端不需要帳號，不要把匿名使用者推去註冊。
+        // 「登入後可以回報」也是那種引導，所以整區不顯示。
+        const { wrapper } = await mountDetail('1');
+
+        expect(wrapper.find('section.report').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('這家店的資訊有問題');
+    });
+
+    it('提供 Google 地圖連結，另開分頁且擋掉 opener 劫持', async () => {
+        const { wrapper } = await mountDetail('1');
+
+        const link = wrapper.find('a.map-link');
+
+        expect(link.exists()).toBe(true);
+        expect(link.attributes('target')).toBe('_blank');
+        // 少了 noopener，新分頁能透過 window.opener 把這一頁導走。
+        expect(link.attributes('rel')).toContain('noopener');
+        expect(link.attributes('rel')).toContain('noreferrer');
+        // 用座標而不是店名：同名的店會定位到別家。
+        expect(link.attributes('href')).toContain('query=');
+    });
+
     it('飲食與特色顯示中文標籤，不是 raw code', async () => {
         const { wrapper } = await mountDetail('1');
 

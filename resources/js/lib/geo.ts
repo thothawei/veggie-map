@@ -16,3 +16,16 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
 export function formatBbox(bounds: { minLat: number; minLng: number; maxLat: number; maxLng: number }): string {
     return `${bounds.minLat},${bounds.minLng},${bounds.maxLat},${bounds.maxLng}`;
 }
+
+/**
+ * 這家店在 Google 地圖上的連結。
+ *
+ * 用**座標**而不是店名當 query：OSM 的店名跟 Google 上的未必一致（分店名、
+ * 全形半形、日文店名的漢字寫法都會差），拿名字去搜有機會定位到另一家同名的店。
+ * 座標一定指向這家店本人。名字放 label 讓使用者知道自己要開的是誰。
+ *
+ * 走官方的 Maps URL scheme（api=1），桌機開網頁版、手機會被系統接手開 App。
+ */
+export function googleMapsUrl(place: { latitude: number; longitude: number }): string {
+    return `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`;
+}
