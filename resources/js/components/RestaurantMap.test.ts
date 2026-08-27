@@ -20,8 +20,9 @@ const mapStub = {
 };
 
 const clusterStub = { clearLayers: vi.fn(), addLayer: vi.fn() };
-const { bindPopup, markerOn } = vi.hoisted(() => ({
+const { bindPopup, bindTooltip, markerOn } = vi.hoisted(() => ({
     bindPopup: vi.fn().mockReturnThis(),
+    bindTooltip: vi.fn().mockReturnThis(),
     markerOn: vi.fn(),
 }));
 
@@ -30,7 +31,7 @@ vi.mock('leaflet', () => ({
         map: vi.fn(() => mapStub),
         tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
         markerClusterGroup: vi.fn(() => clusterStub),
-        marker: vi.fn(() => ({ bindPopup, on: markerOn })),
+        marker: vi.fn(() => ({ bindPopup, bindTooltip, on: markerOn })),
         divIcon: vi.fn((options: unknown) => options),
     },
 }));
@@ -449,5 +450,66 @@ describe('RestaurantMap popup 的出口', () => {
         element.querySelector('button')!.click();
 
         expect(wrapper.emitted('select')?.[0]).toEqual([restaurant]);
+    });
+});
+
+/**
+ * 滑鼠移到 marker 上的提示。
+ *
+ * 它是**附加**在 popup 之上的一層，不是取代：手機沒有 hover，改成 hover-only
+ * 會讓手機使用者完全看不到這些資訊。
+ */
+describe('RestaurantMap marker tooltip', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    function mountWith(restaurant: Partial<Restaurant>) {
+        return mount(RestaurantMap, {
+            props: {
+                restaurants: [{
+                    id: 1, name: '綠光食堂', latitude: 25.03, longitude: 121.56,
+                    rating: 4, rating_count: 1, ...restaurant,
+                } as Restaurant],
+                center: [25.033, 121.5654] as [number, number],
+                zoom: 13,
+            },
+        });
+    }
+
+    it('顯示店名與料理種類', () => {
+        // cuisines 是 { code, label } 物件（API 實際回傳的形狀），不是字串陣列。
+        mountWith({ cuisines: [{ code: 'ramen', label: '拉麵' }, { code: 'japanese', label: '日式料理' }] });
+
+        const html = String(bindTooltip.mock.calls[0][0]);
+        expect(html).toContain('綠光食堂');
+        expect(html).toContain('拉麵');
+    });
+
+    it('沒有料理種類時只有店名，不留一個空欄位', () => {
+        // OSM 很多店沒有 cuisine 標籤。硬留一個空的 span 會在 tooltip 底下
+        // 多出一條沒有內容的間距。
+        mountWith({ cuisines: [] });
+
+        const html = String(bindTooltip.mock.calls[0][0]);
+        expect(html).toContain('綠光食堂');
+        expect(html).not.toContain('tooltip-cuisines');
+    });
+
+    it('店名裡的 HTML 會被跳脫', () => {
+        // tooltip 跟 popup 一樣吃 HTML 字串，跳脫規則要比照。
+        mountWith({ name: '<img src=x onerror=alert(1)>' });
+
+        const html = String(bindTooltip.mock.calls[0][0]);
+        expect(html).not.toContain('<img');
+        expect(html).toContain('&lt;img');
+    });
+
+    it('tooltip 不取代 popup——兩個都要在', () => {
+        mountWith({ cuisines: [{ code: 'ramen', label: '拉麵' }] });
+
+        expect(bindTooltip).toHaveBeenCalled();
+        expect(bindPopup).toHaveBeenCalled();
     });
 });

@@ -114,6 +114,23 @@ function renderMarkers() {
         );
 
         /*
+         * 滑過去就看得到「這是哪一家、賣什麼」，不必先點開。
+         *
+         * 用 tooltip **附加**在 popup 之上，而不是把 popup 改成 hover 顯示：
+         * 手機沒有 hover，改成 hover-only 會讓手機使用者完全看不到這些資訊，
+         * 而地圖類產品的主力裝置正是手機。加一層則兩邊都成立。
+         *
+         * 只放店名與料理種類。把 popup 的整份內容搬過來的話，滑過去就跳出一大塊
+         * 蓋住地圖，反而更難找店——要看細節的人會點開 popup。
+         */
+        const tooltipCuisines = cuisines ? `<span class="tooltip-cuisines">${escapeHtml(cuisines)}</span>` : '';
+
+        marker.bindTooltip(
+            `<strong>${escapeHtml(restaurant.name)}</strong>${tooltipCuisines}`,
+            { direction: 'top', offset: [0, -10] },
+        );
+
+        /*
          * 點 marker = 開 popup（Leaflet 的預設行為），不再直接導航。
          * 導航改由 popup 裡的「看詳情」觸發。
          */

@@ -71,3 +71,14 @@
 .leaflet-popup-content .popup-actions a {
     white-space: nowrap;
 }
+
+/*
+ * marker 的 hover 提示。跟 popup 一樣由 Leaflet 建在 map pane 上、不帶 Vue 的
+ * scope 屬性，所以樣式寫在全域。
+ */
+.leaflet-tooltip .tooltip-cuisines {
+    display: block;
+    margin-top: 0.125rem;
+    font-size: 0.75rem;
+    opacity: 0.75;
+}
