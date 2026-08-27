@@ -76,28 +76,91 @@ final class KeywordSearch
     }
 
     /**
-     * 每個詞都必須命中（AND），但可以命中任一個欄位（OR）。
+     * 把每個查詢詞展開成一組同義變體。
+     *
+     * 回傳的是「群組的列表」：群組**之間**仍然是 AND（「台中 拉麵」兩個條件都要中），
+     * 群組**之內**是 OR（「拉麵」或「ramen」中一個就算）。這個形狀是刻意的——
+     * 把同義詞攤平成一維陣列會讓多詞查詢從 AND 變成 OR，「台中 拉麵」會開始
+     * 回傳所有台中的店。
+     *
+     * 詞表在 config/veggiemap.php 的 search.synonyms，一個詞可能落在多個群組
+     * （「外賣」在台灣多指外帶、別處指外送），這時把所有含它的群組合併。
+     *
+     * 原詞永遠是群組的第一個元素，而且不會被 max_variants 截掉——展開是為了
+     * 多找到東西，不能反過來把使用者真正打的那個詞弄丟。
      *
      * @param  list<string>  $terms
+     * @return list<list<string>>
      */
-    public static function applyTo(Builder $query, array $terms): void
+    public static function expand(array $terms): array
     {
-        foreach ($terms as $term) {
-            $like = '%'.self::escapeLike($term).'%';
+        $groups = [];
 
-            $query->where(function (Builder $q) use ($like, $term) {
-                $q->where('restaurants.name', 'like', $like)
-                    ->orWhere('restaurants.address', 'like', $like)
-                    ->orWhere('restaurants.city', 'like', $like)
-                    ->orWhere('restaurants.district', 'like', $like)
-                    ->orWhere('restaurants.description', 'like', $like)
-                    // 菜色與料理種類：搜「拉麵」要找得到有拉麵的店，即使店名沒有這兩個字。
-                    ->orWhereHas('menuItems', fn (Builder $m) => $m->where('name', 'like', $like))
-                    ->orWhereHas('features', fn (Builder $f) => $f
-                        ->where('label', 'like', $like)
-                        ->orWhere('code', 'like', $like))
-                    // 完全相同的店名一定要命中，即使它短於斷詞門檻。
-                    ->orWhere('restaurants.name', '=', $term);
+        foreach ($terms as $term) {
+            $variants = [$term];
+            $needle = mb_strtolower($term);
+
+            foreach (self::synonymGroups() as $group) {
+                $lowered = array_map(mb_strtolower(...), $group);
+
+                if (! in_array($needle, $lowered, true)) {
+                    continue;
+                }
+
+                foreach ($group as $word) {
+                    if (mb_strtolower($word) !== $needle) {
+                        $variants[] = $word;
+                    }
+                }
+            }
+
+            $max = max(1, (int) config('veggiemap.search.max_variants', 8));
+            $groups[] = array_slice(array_values(array_unique($variants)), 0, $max);
+        }
+
+        return $groups;
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    private static function synonymGroups(): array
+    {
+        /** @var list<list<string>> $groups */
+        $groups = config('veggiemap.search.synonyms', []);
+
+        return $groups;
+    }
+
+    /**
+     * 每個詞都必須命中（AND），但可以命中任一個欄位（OR）。
+     *
+     * 吃的是 expand() 產出的群組：群組之間 AND，群組之內（同義變體）OR。
+     *
+     * @param  list<list<string>>  $groups
+     */
+    public static function applyTo(Builder $query, array $groups): void
+    {
+        foreach ($groups as $variants) {
+            $query->where(function (Builder $outer) use ($variants) {
+                foreach ($variants as $term) {
+                    $like = '%'.self::escapeLike($term).'%';
+
+                    $outer->orWhere(function (Builder $q) use ($like, $term) {
+                        $q->where('restaurants.name', 'like', $like)
+                            ->orWhere('restaurants.address', 'like', $like)
+                            ->orWhere('restaurants.city', 'like', $like)
+                            ->orWhere('restaurants.district', 'like', $like)
+                            ->orWhere('restaurants.description', 'like', $like)
+                            // 菜色與料理種類：搜「拉麵」要找得到有拉麵的店，即使店名沒有這兩個字。
+                            ->orWhereHas('menuItems', fn (Builder $m) => $m->where('name', 'like', $like))
+                            ->orWhereHas('features', fn (Builder $f) => $f
+                                ->where('label', 'like', $like)
+                                ->orWhere('code', 'like', $like))
+                            // 完全相同的店名一定要命中，即使它短於斷詞門檻。
+                            ->orWhere('restaurants.name', '=', $term);
+                    });
+                }
             });
         }
     }
@@ -109,51 +172,76 @@ final class KeywordSearch
      * 額外的 FULLTEXT 索引，對這個資料量（數百筆）沒有效益，卻會讓權重不可控——
      * 這裡的重點是「店名命中排在地址命中前面」這種產品判斷，不是相似度演算法。
      *
-     * @param  list<string>  $terms
+     * 同義變體與原詞**同分**。刻意不給同義詞打折：使用者搜「珍珠奶茶」時，
+     * 一家標成「手搖飲」的店就是他要找的店，排在後面沒有道理。分數的階梯要表達的是
+     * 「命中店名比命中地址重要」，不是「你用對詞了沒」。
+     *
+     * @param  list<list<string>>  $groups  見 expand()
      * @return array{0: string, 1: list<string>}
      */
-    public static function relevanceExpression(array $terms): array
+    public static function relevanceExpression(array $groups): array
     {
         $pieces = [];
         $bindings = [];
 
-        foreach ($terms as $term) {
-            $escaped = self::escapeLike($term);
-            $contains = '%'.$escaped.'%';
-            $prefix = $escaped.'%';
+        foreach ($groups as $variants) {
+            $exact = [];
+            $prefix = [];
+            $contains = [];
 
-            $pieces[] = '(CASE WHEN restaurants.name = ? THEN '.self::SCORE_NAME_EXACT
-                .' WHEN restaurants.name LIKE ? THEN '.self::SCORE_NAME_PREFIX
-                .' WHEN restaurants.name LIKE ? THEN '.self::SCORE_NAME_CONTAINS
+            foreach ($variants as $term) {
+                $escaped = self::escapeLike($term);
+                $exact[] = $term;
+                $prefix[] = $escaped.'%';
+                $contains[] = '%'.$escaped.'%';
+            }
+
+            $pieces[] = '(CASE WHEN '.self::anyOf('restaurants.name = ?', count($exact))
+                .' THEN '.self::SCORE_NAME_EXACT
+                .' WHEN '.self::anyOf('restaurants.name LIKE ?', count($prefix))
+                .' THEN '.self::SCORE_NAME_PREFIX
+                .' WHEN '.self::anyOf('restaurants.name LIKE ?', count($contains))
+                .' THEN '.self::SCORE_NAME_CONTAINS
                 .' ELSE 0 END)';
-            $bindings[] = $term;
-            $bindings[] = $prefix;
-            $bindings[] = $contains;
+            $bindings = [...$bindings, ...$exact, ...$prefix, ...$contains];
 
             $pieces[] = '(CASE WHEN EXISTS (SELECT 1 FROM menu_items mi'
-                .' WHERE mi.restaurant_id = restaurants.id AND mi.name LIKE ?) THEN '
+                .' WHERE mi.restaurant_id = restaurants.id AND '
+                .self::anyOf('mi.name LIKE ?', count($contains)).') THEN '
                 .self::SCORE_MENU_ITEM.' ELSE 0 END)';
-            $bindings[] = $contains;
+            $bindings = [...$bindings, ...$contains];
 
             $pieces[] = '(CASE WHEN EXISTS (SELECT 1 FROM restaurant_features rf'
                 .' JOIN features f ON f.id = rf.feature_id'
-                .' WHERE rf.restaurant_id = restaurants.id AND (f.label LIKE ? OR f.code LIKE ?)) THEN '
+                .' WHERE rf.restaurant_id = restaurants.id AND ('
+                .self::anyOf('f.label LIKE ?', count($contains)).' OR '
+                .self::anyOf('f.code LIKE ?', count($contains)).')) THEN '
                 .self::SCORE_CUISINE.' ELSE 0 END)';
-            $bindings[] = $contains;
-            $bindings[] = $contains;
+            $bindings = [...$bindings, ...$contains, ...$contains];
 
-            $pieces[] = '(CASE WHEN restaurants.city LIKE ? OR restaurants.district LIKE ?'
-                .' OR restaurants.address LIKE ? THEN '.self::SCORE_LOCALITY.' ELSE 0 END)';
-            $bindings[] = $contains;
-            $bindings[] = $contains;
-            $bindings[] = $contains;
+            $pieces[] = '(CASE WHEN '.self::anyOf('restaurants.city LIKE ?', count($contains))
+                .' OR '.self::anyOf('restaurants.district LIKE ?', count($contains))
+                .' OR '.self::anyOf('restaurants.address LIKE ?', count($contains))
+                .' THEN '.self::SCORE_LOCALITY.' ELSE 0 END)';
+            $bindings = [...$bindings, ...$contains, ...$contains, ...$contains];
 
-            $pieces[] = '(CASE WHEN restaurants.description LIKE ? THEN '
-                .self::SCORE_DESCRIPTION.' ELSE 0 END)';
-            $bindings[] = $contains;
+            $pieces[] = '(CASE WHEN '.self::anyOf('restaurants.description LIKE ?', count($contains))
+                .' THEN '.self::SCORE_DESCRIPTION.' ELSE 0 END)';
+            $bindings = [...$bindings, ...$contains];
         }
 
         return [implode(' + ', $pieces), $bindings];
+    }
+
+    /**
+     * 把同一個條件重複 n 次用 OR 串起來：`(a LIKE ? OR a LIKE ?)`。
+     *
+     * bindings 的順序必須跟這裡產生的 `?` 順序完全一致，所以呼叫端每接一段
+     * SQL 就立刻把對應的那組值 append 上去，不要最後才一次補。
+     */
+    private static function anyOf(string $condition, int $times): string
+    {
+        return '('.implode(' OR ', array_fill(0, max(1, $times), $condition)).')';
     }
 
     /**

@@ -199,14 +199,18 @@ class RestaurantRepository
 
             $corners = isset($filters['bbox']) ? $this->parseBbox((string) $filters['bbox']) : null;
 
+            // 斷詞之後再展開同義詞（「珍珠奶茶」→ 手搖飲／飲料…）。WHERE、相關性
+            // 排序與命中原因三處都吃同一份 $groups——只要有一處還在用未展開的
+            // $terms，就會出現「搜得到但排在最後」或「命中了卻說不出原因」。
             $terms = ! empty($filters['keyword']) ? KeywordSearch::terms((string) $filters['keyword']) : [];
-            $hasRelevance = $terms !== [];
+            $groups = KeywordSearch::expand($terms);
+            $hasRelevance = $groups !== [];
 
             $lat = (float) ($filters['latitude'] ?? 0);
             $lng = (float) ($filters['longitude'] ?? 0);
             $radiusKm = (float) ($filters['radius'] ?? 5);
 
-            $inner = $this->baseQuery($filters, $terms);
+            $inner = $this->baseQuery($filters, $groups);
 
             if ($hasCoords || $corners !== null) {
                 // bbox 優先：明確給定的矩形就是邊界本身，不需要再從半徑推一個出來。
@@ -237,7 +241,7 @@ class RestaurantRepository
             }
 
             if ($hasRelevance) {
-                [$relevanceSql, $relevanceBindings] = KeywordSearch::relevanceExpression($terms);
+                [$relevanceSql, $relevanceBindings] = KeywordSearch::relevanceExpression($groups);
                 $computed[] = "({$relevanceSql}) as relevance";
                 $computedBindings = [...$computedBindings, ...$relevanceBindings];
             }
@@ -270,21 +274,21 @@ class RestaurantRepository
 
             $paginator = $query->cursorPaginate($perPage);
 
-            $this->attachMatchReasons($paginator->items(), $terms);
+            $this->attachMatchReasons($paginator->items(), $groups);
 
             return $paginator;
         });
     }
 
     /**
-     * @param  list<string>  $terms  已斷詞的關鍵字（見 KeywordSearch::terms）
+     * @param  list<list<string>>  $groups  斷詞並展開同義詞後的查詢詞（見 KeywordSearch::expand）
      */
-    private function baseQuery(array $filters, array $terms = []): Builder
+    private function baseQuery(array $filters, array $groups = []): Builder
     {
         $query = Restaurant::query()->where('status', 'active');
 
-        if ($terms !== []) {
-            KeywordSearch::applyTo($query, $terms);
+        if ($groups !== []) {
+            KeywordSearch::applyTo($query, $groups);
         }
 
         if (! empty($filters['city'])) {
@@ -346,13 +350,18 @@ class RestaurantRepository
      * 料理種類已經在 `features` 關聯裡，不必再查。
      *
      * @param  array<int, Model>  $restaurants
-     * @param  list<string>  $terms
+     * @param  list<list<string>>  $groups
      */
-    private function attachMatchReasons(array $restaurants, array $terms): void
+    private function attachMatchReasons(array $restaurants, array $groups): void
     {
-        if ($terms === [] || $restaurants === []) {
+        if ($groups === [] || $restaurants === []) {
             return;
         }
+
+        // 展開後的變體全部攤平：這裡只是要「哪些菜名讓這家店中的」，不需要維持
+        // AND／OR 的結構。搜「珍珠奶茶」時命中的菜名可能寫著「奶茶」，
+        // 只比對原詞的話這家店會顯示成「不知道為什麼中的」。
+        $terms = array_values(array_unique(array_merge(...$groups)));
 
         $ids = array_map(fn ($restaurant) => $restaurant->getKey(), $restaurants);
 

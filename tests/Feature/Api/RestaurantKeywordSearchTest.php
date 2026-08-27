@@ -27,6 +27,55 @@ class RestaurantKeywordSearchTest extends TestCase
         return array_column($response->json('data'), 'id');
     }
 
+    public function test_synonym_finds_a_shop_tagged_with_a_different_wording(): void
+    {
+        // 實測催生這條測試的案例：「珍珠奶茶」原本搜出 0 筆，但資料庫裡有 22 家
+        // 標成手搖飲的店——使用者打得出來的詞跟資料裡的詞對不上。
+        $bubbleTea = Restaurant::factory()->create(['name' => '綠意茶飲']);
+        $feature = Feature::factory()->create(['code' => 'bubble_tea', 'label' => '手搖飲']);
+        $bubbleTea->features()->attach($feature);
+
+        Restaurant::factory()->create(['name' => '陽光蔬食']);
+
+        $this->assertSame([$bubbleTea->id], $this->search('keyword=珍珠奶茶'));
+        // 雙向：搜「手搖」的人一樣要找得到。
+        $this->assertSame([$bubbleTea->id], $this->search('keyword=手搖'));
+    }
+
+    public function test_synonym_expansion_does_not_turn_multi_word_and_into_or(): void
+    {
+        // city 要明寫：factory 會隨機挑城市，不指定的話「台北那家」有機會落在
+        // 台中市，於是它也命中「台中」——測試會紅在資料而不是行為上。
+        $taichungTea = Restaurant::factory()->create([
+            'name' => '台中珍奶店', 'city' => '台中市', 'district' => '西區',
+        ]);
+        $taipeiTea = Restaurant::factory()->create([
+            'name' => '台北珍奶店', 'city' => '台北市', 'district' => '大安區',
+        ]);
+        $feature = Feature::factory()->create(['code' => 'bubble_tea', 'label' => '手搖飲']);
+        $taichungTea->features()->attach($feature);
+        $taipeiTea->features()->attach($feature);
+
+        // 兩個詞都要命中。展開若把變體攤平成一維，這裡會連台北那家一起回傳。
+        $this->assertSame([$taichungTea->id], $this->search('keyword=台中 珍珠奶茶'));
+    }
+
+    public function test_match_reasons_use_the_expanded_terms(): void
+    {
+        // 命中原因若只比對原詞，這家店會顯示成「不知道為什麼中的」。
+        $shop = Restaurant::factory()->create(['name' => '綠意茶飲']);
+        MenuItem::factory()->create([
+            'restaurant_id' => $shop->id,
+            'name' => '黑糖奶茶',
+            'diet_type' => 'vegetarian',
+        ]);
+
+        $response = $this->getJson('/api/v1/restaurants?keyword=珍珠奶茶');
+        $response->assertOk();
+
+        $this->assertSame(['黑糖奶茶'], $response->json('data.0.matched_menu_items'));
+    }
+
     public function test_keyword_matches_menu_item_names(): void
     {
         $withRamen = Restaurant::factory()->create(['name' => '綠光食堂']);

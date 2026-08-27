@@ -41,30 +41,36 @@ class RestaurantSuggestionRepository
             return ['restaurants' => [], 'cuisines' => [], 'districts' => []];
         }
 
+        // 建議清單跟正式搜尋吃同一份展開結果：打「珍珠奶茶」時建議裡要出現手搖店，
+        // 否則使用者會在自動完成看不到、以為沒有這種店而放棄，根本走不到搜尋結果。
+        $groups = KeywordSearch::expand($terms);
+        // 料理種類與行政區的比對不需要 AND／OR 結構，攤平即可。
+        $flat = array_values(array_unique(array_merge(...$groups)));
+
         // 自動完成是逐字打出來的，同一個前綴會被反覆查詢——這正是 cache 最有效的
         // 形狀。TTL 短一點（60s）：建議清單過期一分鐘沒關係，但新匯入的店應該很快
         // 出現在建議裡。
         $cacheKey = 'restaurants:suggest:'.md5(json_encode([$query, $city]));
 
-        return Cache::tags(['restaurants'])->remember($cacheKey, 60, function () use ($terms, $city) {
+        return Cache::tags(['restaurants'])->remember($cacheKey, 60, function () use ($groups, $flat, $city) {
             return [
-                'restaurants' => $this->restaurants($terms, $city),
-                'cuisines' => $this->cuisines($terms),
-                'districts' => $this->districts($terms, $city),
+                'restaurants' => $this->restaurants($groups, $city),
+                'cuisines' => $this->cuisines($flat),
+                'districts' => $this->districts($flat, $city),
             ];
         });
     }
 
     /**
-     * @param  list<string>  $terms
+     * @param  list<list<string>>  $groups
      * @return list<array{id: int, name: string, slug: string, address: string|null, city: string|null, district: string|null}>
      */
-    private function restaurants(array $terms, ?string $city): array
+    private function restaurants(array $groups, ?string $city): array
     {
-        [$relevanceSql, $relevanceBindings] = KeywordSearch::relevanceExpression($terms);
+        [$relevanceSql, $relevanceBindings] = KeywordSearch::relevanceExpression($groups);
 
         $query = Restaurant::query()->where('status', 'active');
-        KeywordSearch::applyTo($query, $terms);
+        KeywordSearch::applyTo($query, $groups);
 
         if ($city !== null && $city !== '') {
             $query->where('city', $city);
