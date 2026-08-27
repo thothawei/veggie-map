@@ -416,6 +416,27 @@ describe('RestaurantMap popup 的出口', () => {
         expect(events).toContain('popupopen');
     });
 
+    it('popup 反覆開關後，看詳情只會發一次 select', async () => {
+        const wrapper = mountWithRestaurant();
+
+        /*
+         * Leaflet 關閉再開啟同一個 marker 的 popup 時重用同一份 DOM
+         * （2026-08-27 在瀏覽器實測：popup element 與 button element 都是同一個物件）。
+         * 用 addEventListener 的話開關兩次就綁了兩個，點一下發兩次 select。
+         * 把 onclick 賦值改回 addEventListener，這條會紅。
+         */
+        const element = document.createElement('div');
+        element.innerHTML = '<button data-detail="42">看詳情</button>';
+        const handler = markerOn.mock.calls.find((call) => call[0] === 'popupopen')?.[1];
+
+        handler({ popup: { getElement: () => element } });
+        handler({ popup: { getElement: () => element } });
+
+        element.querySelector('button')!.click();
+
+        expect(wrapper.emitted('select')?.length).toBe(1);
+    });
+
     it('popup 裡的「看詳情」走 Vue 導航，不是整頁重載', async () => {
         const wrapper = mountWithRestaurant();
 

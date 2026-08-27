@@ -24,7 +24,7 @@
 第一次盤點只比對了兩份總 Prompt，沒有回頭比對自己產出的 implementation-plan——
 下次盤點三份都要比。
 
-測試：後端 **630**（4 skipped，1728 assertions）、前端 **311**，PHPStan 0 error、Pint PASS、CI 綠
+測試：後端 **630**（4 skipped，1728 assertions）、前端 **312**，PHPStan 0 error、Pint PASS、CI 綠
 （CI 從 Phase 8 起一直是紅的，2026-08-26 修好——真因是一條依賴機器時區的測試，
 以及兩條假設「這台機器沒有 docker」的沙箱測試）。
 
@@ -433,6 +433,30 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 
 ---
 
+## 待做：滑鼠移到地圖標記時顯示店名與料理種類
+
+使用者需求（2026-08-27）：**滑鼠游標移到地圖上的定位點時，要顯示對應的餐廳名稱
+以及料理種類**，不必等到點下去。
+
+現況：marker 只有 `alt`（給螢幕閱讀器與色盲使用者用的），滑鼠移上去畫面沒有任何反應；
+店名與料理種類要點開 popup 才看得到。
+
+建議做法：**Leaflet 的 `bindTooltip`，不是改 popup**。
+
+- tooltip 是附加的一層，不動現有的「點 marker 開 popup」——手機沒有 hover，
+  改成 hover-only 會讓手機使用者完全看不到資訊（地圖類產品主力是手機）。
+  加 tooltip 則兩邊都成立：桌機滑過就看到摘要，手機照樣點開 popup。
+- 內容只放**店名 ＋ 料理種類**（`formatCuisines(restaurant.cuisines)`，
+  詳情頁與 popup 已經在用同一個函式）。不要把 popup 的整份內容搬過來——
+  滑過去就跳出一大塊會蓋住地圖，反而更難找店。
+- 料理種類可能是空的（OSM 沒填），這時只顯示店名，不要留一個空括號。
+- 店名必須 `escapeHtml()`：tooltip 跟 popup 一樣吃 HTML 字串
+  （popup 那邊已經有一條 XSS 跳脫測試，tooltip 要比照）。
+- 叢集（cluster）圖示不要加 tooltip——那上面是數字不是單一店家。
+
+驗收：桌機滑過單一 marker 顯示「店名／料理種類」；手機點 marker 仍然開 popup、
+行為不變；店名含 HTML 時不會被當標籤解析。
+
 ## 2026-08-27 Google 地圖連結補齊 ＋ 讓地圖 popup 活過來 ✅ 已完成
 
 盤點「另開 Google 地圖」的覆蓋率，發現只有詳情頁與 Admin 審核頁有，其餘四處沒處理：
@@ -449,6 +473,17 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 - [x] **URL 格式原本有兩份**（上一輪自己造成的）：前端 `lib/geo.ts` 與
       `ClosureSignalController` 各拼各的。後端抽成 `App\Support\MapLinks`，
       兩邊各自單一來源、各有測試釘住格式（跨語言沒辦法共用程式碼，這點誠實寫在註解裡）。
+
+**2026-08-27 事後除錯抓到一個自己引入的 bug**：popup 的「看詳情」原本用
+`addEventListener` 綁定，但**Leaflet 關閉再開啟同一個 marker 的 popup 時重用同一份
+DOM**（在瀏覽器實測：popup element 與 button element 都是同一個物件），所以開關幾次
+就疊了幾個 listener，點一下發好幾次 `select`。改成 `onclick` 賦值（覆寫而非累加），
+並補一條測試——改回 `addEventListener` 那條會紅。
+
+同一輪除錯另外查了兩件事，**都不是 bug**：列表頁的 Google 連結不會連帶觸發卡片導航
+（實測 `navigated: false`）；`@mousedown.prevent` 在觸控裝置上不會取消 click
+（實測完整 touch 序列後 `clicks: 1`，候選清單照常出現）——先前一次「手機上沒反應」
+是自動化工具沒點到，不是程式碼。
 
 真瀏覽器實測（東京新宿）：點 marker → popup 顯示店名／素食標籤／距離／兩個出口 →
 「看詳情」走 SPA 導航沒有整頁重載 → 詳情頁與附近清單都有連結；

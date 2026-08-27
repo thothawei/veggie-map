@@ -120,7 +120,16 @@ function renderMarkers() {
         marker.on('popupopen', (event: L.PopupEvent) => {
             const button = event.popup.getElement()?.querySelector<HTMLButtonElement>('[data-detail]');
 
-            button?.addEventListener('click', () => emit('select', restaurant), { once: true });
+            if (button) {
+                /*
+                 * 用 onclick 賦值而不是 addEventListener：Leaflet 關閉再開啟同一個
+                 * marker 的 popup 時**重用同一份 DOM**（2026-08-27 在瀏覽器實測，
+                 * 關掉再開的 popup element 與 button element 都是同一個物件）。
+                 * addEventListener 會一次疊一個，開關三次就發三次 select。
+                 * 賦值是覆寫，開幾次都只有一個 handler。
+                 */
+                button.onclick = () => emit('select', restaurant);
+            }
         });
 
         clusterGroup.addLayer(marker);
