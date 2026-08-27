@@ -247,7 +247,19 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
 
         $locality = [];
 
-        foreach (['addr:city', 'addr:district', 'addr:suburb', 'addr:place'] as $key) {
+        /*
+         * 日本的地址沒有「街道名」，用的是「都道府県 → 市区町村 → 町名 → 丁目 →
+         * 街区符号 → 号」。addr:street／addr:housenumber 那組在這裡幾乎派不上用場。
+         *
+         * 這不是對日本地址的推測：2026-08-27 查東京素食餐廳的 OSM 節點（取樣 51 筆），
+         * addr:neighbourhood 10 筆、addr:block_number 10 筆、addr:province 9 筆，
+         * 而 addr:full 只有 1 筆。原本只讀 city/district/suburb/place ＋ street，
+         * 結果是 195 家東京餐廳只有 41 家有地址、38 家有 city——**核心欄位一個都沒讀**。
+         *
+         * province 放最前面（東京都／大阪府），順序跟台灣一樣是大到小，
+         * 所以同一份組裝邏輯兩邊都成立。
+         */
+        foreach (['addr:province', 'addr:city', 'addr:district', 'addr:suburb', 'addr:quarter', 'addr:neighbourhood', 'addr:place'] as $key) {
             $value = trim((string) ($tags[$key] ?? ''));
 
             if ($value === '') {
@@ -261,10 +273,22 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
             }
         }
 
-        $street = trim(implode(' ', array_filter([
-            trim((string) ($tags['addr:street'] ?? '')),
-            trim((string) ($tags['addr:housenumber'] ?? '')),
-        ], fn (string $part) => $part !== '')));
+        /*
+         * 台灣：路名 ＋ 門牌（「公益路 100」）。
+         * 日本：街区符号 ＋ 号（「2-3」）——block_number 與 housenumber 之間用短橫線，
+         * 那是日本地址的寫法，不是我們自己編的分隔符。
+         */
+        $blockNumber = trim((string) ($tags['addr:block_number'] ?? ''));
+        $houseNumber = trim((string) ($tags['addr:housenumber'] ?? ''));
+
+        if ($blockNumber !== '') {
+            $street = $houseNumber === '' ? $blockNumber : $blockNumber.'-'.$houseNumber;
+        } else {
+            $street = trim(implode(' ', array_filter([
+                trim((string) ($tags['addr:street'] ?? '')),
+                $houseNumber,
+            ], fn (string $part) => $part !== '')));
+        }
 
         $place = implode('', $locality);
 

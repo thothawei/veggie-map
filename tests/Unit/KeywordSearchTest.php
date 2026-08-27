@@ -33,6 +33,23 @@ class KeywordSearchTest extends TestCase
         $this->assertContains('全素', KeywordSearch::expand(['vegan'])[0]);
     }
 
+    public function test_japanese_terms_reach_the_chinese_and_english_labels(): void
+    {
+        /*
+         * 東京有 195 家店，店名與標籤都是日文，但資料裡的 feature label 是中文。
+         * 加日文之前實測：「ベジタリアン」0 筆、「ラーメン」3 筆，
+         * 而中文「拉麵」有 18 筆——日文使用者在東京等於沒有搜尋功能。
+         */
+        $ramen = KeywordSearch::expand(['ラーメン'])[0];
+        $this->assertContains('拉麵', $ramen);
+        $this->assertContains('ramen', $ramen);
+
+        $this->assertContains('全素', KeywordSearch::expand(['ヴィーガン'])[0]);
+        $this->assertContains('素食', KeywordSearch::expand(['ベジタリアン'])[0]);
+        // 反向也要通：在日文介面找中文詞的人一樣找得到。
+        $this->assertContains('ラーメン', KeywordSearch::expand(['拉麵'])[0]);
+    }
+
     public function test_expand_leaves_unknown_terms_alone(): void
     {
         // 詞表沒收的詞就是它自己，不要為了「有展開」硬塞近似詞。

@@ -154,6 +154,88 @@ class OsmRestaurantProviderTest extends TestCase
         $this->assertSame([], $results[0]->cuisineCodes);
     }
 
+    public function test_japanese_address_tags_are_composed(): void
+    {
+        /*
+         * 資料形狀取自真實節點（2026-08-27 查 overpass-api.de，東京千代田区）。
+         *
+         * 日本地址沒有街道名，用「都道府県 → 市区町村 → 町名 → 街区符号 → 号」。
+         * 取樣 51 個東京素食餐廳節點：addr:neighbourhood 10 筆、addr:block_number
+         * 10 筆、addr:province 9 筆，addr:full 只有 1 筆——原本這些欄位一個都沒讀，
+         * 所以東京 195 家只有 41 家有地址。
+         */
+        Http::fake([
+            '*' => Http::response(['elements' => [[
+                'type' => 'node', 'id' => 1, 'lat' => 35.674, 'lon' => 139.755,
+                'tags' => [
+                    'name' => 'ベジハウス',
+                    'diet:vegetarian' => 'only',
+                    'addr:province' => '東京都',
+                    'addr:city' => '千代田区',
+                    'addr:neighbourhood' => '日比谷公園',
+                    'addr:block_number' => '1',
+                    'addr:housenumber' => '2',
+                ],
+            ]]]),
+        ]);
+
+        $results = (new OsmRestaurantProvider('only'))->fetch(new BoundingBox(35.5, 139.5, 35.9, 140.0));
+
+        // 街区符号與号之間是短橫線，那是日本地址的寫法，不是我們自己編的分隔符。
+        $this->assertSame('東京都千代田区日比谷公園1-2', $results[0]->address);
+    }
+
+    public function test_japanese_quarter_tag_is_placed_before_neighbourhood(): void
+    {
+        /*
+         * 同樣取自真實節點（東京港区）。OSM 的日本地址標籤**用法不一致**：
+         * 多數把町名與丁目合寫在 addr:neighbourhood（「銀座四丁目」），
+         * 少數則是 addr:quarter=町名、addr:neighbourhood=丁目。
+         * 兩種都要組得出正確順序，所以 quarter 排在 neighbourhood 前面。
+         */
+        Http::fake([
+            '*' => Http::response(['elements' => [[
+                'type' => 'node', 'id' => 2, 'lat' => 35.655, 'lon' => 139.736,
+                'tags' => [
+                    'name' => 'ヴィーガン食堂',
+                    'diet:vegetarian' => 'only',
+                    'addr:province' => '東京都',
+                    'addr:city' => '港区',
+                    'addr:quarter' => '麻布十番',
+                    'addr:neighbourhood' => '4丁目',
+                    'addr:block_number' => '3',
+                    'addr:housenumber' => '1',
+                ],
+            ]]]),
+        ]);
+
+        $results = (new OsmRestaurantProvider('only'))->fetch(new BoundingBox(35.5, 139.5, 35.9, 140.0));
+
+        $this->assertSame('東京都港区麻布十番4丁目3-1', $results[0]->address);
+    }
+
+    public function test_taiwanese_street_address_still_works(): void
+    {
+        // 加了日本欄位之後，原本的台灣地址不能壞。
+        Http::fake([
+            '*' => Http::response(['elements' => [[
+                'type' => 'node', 'id' => 2, 'lat' => 24.14, 'lon' => 120.68,
+                'tags' => [
+                    'name' => '綠光食堂',
+                    'diet:vegetarian' => 'only',
+                    'addr:city' => '台中市',
+                    'addr:district' => '西區',
+                    'addr:street' => '公益路',
+                    'addr:housenumber' => '100',
+                ],
+            ]]]),
+        ]);
+
+        $results = (new OsmRestaurantProvider('only'))->fetch(new BoundingBox(24.0, 120.5, 24.3, 120.8));
+
+        $this->assertSame('台中市西區公益路 100', $results[0]->address);
+    }
+
     public function test_city_and_street_are_composed_when_full_address_is_missing(): void
     {
         Http::fake([
