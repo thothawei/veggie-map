@@ -17,6 +17,18 @@ enum BusinessStatus: string
 
     case ClosedPermanently = 'closed_permanently';
 
+    /**
+     * 來源查得動，但這個點位已經不在了（OSM 節點被刪掉）。
+     *
+     * 跟 Unknown 分開是必要的：Unknown 是「我沒查成功」（超時、HTTP 500、
+     * 來源沒收錄），Missing 是「我查成功了，它不在」。混在一起的話，Overpass
+     * 掛掉一次就會替所有店產生一批假的「疑似歇業」訊號洗版 Admin 的待審清單。
+     *
+     * 不直接當成歇業：節點會因為被合併進 way／building、改成別的 element、
+     * 或單純被誤刪而消失。它是線索，交給人判斷。
+     */
+    case Missing = 'missing';
+
     case Unknown = 'unknown';
 
     public function isClosedPermanently(): bool

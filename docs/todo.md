@@ -24,7 +24,7 @@
 第一次盤點只比對了兩份總 Prompt，沒有回頭比對自己產出的 implementation-plan——
 下次盤點三份都要比。
 
-測試：後端 **615**（4 skipped，1692 assertions）、前端 **299**，PHPStan 0 error、Pint PASS、CI 綠
+測試：後端 **627**（4 skipped，1725 assertions）、前端 **308**，PHPStan 0 error、Pint PASS、CI 綠
 （CI 從 Phase 8 起一直是紅的，2026-08-26 修好——真因是一條依賴機器時區的測試，
 以及兩條假設「這台機器沒有 docker」的沙箱測試）。
 
@@ -432,6 +432,27 @@ Phase 0～13＋8.5 與兩輪 gap analysis 的**主線都做完了**，但總 Pro
 - [x] 詳情頁走 slug ✅ 2026-08-26
 
 ---
+
+## 2026-08-27 疑似歇業標記 ＋ Admin 審核頁 ✅ 已完成
+
+在「自動下架」之上補一層人工關卡，訊號不夠硬的不自己動手。
+
+- `restaurant_closure_signals`（新表）：一家店可以累積多個訊號，Admin 看的是
+  「憑什麼說它歇業了」而不是一個布林值。同店同訊號 unique，重複偵測只更新時間。
+- `BusinessStatus::Missing`（新狀態）：「查成功了但點位不在」，與 `Unknown`
+  （沒查成功）分開——混在一起的話 Overpass 掛一次就會產生上千筆假訊號。
+- `GET/POST /admin/closures`＋管理後台「疑似歇業」分頁，每筆帶 `google_maps_url`。
+- 店又出現時自動 dismiss 舊訊號；已審核的不會被排程復活。
+
+**指令加了 `--bbox`**：起因是「優先跑東京」時用 195 個 `--id=` 傳參，在 zsh 下
+未加引號的變數不做 word splitting，整串被當成單一參數、只跑了 1 家。
+與其繞過 shell 陷阱，不如讓「跑某個地區」變成指令本身的能力。
+bbox 格式錯誤會 throw 而不是靜默掃全表。
+
+東京實跑：195 家全部查到明確狀態，0 下架、0 待審，資料未變動（1159 active／0 inactive）。
+
+**沒有做**：Admin 審核頁我沒有用真帳號在瀏覽器上點過（不會代輸密碼），
+UI 行為由 4 條元件測試覆蓋、API 由 7 條 Feature test 覆蓋。
 
 ## 2026-08-27 永久歇業自動下架 ✅ 已完成
 

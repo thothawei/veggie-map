@@ -204,11 +204,30 @@ N.Y.Bagels Cafe，`name` 卻是「初泰」：舊店收了、新店進駐同一�
 所以規則收成「有 disused／was 前綴 **而且** 沒有 `amenity`／`shop`／`office`／
 `craft`／`tourism`／`leisure`」。少了後半段，被下架的正好是那些換過手、還在營業的店。
 
-### 兩個保守的預設
+### 三種結果，三種處置（2026-08-27 更新）
 
-- **節點消失不算歇業**。node 會因為被合併進 way、改成別的 element 或被誤刪而消失，
-  查不到一律回 `Unknown`、不動手。
-- **`Unknown` 永遠不下架**。查不到、超時、Google 沒收錄都是 `Unknown`。
-  下架一家還在營業的店，使用者不會回頭來檢查地圖上少了誰——兩種錯的代價不對等。
+| 狀態 | 意思 | 處置 |
+|---|---|---|
+| `ClosedPermanently` | 明確的歇業標註（OSM `disused:` 且無現行業態／Google `CLOSED_PERMANENTLY`） | **自動下架** |
+| `Missing` | 查得動，但這個點位不在了（OSM 節點被刪） | **標記為疑似歇業，等 Admin 審核** |
+| `Operational` | 還在營業 | 不動，並把該店未審核的舊訊號自動 dismiss |
+| `Unknown` | 沒查成功（超時、HTTP 5xx、來源沒收錄） | **什麼都不做** |
 
-下架是 `status = inactive` 不是刪除，跟回報核准、重複審核的處置一致。
+`Missing` 與 `Unknown` 分開是必要的：`Unknown` 是「我沒查成功」，`Missing` 是
+「我查成功了，它不在」。混在一起的話，Overpass 掛掉一次就會替上千家店產生假的
+疑似歇業訊號，把 Admin 的待審清單洗版。有測試守著這件事。
+
+節點消失之所以只標記不下架：node 會因為被合併進 way／building、改成別的 element、
+或單純被誤刪而消失，那些都不代表店收了。訊號不夠硬的交給人判斷。
+
+下架一律是 `status = inactive` 不是刪除，跟回報核准、重複審核的處置一致。
+
+### 審核出口
+
+`GET /admin/closures` 列待審訊號（每筆帶 `google_maps_url`，讓 Admin 直接去看一眼），
+`POST /admin/closures/{id}` 送 `confirmed`（確認歇業並下架）或 `dismissed`（誤報）。
+前端在管理後台的「疑似歇業」分頁。
+
+同一家店的同一種訊號只留一筆（表上有 unique），重複偵測只更新時間——
+排程每天跑，沒有這個限制的話待審清單三個月後會被同一家店洗版。
+已經審核過的訊號不會被下一次排程復活，否則 Admin 的判斷等於白做。

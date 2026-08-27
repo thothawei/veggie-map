@@ -111,3 +111,83 @@ describe('AdminView 重複審核', () => {
         expect(wrapper.text()).toContain('目前沒有被標記為可能重複的餐廳');
     });
 });
+
+describe('AdminView 疑似歇業', () => {
+    function closureSignal(overrides: Record<string, unknown> = {}) {
+        return {
+            id: 7,
+            signal: 'osm_node_missing',
+            metadata: { source_id: '123' },
+            detected_at: '2026-08-27T03:00:00+00:00',
+            restaurant: {
+                id: 42,
+                name: '綠光食堂',
+                slug: 'lu-guang-shi-tang',
+                address: '台北市大安區',
+                city: '台北市',
+                status: 'active',
+                website: null,
+                google_maps_url: 'https://www.google.com/maps/search/?api=1&query=25.03,121.56',
+            },
+            ...overrides,
+        };
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        get.mockResolvedValue({ data: { data: [] } });
+    });
+
+    async function openClosuresTab() {
+        const wrapper = mount(AdminView);
+        await flushPromises();
+
+        get.mockResolvedValueOnce({ data: { data: [closureSignal()] } });
+        const tab = wrapper.findAll('button').find((b) => b.text() === '疑似歇業');
+        await tab!.trigger('click');
+        await flushPromises();
+
+        return wrapper;
+    }
+
+    it('列出訊號時說明「憑什麼說它歇業了」，不是丟一個代碼', async () => {
+        const wrapper = await openClosuresTab();
+
+        expect(get).toHaveBeenCalledWith('/admin/closures');
+        expect(wrapper.text()).toContain('綠光食堂');
+        // osm_node_missing 對人沒有意義。
+        expect(wrapper.text()).toContain('OpenStreetMap 上查不到這個點位了');
+    });
+
+    it('直接給 Google 地圖連結，Admin 不必自己複製店名去搜', async () => {
+        const wrapper = await openClosuresTab();
+
+        const link = wrapper.findAll('a').find((a) => a.text().includes('Google 地圖'));
+        expect(link?.attributes('href')).toContain('google.com/maps');
+        expect(link?.attributes('rel')).toContain('noopener');
+    });
+
+    it('確認歇業會送 confirmed，並重新載入清單', async () => {
+        const wrapper = await openClosuresTab();
+        post.mockResolvedValueOnce({ data: { data: {} } });
+        get.mockResolvedValueOnce({ data: { data: [] } });
+
+        const confirm = wrapper.findAll('button').find((b) => b.text() === '確認歇業並下架');
+        await confirm!.trigger('click');
+        await flushPromises();
+
+        expect(post).toHaveBeenCalledWith('/admin/closures/7', { resolution: 'confirmed' });
+    });
+
+    it('誤報送 dismissed——不下架', async () => {
+        const wrapper = await openClosuresTab();
+        post.mockResolvedValueOnce({ data: { data: {} } });
+        get.mockResolvedValueOnce({ data: { data: [] } });
+
+        const dismiss = wrapper.findAll('button').find((b) => b.text() === '誤報，店還在');
+        await dismiss!.trigger('click');
+        await flushPromises();
+
+        expect(post).toHaveBeenCalledWith('/admin/closures/7', { resolution: 'dismissed' });
+    });
+});

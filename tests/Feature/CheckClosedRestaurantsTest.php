@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Restaurant;
+use App\Models\RestaurantClosureSignal;
 use App\Services\External\BusinessStatus;
 use App\Services\External\BusinessStatusProviderInterface;
 use App\Services\External\MockBusinessStatusProvider;
@@ -53,15 +54,76 @@ class CheckClosedRestaurantsTest extends TestCase
         $this->assertSame('active', $open->fresh()->status);
     }
 
-    public function test_unknown_status_never_deactivates(): void
+    public function test_unknown_status_never_deactivates_or_flags(): void
     {
-        // 查不到／超時／來源沒收錄都會回 Unknown。把它當成歇業的話，外部來源的
-        // 任何一次閃失都會把還在營業的店抹掉。
+        // 查不到／超時／來源沒收錯都會回 Unknown。把它當成歇業的話，外部來源的
+        // 任何一次閃失都會把還在營業的店抹掉；當成疑似歇業則會洗版待審清單。
         $unknown = Restaurant::factory()->create(['status' => 'active']);
 
         $this->artisan('restaurants:check-closed')->assertSuccessful();
 
         $this->assertSame('active', $unknown->fresh()->status);
+        $this->assertDatabaseCount('restaurant_closure_signals', 0);
+    }
+
+    public function test_missing_node_is_flagged_for_review_not_deactivated(): void
+    {
+        // 這是這一輪的核心：訊號不夠硬的就交給人，不要自己動手。
+        $restaurant = Restaurant::factory()->create(['status' => 'active', 'source_id' => '999']);
+        $this->provider->setStatus($restaurant->id, BusinessStatus::Missing);
+
+        $this->artisan('restaurants:check-closed')->assertSuccessful();
+
+        $this->assertSame('active', $restaurant->fresh()->status);
+        $this->assertDatabaseHas('restaurant_closure_signals', [
+            'restaurant_id' => $restaurant->id,
+            'signal' => 'osm_node_missing',
+            'resolution' => null,
+        ]);
+    }
+
+    public function test_repeated_detection_updates_the_existing_signal(): void
+    {
+        // 排程每天跑。沒有這個的話，一家店三個月後會累積九十筆一樣的訊號，
+        // Admin 的待審清單會被同一家店洗版。
+        $restaurant = Restaurant::factory()->create(['status' => 'active']);
+        $this->provider->setStatus($restaurant->id, BusinessStatus::Missing);
+
+        $this->artisan("restaurants:check-closed --id={$restaurant->id}")->assertSuccessful();
+        $this->artisan("restaurants:check-closed --id={$restaurant->id}")->assertSuccessful();
+
+        $this->assertDatabaseCount('restaurant_closure_signals', 1);
+    }
+
+    public function test_a_dismissed_signal_is_not_resurrected(): void
+    {
+        // Admin 判定誤報之後，隔天的排程又把它清成待審的話，那個判斷等於白做。
+        $restaurant = Restaurant::factory()->create(['status' => 'active']);
+        $this->provider->setStatus($restaurant->id, BusinessStatus::Missing);
+
+        $this->artisan("restaurants:check-closed --id={$restaurant->id}")->assertSuccessful();
+        RestaurantClosureSignal::query()->update(['resolution' => 'dismissed', 'reviewed_at' => now()]);
+
+        $this->artisan("restaurants:check-closed --id={$restaurant->id}")->assertSuccessful();
+
+        $this->assertSame('dismissed', RestaurantClosureSignal::first()->resolution);
+    }
+
+    public function test_an_operational_result_dismisses_stale_signals(): void
+    {
+        // 店又出現了＝之前的訊號是誤報，自動收掉，不要讓 Admin 看一份
+        // 早就不成立的待辦。
+        $restaurant = Restaurant::factory()->create(['status' => 'active']);
+        RestaurantClosureSignal::create([
+            'restaurant_id' => $restaurant->id,
+            'signal' => 'osm_node_missing',
+            'detected_at' => now()->subDays(3),
+        ]);
+        $this->provider->setStatus($restaurant->id, BusinessStatus::Operational);
+
+        $this->artisan("restaurants:check-closed --id={$restaurant->id}")->assertSuccessful();
+
+        $this->assertSame('dismissed', RestaurantClosureSignal::first()->resolution);
     }
 
     public function test_dry_run_reports_without_writing(): void

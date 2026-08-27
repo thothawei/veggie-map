@@ -10,6 +10,7 @@ use App\AiOffice\Http\Controllers\ProjectController as AiOfficeProjectController
 use App\AiOffice\Http\Controllers\TaskController as AiOfficeTaskController;
 use App\AiOffice\Http\Controllers\TaskDependencyController as AiOfficeTaskDependencyController;
 use App\AiOffice\Http\Controllers\UsageController as AiOfficeUsageController;
+use App\Http\Controllers\Api\Admin\ClosureSignalController as AdminClosureSignalController;
 use App\Http\Controllers\Api\Admin\DuplicateRestaurantController as AdminDuplicateRestaurantController;
 use App\Http\Controllers\Api\Admin\MenuItemController as AdminMenuItemController;
 use App\Http\Controllers\Api\Admin\RestaurantReportController as AdminRestaurantReportController;
@@ -126,6 +127,10 @@ Route::middleware('throttle:api')->group(function () {
             Route::post('/restaurants/{restaurant}/menu-items', [AdminMenuItemController::class, 'store']);
 
             // 重複標記的審核（第二十二節）。同步只標記，這裡是唯一的處置出口。
+            // 疑似歇業（restaurants:check-closed 產生的訊號）的審核出口。
+            Route::get('/closures', [AdminClosureSignalController::class, 'index']);
+            Route::post('/closures/{signal}', [AdminClosureSignalController::class, 'resolve']);
+
             Route::get('/duplicates', [AdminDuplicateRestaurantController::class, 'index']);
             Route::post(
                 '/restaurants/{restaurant}/duplicate',

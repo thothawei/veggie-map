@@ -139,9 +139,15 @@ class OverpassBusinessStatusProvider implements BusinessStatusProviderInterface
             $statuses[(int) $id] = $this->fromTags($tags);
         }
 
-        // 請求了但沒回來的 node：Unknown，理由見類別註解（消失 ≠ 歇業）。
+        /*
+         * 請求了但沒回來的 node = Missing（不是 Unknown，也不是歇業）。
+         *
+         * 這一行只在 HTTP 請求成功時才會跑到——失敗的路徑直接回空陣列，
+         * 呼叫端看到的是「這批沒查到狀態」。這個分野很重要：Overpass 掛掉
+         * 不該讓一千多家店同時冒出「疑似歇業」。
+         */
         foreach ($requested as $nodeId) {
-            $statuses[$nodeId] ??= BusinessStatus::Unknown;
+            $statuses[$nodeId] ??= BusinessStatus::Missing;
         }
 
         return $statuses;

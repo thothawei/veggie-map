@@ -157,6 +157,70 @@ paths:
                       meta: { $ref: "#/components/schemas/CursorMeta" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /admin/closures:
+    get:
+      operationId: listClosureSignals
+      tags: [Admin]
+      summary: 疑似歇業的待審訊號
+      description: >-
+        restaurants:check-closed 偵測到但不夠硬、不能自動下架的訊號（例如 OSM 節點
+        查不到了——也可能只是被合併進 way 或誤刪）。每筆帶 google_maps_url，
+        讓 Admin 直接去看一眼再決定。已審核過的不會再出現。
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        signal: { type: string, enum: [osm_node_missing] }
+                        metadata: { type: object, nullable: true }
+                        detected_at: { type: string, format: date-time, nullable: true }
+                        restaurant:
+                          type: object
+                          nullable: true
+                          properties:
+                            id: { type: integer }
+                            name: { type: string }
+                            status: { type: string }
+                            google_maps_url: { type: string, format: uri }
+        "401": { description: 未登入 }
+        "403": { description: 不是 admin }
+
+  /admin/closures/{signal}:
+    post:
+      operationId: resolveClosureSignal
+      tags: [Admin]
+      summary: 審核疑似歇業（confirmed 會下架該餐廳）
+      description: >-
+        confirmed＝確認歇業，把餐廳 status 改成 inactive（下架不是刪除，判斷錯了
+        救得回來）；dismissed＝誤報，餐廳不動。沒有第三種選項——訊號要嘛成立要嘛不成立。
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: signal, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution]
+              properties:
+                resolution: { type: string, enum: [confirmed, dismissed] }
+      responses:
+        "200": { description: 已審核 }
+        "401": { description: 未登入 }
+        "403": { description: 不是 admin }
+        "422": { description: resolution 不合法 }
+
   /admin/duplicates:
     get:
       operationId: listDuplicateRestaurants

@@ -36,10 +36,53 @@ interface DuplicateGroup {
     }>;
 }
 
-type Tab = 'reports' | 'reviews' | 'duplicates';
+type Tab = 'reports' | 'reviews' | 'duplicates' | 'closures';
 
 const tab = ref<Tab>('reports');
 const duplicates = ref<DuplicateGroup[]>([]);
+
+/**
+ * 疑似歇業。偵測端（restaurants:check-closed）只寫訊號、不下架——OSM 節點消失
+ * 也可能只是被合併進 way 或誤刪。這一頁是那些訊號唯一的出口。
+ */
+interface ClosureSignal {
+    id: number;
+    signal: string;
+    metadata: Record<string, unknown> | null;
+    detected_at: string | null;
+    restaurant: {
+        id: number;
+        name: string;
+        slug: string | null;
+        address: string | null;
+        city: string | null;
+        status: string;
+        website: string | null;
+        google_maps_url: string;
+    } | null;
+}
+
+const closures = ref<ClosureSignal[]>([]);
+
+/** 訊號代碼對使用者沒有意義，翻成「憑什麼說它歇業了」。 */
+const SIGNAL_LABELS: Record<string, string> = {
+    osm_node_missing: 'OpenStreetMap 上查不到這個點位了',
+};
+
+async function loadClosures() {
+    loading.value = true;
+    try {
+        const response = await client.get<ApiSuccess<ClosureSignal[]>>('/admin/closures');
+        closures.value = response.data.data;
+    } finally {
+        loading.value = false;
+    }
+}
+
+async function resolveClosure(signal: ClosureSignal, resolution: 'confirmed' | 'dismissed') {
+    await client.post(`/admin/closures/${signal.id}`, { resolution });
+    await loadClosures();
+}
 const reports = ref<AdminReport[]>([]);
 const reviews = ref<AdminReview[]>([]);
 const loading = ref(false);
@@ -105,6 +148,7 @@ function switchTab(target: Tab) {
 
     if (target === 'reports') loadReports();
     else if (target === 'reviews') loadReviews();
+    else if (target === 'closures') loadClosures();
     else loadDuplicates();
 }
 
@@ -123,6 +167,9 @@ onMounted(loadReports);
             </button>
             <button type="button" :class="{ active: tab === 'duplicates' }" @click="switchTab('duplicates')">
                 重複審核
+            </button>
+            <button type="button" :class="{ active: tab === 'closures' }" @click="switchTab('closures')">
+                疑似歇業
             </button>
         </nav>
 
@@ -150,6 +197,41 @@ onMounted(loadReports);
                 </div>
             </li>
             <p v-if="!reviews.length">目前沒有評論。</p>
+        </ul>
+
+        <ul v-if="tab === 'closures' && !loading" class="closures">
+            <li v-for="signal in closures" :key="signal.id">
+                <strong>{{ signal.restaurant?.name ?? '（餐廳已不存在）' }}</strong>
+                <p class="reason">{{ SIGNAL_LABELS[signal.signal] ?? signal.signal }}</p>
+                <p v-if="signal.restaurant?.address" class="address">{{ signal.restaurant.address }}</p>
+                <p v-if="signal.restaurant?.status !== 'active'" class="stale">
+                    這家店已經是 {{ signal.restaurant?.status }}，可能已由別的流程處理過
+                </p>
+                <!--
+                    判斷「這家店還在不在」最快的方式就是去 Google 地圖看一眼，
+                    所以連結直接放在按鈕旁邊——不要逼 Admin 自己複製店名再搜尋。
+                -->
+                <p v-if="signal.restaurant" class="links">
+                    <a :href="signal.restaurant.google_maps_url" target="_blank" rel="noopener noreferrer">
+                        在 Google 地圖查看
+                    </a>
+                    <a
+                        v-if="signal.restaurant.website"
+                        :href="signal.restaurant.website"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >官方網站</a>
+                </p>
+                <div class="actions">
+                    <button type="button" class="danger" @click="resolveClosure(signal, 'confirmed')">
+                        確認歇業並下架
+                    </button>
+                    <button type="button" @click="resolveClosure(signal, 'dismissed')">
+                        誤報，店還在
+                    </button>
+                </div>
+            </li>
+            <p v-if="!closures.length">目前沒有疑似歇業的店家。</p>
         </ul>
 
         <ul v-if="tab === 'duplicates' && !loading" class="duplicates">

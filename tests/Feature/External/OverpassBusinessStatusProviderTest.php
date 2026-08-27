@@ -78,18 +78,30 @@ class OverpassBusinessStatusProviderTest extends TestCase
         $this->assertSame(BusinessStatus::Operational, $statuses[$restaurant->id]);
     }
 
-    public function test_a_node_that_disappeared_is_unknown_not_closed(): void
+    public function test_a_node_that_disappeared_is_missing_not_closed(): void
     {
-        // 這條是整個功能最重要的一條。node 會因為被合併進 way／building、
-        // 被改成別的 element、或單純被誤刪而消失——那些都不代表店收了。
-        // 把「查不到」當成歇業，等於讓 OSM 的任何一次結構調整都能從我們的
-        // 地圖上抹掉一家還在營業的店。
+        // node 會因為被合併進 way／building、被改成別的 element、或單純被誤刪
+        // 而消失——那些都不代表店收了。所以是 Missing（線索，交給人判斷）
+        // 而不是 ClosedPermanently（自動下架）。
         $restaurant = $this->osmRestaurant('126');
         $this->fakeElements([]);
 
         $statuses = (new OverpassBusinessStatusProvider)->statusFor([$restaurant]);
 
-        $this->assertSame(BusinessStatus::Unknown, $statuses[$restaurant->id]);
+        $this->assertSame(BusinessStatus::Missing, $statuses[$restaurant->id]);
+    }
+
+    public function test_a_failed_request_yields_unknown_not_missing(): void
+    {
+        // 這條守的是「Overpass 掛掉不能變成一批假的疑似歇業」。
+        // 請求失敗時整批沒有狀態，呼叫端就什麼都不做；如果這裡回 Missing，
+        // 外部服務抖一下就會讓 Admin 的待審清單被上千家店洗版。
+        $restaurant = $this->osmRestaurant('128');
+        Http::fake(['*' => Http::response('boom', 503)]);
+
+        $statuses = (new OverpassBusinessStatusProvider)->statusFor([$restaurant]);
+
+        $this->assertArrayNotHasKey($restaurant->id, $statuses);
     }
 
     public function test_http_failure_yields_no_status_instead_of_guessing(): void
