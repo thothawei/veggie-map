@@ -236,6 +236,34 @@ class OsmRestaurantProviderTest extends TestCase
         $this->assertSame('台中市西區公益路 100', $results[0]->address);
     }
 
+    public function test_taiwanese_full_address_is_tidied(): void
+    {
+        /*
+         * 資料形狀取自真實節點（2026-08-31 查 overpass-api.de，台中北屯）。
+         * 台灣的 addr:full 寫法很雜：223 筆裡 129 筆以郵遞區號開頭、43 筆夾著里鄰、
+         * 109 筆寫「臺」。收斂規則見 App\Support\TaiwanAddress。
+         */
+        Http::fake([
+            '*' => Http::response(['elements' => [[
+                'type' => 'node', 'id' => 3, 'lat' => 24.18, 'lon' => 120.68,
+                'tags' => [
+                    'name' => '素食小館',
+                    'diet:vegetarian' => 'only',
+                    'addr:city' => '臺中市',
+                    'addr:district' => '北屯區',
+                    'addr:full' => '40663臺中市北屯區平順里8鄰大連路三段14號',
+                ],
+            ]]]),
+        ]);
+
+        $results = (new OsmRestaurantProvider('only'))->fetch(new BoundingBox(24.0, 120.5, 24.3, 120.8));
+
+        $this->assertSame('台中市北屯區大連路三段14號', $results[0]->address);
+        // city／district 是篩選清單的來源，兩種寫法會長出兩個一樣的選項。
+        $this->assertSame('台中市', $results[0]->city);
+        $this->assertSame('北屯區', $results[0]->district);
+    }
+
     public function test_city_and_street_are_composed_when_full_address_is_missing(): void
     {
         Http::fake([

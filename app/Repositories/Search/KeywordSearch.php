@@ -108,17 +108,25 @@ final class KeywordSearch
 
         foreach ($terms as $term) {
             $variants = [$term];
-            $needle = mb_strtolower($term);
+            $needles = self::lookupForms($term);
+
+            // 剝掉詞綴後的字本身也是變體：「素食滷味」的「滷味」不在任何同義詞群組裡，
+            // 但資料庫有一家「滷味」——不加它就等於這個查詢沒救。
+            foreach ($needles as $needle) {
+                if ($needle !== mb_strtolower($term)) {
+                    $variants[] = $needle;
+                }
+            }
 
             foreach (self::synonymGroups() as $group) {
                 $lowered = array_map(mb_strtolower(...), $group);
 
-                if (! in_array($needle, $lowered, true)) {
+                if (array_intersect($needles, $lowered) === []) {
                     continue;
                 }
 
                 foreach ($group as $word) {
-                    if (mb_strtolower($word) !== $needle) {
+                    if (! in_array(mb_strtolower($word), $needles, true)) {
                         $variants[] = $word;
                     }
                 }
@@ -129,6 +137,69 @@ final class KeywordSearch
         }
 
         return $groups;
+    }
+
+    /**
+     * 一個查詢詞的「查表用形態」：原詞，加上剝掉詞綴後的字。
+     *
+     * 為什麼需要它：同義詞是查**整個詞**，所以「素食便當」「麵店」「珍珠奶茶店」
+     * 這種複合寫法一個群組都對不到。2026-08-31 在台中 bbox 實測，基本詞有結果、
+     * 複合詞是 0：便當 0 ／ 早餐 7 但早餐店 0 ／ 麵 14 但麵店 0 ／
+     * 珍珠奶茶 1 但珍珠奶茶店 0 ／ 火鍋 7 但素食火鍋 0。這在台灣不是偶發——
+     * 台灣使用者本來就會打「素食＋品項」或「品項＋店」。
+     *
+     * 刻意用「剝詞綴」而不是「群組詞有被包含就算命中」：後者會讓「麵包」對到
+     * 麵／noodle 那一組，麵包店的搜尋結果混進一堆麵店。
+     *
+     * @return list<string> 一律小寫，原詞永遠是第一個
+     */
+    private static function lookupForms(string $term): array
+    {
+        $term = mb_strtolower($term);
+        $forms = [$term];
+
+        // 詞表裡本來就有的詞不剝：「素食」剝掉「素」會剩一個「食」，那會對到所有
+        // 名字裡有「食」的店；「拉麵」剝成「麵」則會把一家拉麵店的搜尋擴散成所有麵店。
+        foreach (self::synonymGroups() as $group) {
+            if (in_array($term, array_map(mb_strtolower(...), $group), true)) {
+                return $forms;
+            }
+        }
+
+        /** @var array{prefixes?: list<string>, suffixes?: list<string>} $affixes */
+        $affixes = config('veggiemap.search.affixes', []);
+
+        $stripped = [$term];
+
+        foreach (['prefixes', 'suffixes'] as $kind) {
+            $next = $stripped;
+
+            foreach ($stripped as $candidate) {
+                foreach ($affixes[$kind] ?? [] as $affix) {
+                    $affix = mb_strtolower($affix);
+                    $trimmed = $kind === 'prefixes'
+                        ? (str_starts_with($candidate, $affix) ? mb_substr($candidate, mb_strlen($affix)) : null)
+                        : (str_ends_with($candidate, $affix) ? mb_substr($candidate, 0, -mb_strlen($affix)) : null);
+
+                    // 剝到只剩空字串就不是一個查詢詞了（「素食」剝掉「素食」）。
+                    if ($trimmed !== null && $trimmed !== '') {
+                        $next[] = $trimmed;
+
+                        break;
+                    }
+                }
+            }
+
+            $stripped = array_values(array_unique($next));
+        }
+
+        foreach ($stripped as $form) {
+            if ($form !== $term) {
+                $forms[] = $form;
+            }
+        }
+
+        return array_values(array_unique($forms));
     }
 
     /**

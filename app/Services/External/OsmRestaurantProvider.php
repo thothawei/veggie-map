@@ -5,6 +5,7 @@ namespace App\Services\External;
 use App\Models\ExternalApiLog;
 use App\Support\CuisineCatalog;
 use App\Support\DietCatalog;
+use App\Support\TaiwanAddress;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -190,8 +191,10 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
                 address: $this->buildAddress($tags),
                 // 標籤存在但值是空字串的節點確實有。在來源這一層就正規化成 null，
                 // 免得空字串一路寫進 DB——那是一個值，不是「沒有這個資訊」。
-                city: self::tagOrNull($tags, 'addr:city'),
-                district: self::tagOrNull($tags, 'addr:district'),
+                // 「臺中市」與「台中市」是同一個城市的兩種寫法（台中 bbox 實測 88 : 29），
+                // 不收斂的話篩選清單會長出兩個一模一樣的選項。日本的值不受影響。
+                city: TaiwanAddress::normalizeName(self::tagOrNull($tags, 'addr:city')),
+                district: TaiwanAddress::normalizeName(self::tagOrNull($tags, 'addr:district')),
                 phone: $tags['phone'] ?? $tags['contact:phone'] ?? null,
                 website: $tags['website'] ?? $tags['contact:website'] ?? null,
                 openingHours: isset($tags['opening_hours']) ? (string) $tags['opening_hours'] : null,
@@ -239,10 +242,12 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
     private function buildAddress(array $tags): ?string
     {
         // 有完整地址就用它——路名＋門牌常常缺城市，地圖上看不出在哪。
+        // 台灣的 addr:full 寫法很雜（郵遞區號開頭、夾里鄰、臺／台混用），
+        // 交給 TaiwanAddress 收斂；日本的字串走過去不會有任何變動（實測 42 筆 0 變動）。
         $full = trim((string) ($tags['addr:full'] ?? ''));
 
         if ($full !== '') {
-            return $full;
+            return TaiwanAddress::tidy($full);
         }
 
         $locality = [];
@@ -293,13 +298,13 @@ class OsmRestaurantProvider implements RestaurantProviderInterface
         $place = implode('', $locality);
 
         if ($place !== '' && $street !== '') {
-            return str_contains($place, $street) ? $place : $place.$street;
+            return TaiwanAddress::tidy(str_contains($place, $street) ? $place : $place.$street);
         }
 
         if ($street !== '') {
-            return $street;
+            return TaiwanAddress::tidy($street);
         }
 
-        return $place !== '' ? $place : null;
+        return $place !== '' ? TaiwanAddress::tidy($place) : null;
     }
 }

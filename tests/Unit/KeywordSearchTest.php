@@ -50,6 +50,52 @@ class KeywordSearchTest extends TestCase
         $this->assertContains('ラーメン', KeywordSearch::expand(['拉麵'])[0]);
     }
 
+    public function test_compound_taiwanese_terms_reach_the_base_word(): void
+    {
+        /*
+         * 台灣使用者會打「素食＋品項」或「品項＋店」，而同義詞是查整個詞，
+         * 所以那些複合寫法一個群組都對不到。2026-08-31 台中 bbox 實測：
+         * 早餐 7 筆但「早餐店」0 筆、麵 14 筆但「麵店」0 筆、
+         * 火鍋 7 筆但「素食火鍋」0 筆、珍珠奶茶 1 筆但「珍珠奶茶店」0 筆。
+         */
+        $noodle = KeywordSearch::expand(['麵店'])[0];
+        $this->assertSame('麵店', $noodle[0]);
+        $this->assertContains('麵', $noodle);
+        $this->assertContains('noodle', $noodle);
+
+        $this->assertContains('早餐', KeywordSearch::expand(['早餐店'])[0]);
+        $this->assertContains('火鍋', KeywordSearch::expand(['素食火鍋'])[0]);
+        $this->assertContains('珍珠奶茶', KeywordSearch::expand(['珍珠奶茶店'])[0]);
+        // 剝完的字不在任何群組裡也要留著當變體——資料庫真的有一家「滷味」。
+        $this->assertContains('滷味', KeywordSearch::expand(['素食滷味'])[0]);
+    }
+
+    public function test_terms_already_in_the_synonym_table_are_never_stripped(): void
+    {
+        /*
+         * 「素食」剝掉前綴「素」會剩一個「食」，那會對到所有名字裡有「食」的店；
+         * 「拉麵」剝成「麵」則會把一家拉麵店的搜尋擴散成所有麵店。
+         */
+        $this->assertNotContains('食', KeywordSearch::expand(['素食'])[0]);
+        $this->assertNotContains('麵', KeywordSearch::expand(['拉麵'])[0]);
+    }
+
+    public function test_stripping_does_not_bleed_between_unrelated_groups(): void
+    {
+        // 「麵包」不是「麵」＋詞綴，不能被展開成麵店那一組——麵包店的搜尋結果
+        // 會混進一堆麵店。這是刻意選「剝詞綴」而不是「包含就算命中」的原因。
+        $bakery = KeywordSearch::expand(['麵包'])[0];
+        $this->assertContains('bakery', $bakery);
+        $this->assertNotContains('noodle', $bakery);
+    }
+
+    public function test_both_ways_of_writing_a_city_name_find_the_same_places(): void
+    {
+        // 匯入時已收斂成「台」，但舊資料還留著「臺」，而使用者兩種都會打。
+        $this->assertContains('臺中', KeywordSearch::expand(['台中'])[0]);
+        $this->assertContains('台中', KeywordSearch::expand(['臺中'])[0]);
+    }
+
     public function test_expand_leaves_unknown_terms_alone(): void
     {
         // 詞表沒收的詞就是它自己，不要為了「有展開」硬塞近似詞。
