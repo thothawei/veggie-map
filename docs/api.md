@@ -140,6 +140,12 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 - **`matched_menu_items`**：命中的是菜色時，結果會帶上是哪幾道（最多三個）。
   搜「拉麵」跳出一家店名沒有那兩個字的店時，不說明看起來像 bug。店名本身就命中
   時不會有這個欄位——多一行只是雜訊。
+- **`matched_reasons`**（2026-09）：`matched_menu_items` 只說得出「命中菜色」一種
+  理由，命中的其實是料理種類標籤、地區、描述或飲食類型時說不出理由。這個欄位涵蓋
+  全部六種來源（`name`／`menu_item`／`cuisine`／`locality`／`description`／`diet`），
+  每筆 `{ type, value, term }`：`value` 是實際命中的字串、`term` 是命中的是使用者
+  打的哪個詞（同義詞展開後的變體，不一定是原詞）。每種來源最多一筆（菜色比照
+  `matched_menu_items` 最多三筆），順序即畫面上的優先順序——店名最先。
 - **飲食類型**（`diet_types` 的 code 與 label）也在比對範圍內：打「蛋奶素」「奶素」
   「ovo_lacto」以前一筆都回不來，標籤明明就在資料裡。它的相關性分數是**最低的一級**
   ——每家店都有 diet 標籤，命中它幾乎不帶資訊。實測搜 `vegan` 時排在最前面的仍然是

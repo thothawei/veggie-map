@@ -136,6 +136,63 @@ class RestaurantKeywordSearchTest extends TestCase
         $this->assertSame([$japanese->id], $this->search('keyword=日式'));
     }
 
+    public function test_matched_reasons_cover_more_than_just_menu_items(): void
+    {
+        // 命中原因只說得出菜色一種的話，命中料理種類／地區／描述／飲食類型的店
+        // 會顯示成「不知道為什麼中的」——這條測試把六種來源各造一家店，逐一釘住。
+        $byName = Restaurant::factory()->create(['name' => '拉麵屋', 'description' => null]);
+
+        $byCuisine = Restaurant::factory()->create(['name' => '一號店', 'description' => null]);
+        // 'ramen' 在 config/cuisine.php 已經是標準 code，標準 label 是「拉麵」——
+        // CuisineCatalog::label() 回傳的是**目錄裡的**標準 label，不是 feature 自己
+        // 存的那份，兩者不一致時要以目錄為準，這裡刻意留一個不同的 feature label
+        // 來釘住「用目錄、不是用 feature->label」這件事。
+        $ramen = Feature::factory()->create(['code' => 'ramen', 'label' => '拉麵類']);
+        $byCuisine->features()->attach($ramen->id);
+
+        $data = $this->getJson('/api/v1/restaurants?keyword=拉麵')->json('data');
+        $byId = collect($data)->keyBy('id');
+
+        $this->assertSame(
+            ['type' => 'name', 'value' => '拉麵屋', 'term' => '拉麵'],
+            $byId[$byName->id]['matched_reasons'][0],
+        );
+        $this->assertSame(
+            ['type' => 'cuisine', 'value' => '拉麵', 'term' => '拉麵'],
+            $byId[$byCuisine->id]['matched_reasons'][0],
+        );
+    }
+
+    public function test_matched_reasons_cover_locality_description_and_diet(): void
+    {
+        $byLocality = Restaurant::factory()->create([
+            'name' => '甲蔬食', 'city' => '拉麵市', 'description' => null,
+        ]);
+        $byDescription = Restaurant::factory()->create([
+            'name' => '乙蔬食', 'description' => '本店以拉麵聞名',
+        ]);
+        $byDiet = Restaurant::factory()->create(['name' => '丙蔬食', 'description' => null]);
+        $byDiet->dietTypes()->attach(
+            DietType::factory()->create(['code' => 'ramen_diet', 'label' => '拉麵素']),
+        );
+
+        $data = $this->getJson('/api/v1/restaurants?keyword=拉麵&venue_scope=all')->json('data');
+        $byId = collect($data)->keyBy('id');
+
+        $this->assertSame(
+            ['type' => 'locality', 'value' => '拉麵市', 'term' => '拉麵'],
+            $byId[$byLocality->id]['matched_reasons'][0],
+        );
+        $this->assertSame(
+            ['type' => 'description', 'value' => '本店以拉麵聞名', 'term' => '拉麵'],
+            $byId[$byDescription->id]['matched_reasons'][0],
+        );
+        $this->assertSame(
+            ['type' => 'diet', 'value' => '拉麵素', 'term' => '拉麵'],
+            $byId[$byDiet->id]['matched_reasons'][0],
+        );
+    }
+
     public function test_name_match_outranks_address_match(): void
     {
         // 地址剛好有「公益」兩個字的店，不應該排在店名就叫「公益」的前面。

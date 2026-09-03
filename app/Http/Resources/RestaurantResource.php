@@ -20,6 +20,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *                                                 動態掛上的「命中的菜色名稱」，不是資料表欄位。
  * @property float|null $recommendation_score `RuleBasedRecommendationService::rank()` 動態
  *                                            設定的分數，只有 GET /restaurants/recommended 才會有。
+ * @property list<array{type: string, value: string, term: string}>|null $matched_reasons
+ *                                                                                        同上，但涵蓋店名／菜色／料理種類／地區／描述／飲食類型六種來源，不是只有菜色（見 matched_menu_items）。
  */
 class RestaurantResource extends JsonResource
 {
@@ -92,6 +94,10 @@ class RestaurantResource extends JsonResource
             'matched_menu_items' => $this->when(
                 is_array($this->matched_menu_items) && $this->matched_menu_items !== [],
                 fn () => $this->matched_menu_items,
+            ),
+            'matched_reasons' => $this->when(
+                is_array($this->matched_reasons) && $this->matched_reasons !== [],
+                fn () => $this->matched_reasons,
             ),
             'confidence_score' => $this->whenLoaded('confidenceScore', fn () => $this->confidenceScore?->score),
             // 「這個分數憑什麼」。只有一個數字的話，使用者沒辦法判斷要不要相信它——

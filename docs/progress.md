@@ -3865,3 +3865,36 @@ bindings，開錯人是資料外洩。
 非空字串，這是寫法衛生，不是修掉一個可利用的漏洞。）
 
 後端 578 綠、PHPStan 0、Pint PASS。
+
+## 2026-09-03 A1 — 命中原因說得出全部，不只菜色 ✅ 已完成
+
+見 [plan-2026-09-search-ux.md](plan-2026-09-search-ux.md) 第 1 批。這次接手環境
+**有 docker**（跟規劃文件寫的「這一輪沒有 docker」不同），可以真的跑測試。
+
+`matched_menu_items` 只說得出「命中菜色」一種理由；`RestaurantRepository::attachMatchReasons()`
+新增 `matched_reasons`，涵蓋 `name`／`menu_item`／`cuisine`／`locality`／`description`／
+`diet` 六種來源，每筆 `{ type, value, term }`。`matched_menu_items` 原樣保留不動
+（已在 OpenAPI 與前端測試裡，移掉是破壞性變更）。
+
+- `RestaurantRepository::buildMatchReasons()`：依序檢查六種來源，每種來源目前
+  能用的資料（`name`／`address`／`city`／`district` 直接讀 model 屬性，`features`／
+  `dietTypes` 讀已 eager load 的關聯，`menu_item` 沿用既有的批次查詢）**都不再另外
+  查一次**，只多了一支 description 的批次查詢（`whereIn('id', $ids)`，不是逐筆）——
+  `description` 不在 `LIST_COLUMNS` 裡，沒有現成的欄位可以比對。
+  這支查詢**只拿來判斷命中原因，不會塞回 `description` 屬性**：塞回去會讓
+  `RestaurantResource` 的 `whenHas('description')` 誤判成「這家店本來就有描述」而把
+  整段顯示出來，那不是列表 API 的行為。
+- `cuisine` 的 `value` 用 `CuisineCatalog::label()`（目錄裡的標準 label），不是
+  `feature->label`——兩者不一致時以目錄為準，測試故意造一個不同的 feature label
+  釘住這件事（`ramen` 這個 code 剛好已經在 `config/cuisine.php` 裡，測試因此抓到
+  自己第一版寫錯的期望值，順手修正）。
+- 反向驗證：把 cuisine 分支換成 `if (false)`，`matched reasons cover more than
+  just menu items` 那條測試真的紅（`matched_reasons` key 直接消失，因為那家店
+  唯一的命中原因就是 cuisine）。
+- 新增 4 條測試（6 種來源逐一釘住 + 沿用既有的 N+1 防線測試不受影響），
+  `docs/openapi.yaml`／`docs/api.md` 同步補上欄位說明，
+  `npx @redocly/cli lint` 通過（0 error，既有 35 個無關 warning）。
+
+後端 653 passed（4 skipped，1786 assertions）、PHPStan 0 error、Pint PASS。
+
+**下一步**：依建議順序做 A2（同義詞展開要看得見）。

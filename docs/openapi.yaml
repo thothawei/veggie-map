@@ -1530,6 +1530,25 @@ components:
           items: { type: string }
           description: >
             命中的菜色名稱（最多三個）。只有在帶 keyword、而且命中的不是店名時才出現。
+        matched_reasons:
+          type: array
+          description: >
+            「這家店為什麼出現在結果裡」，涵蓋店名／菜色／料理種類／地區／描述／
+            飲食類型六種來源（matched_menu_items 只有菜色一種）。只有帶 keyword
+            且真的命中時才出現，每種來源最多一筆（菜色比照 matched_menu_items
+            最多三筆）。
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [name, menu_item, cuisine, locality, description, diet]
+              value:
+                type: string
+                description: 實際命中的字串（店名、菜色名、料理標籤、地址片段…）
+              term:
+                type: string
+                description: 命中的是使用者打的哪個詞（同義詞展開後的變體，可能不是原詞）
         open_status:
           type: string
           enum: [open, closed, unknown]

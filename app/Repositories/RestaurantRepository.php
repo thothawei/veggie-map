@@ -8,6 +8,7 @@ use App\Models\Restaurant;
 use App\Models\RestaurantSlugAlias;
 use App\Repositories\Search\KeywordSearch;
 use App\Support\CityCatalog;
+use App\Support\CuisineCatalog;
 use App\Support\DietCatalog;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\CursorPaginator;
@@ -344,10 +345,16 @@ class RestaurantRepository
      * 標出「這家店為什麼出現在結果裡」。
      *
      * 搜「拉麵」跳出「綠光食堂」時，使用者看不出關聯——店名、地址、料理種類都
-     * 沒有那兩個字，命中的是一道菜。不說的話這筆結果看起來像 bug。
+     * 沒有那兩個字，命中的是一道菜。不說的話這筆結果看起來像 bug。而且命中原因
+     * 不是只有菜色一種——搜「拉麵」排第一的店如果命中的是料理種類標籤，只顯示
+     * `matched_menu_items` 會讓使用者以為排序壞了。
      *
-     * 一次查完整頁的菜色（`whereIn` 這一頁的 id），不是逐筆補查——後者就是 N+1。
-     * 料理種類已經在 `features` 關聯裡，不必再查。
+     * `matched_menu_items` 保留不動（已在 OpenAPI 與前端測試裡，移掉是破壞性變更），
+     * `matched_reasons` 是新欄位、兩者並存。
+     *
+     * 一次查完整頁的菜色與描述（`whereIn` 這一頁的 id），不是逐筆補查——後者就是
+     * N+1。店名／地址／城市／行政區／料理種類／飲食類型已經在傳進來的 model 與
+     * `features`／`dietTypes` 關聯裡，不必再查。
      *
      * @param  array<int, Model>  $restaurants
      * @param  list<list<string>>  $groups
@@ -358,7 +365,7 @@ class RestaurantRepository
             return;
         }
 
-        // 展開後的變體全部攤平：這裡只是要「哪些菜名讓這家店中的」，不需要維持
+        // 展開後的變體全部攤平：這裡只是要「哪個詞讓這家店中的」，不需要維持
         // AND／OR 的結構。搜「珍珠奶茶」時命中的菜名可能寫著「奶茶」，
         // 只比對原詞的話這家店會顯示成「不知道為什麼中的」。
         $terms = array_values(array_unique(array_merge(...$groups)));
@@ -378,16 +385,133 @@ class RestaurantRepository
             ->get(['id', 'restaurant_id', 'name'])
             ->groupBy('restaurant_id');
 
+        // description 不在 LIST_COLUMNS 裡（見上方常數註解），列表 model 上沒有這個
+        // 屬性可以直接比對，所以另外批次查一次——只為了命中原因，不會被拿去當
+        // `description` 欄位塞回 model（那會讓 whenHas('description') 誤判成
+        // 「這家店有描述」而整段顯示出來，不是這裡要做的事）。
+        $descriptions = Restaurant::query()
+            ->whereIn('id', $ids)
+            ->whereNotNull('description')
+            ->where(function ($query) use ($terms) {
+                foreach ($terms as $term) {
+                    $query->orWhere('description', 'like', '%'.KeywordSearch::escapeLike($term).'%');
+                }
+            })
+            ->pluck('description', 'id');
+
         foreach ($restaurants as $restaurant) {
-            $matched = $menuItems->get($restaurant->getKey());
+            $matchedMenuItems = $menuItems->get($restaurant->getKey());
 
             // 只留前三個：命中十道菜時列出十個名字會把卡片撐爆，而使用者要的
             // 只是「喔，是因為菜色」這個資訊。
             $restaurant->setAttribute(
                 'matched_menu_items',
-                $matched === null ? [] : $matched->take(3)->pluck('name')->all(),
+                $matchedMenuItems === null ? [] : $matchedMenuItems->take(3)->pluck('name')->all(),
+            );
+
+            // $restaurants 的型別是泛用的 Model（呼叫端傳的是 cursorPaginate 的
+            // items()，PHPStan 推不出比 Model 更精確的型別），但實際上永遠是
+            // Restaurant——這個方法只會被 search() 用 Restaurant 查詢結果呼叫。
+            /** @var Restaurant $restaurant */
+            $restaurant->setAttribute(
+                'matched_reasons',
+                $this->buildMatchReasons($restaurant, $terms, $matchedMenuItems, $descriptions->get($restaurant->getKey())),
             );
         }
+    }
+
+    /**
+     * 依序檢查店名／菜色／料理種類／地區／描述／飲食類型六種來源，每種最多回報
+     * 一筆（菜色比照 `matched_menu_items` 最多三筆），組成
+     * `{ type, value, term }` 的清單。順序即畫面上的優先順序——店名最先，
+     * 因為那是使用者最容易理解的命中理由。
+     *
+     * @param  list<string>  $terms
+     * @param  EloquentCollection<int, MenuItem>|null  $matchedMenuItems
+     * @return list<array{type: string, value: string, term: string}>
+     */
+    private function buildMatchReasons(
+        Restaurant $restaurant,
+        array $terms,
+        ?EloquentCollection $matchedMenuItems,
+        ?string $description,
+    ): array {
+        $reasons = [];
+
+        if (($term = self::findMatchingTerm((string) $restaurant->name, $terms)) !== null) {
+            $reasons[] = ['type' => 'name', 'value' => (string) $restaurant->name, 'term' => $term];
+        }
+
+        foreach (($matchedMenuItems?->take(3) ?? collect()) as $menuItem) {
+            if (($term = self::findMatchingTerm((string) $menuItem->name, $terms)) !== null) {
+                $reasons[] = ['type' => 'menu_item', 'value' => (string) $menuItem->name, 'term' => $term];
+            }
+        }
+
+        if ($restaurant->relationLoaded('features')) {
+            foreach ($restaurant->features as $feature) {
+                if (! CuisineCatalog::isCuisine($feature->code)) {
+                    continue;
+                }
+
+                $label = CuisineCatalog::label($feature->code) ?? $feature->label;
+
+                if (($term = self::findMatchingTerm($label, $terms)) !== null) {
+                    $reasons[] = ['type' => 'cuisine', 'value' => $label, 'term' => $term];
+
+                    break;
+                }
+            }
+        }
+
+        foreach (['city', 'district', 'address'] as $field) {
+            $value = $restaurant->{$field};
+
+            if (! is_string($value) || $value === '') {
+                continue;
+            }
+
+            if (($term = self::findMatchingTerm($value, $terms)) !== null) {
+                $reasons[] = ['type' => 'locality', 'value' => $value, 'term' => $term];
+
+                break;
+            }
+        }
+
+        if ($description !== null && ($term = self::findMatchingTerm($description, $terms)) !== null) {
+            // 截斷成片段：整段描述放進「命中原因」會把卡片撐爆，使用者要的只是
+            // 「喔，是因為這句話」這個線索，不是整份描述（那是描述欄位自己的工作）。
+            $reasons[] = ['type' => 'description', 'value' => mb_substr($description, 0, 40), 'term' => $term];
+        }
+
+        if ($restaurant->relationLoaded('dietTypes')) {
+            foreach ($restaurant->dietTypes as $dietType) {
+                if (($term = self::findMatchingTerm($dietType->label, $terms)) !== null) {
+                    $reasons[] = ['type' => 'diet', 'value' => $dietType->label, 'term' => $term];
+
+                    break;
+                }
+            }
+        }
+
+        return $reasons;
+    }
+
+    /**
+     * 回傳第一個讓 `$haystack` 命中的詞（大小寫不敏感的子字串比對，跟搜尋本身
+     * 的 `LIKE '%…%'` 邏輯一致），找不到就回 null。
+     *
+     * @param  list<string>  $terms
+     */
+    private static function findMatchingTerm(string $haystack, array $terms): ?string
+    {
+        foreach ($terms as $term) {
+            if ($term !== '' && mb_stripos($haystack, $term) !== false) {
+                return $term;
+            }
+        }
+
+        return null;
     }
 
     /**
