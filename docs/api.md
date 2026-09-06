@@ -437,7 +437,7 @@ Controller 只做「呼叫 Service／回傳 Resource」，不做欄位驗證與�
 | POST | `/ai-office/tasks/{id}/dependencies` | 新增相依，body `{ "depends_on_task_ids": [1,2] }` | admin, manager, developer |
 | DELETE | `/ai-office/tasks/{id}/dependencies/{dep}` | 移除相依 | admin, manager, developer |
 | GET | `/ai-office/agents` | Agent 列表（`?role=`、`?status=`），不含 system prompt | 唯讀 |
-| GET | `/ai-office/agents/{id}` | Agent 詳情，含 system prompt、工具清單、權限表、目前任務數 | 唯讀 |
+| GET | `/ai-office/agents/{id}` | Agent 詳情：system prompt、工具清單、權限表、目前任務數、目前任務、最近任務、最近錯誤、效能（成功率／平均耗時／Token 用量） | 唯讀 |
 | GET | `/ai-office/approvals` | 核准列表（預設 `status=pending`；`?status=all` 全看；可 `risk_level`、`project_id`） | 唯讀 |
 | GET | `/ai-office/approvals/{id}` | 單筆核准（含 payload、過期時間） | 唯讀 |
 | POST | `/ai-office/approvals/{id}/approve` | 核准；可選 `comment`。HTTP 內不跑工具，丟 `ProcessApprovalJob` | admin, manager |
@@ -546,6 +546,27 @@ success_rate／avg_duration_ms／total_tokens／estimated_cost`。兩個地方�
 - `tasks` 用「目前 `running`／`waiting_review` 的任務數、`working` 的 Agent 數」
   當系統忙碌程度的代理指標——每個 running task 對應一個正在跑的 Agent loop。
 - `sandbox` 回的是**設定的上限**（`cpu_limit`／`memory_limit_mb`），不是即時用量。
+
+### Agent 詳情併入的效能與任務資訊（規格 §47 `AgentDetailView`）
+
+`GET /ai-office/agents/{id}` 的詳細模式除了 system prompt／工具／權限，還帶：
+
+```json
+{
+  "current_task": { "id": 12, "title": "修好付款 bug", "status": "running", "...": "…同 Task 物件其餘欄位" },
+  "recent_tasks": [{ "id": 12, "status": "running" }, { "id": 11, "status": "completed" }],
+  "recent_errors": [{ "id": 3, "type": "tool_error", "message": "檔案不存在", "task_id": 11, "project_id": 1, "created_at": "2026-09-06T10:00:00+00:00" }],
+  "performance": { "tasks": 5, "completed": 4, "failed": 1, "success_rate": 0.8, "avg_duration_ms": 2100, "total_tokens": 1500, "estimated_cost": "0.015000" }
+}
+```
+
+- `current_task`：狀態是 `assigned` 或 `running` 的那一筆，沒有就是 `null`
+  （不是缺欄位）。
+- `recent_tasks`／`recent_errors`：最近 10 筆，由新到舊。
+- `performance`：跟 `GET /ai-office/stats/agents` 同一套 `AgentPerformanceService`
+  算出來的數字，`success_rate`／`avg_duration_ms` 沒有任務執行過時是 `null`
+  不是 `0`——原本這幾個數字要跨到 `/ai-office/usage` 才看得到，現在單一
+  Agent 的詳情頁一次拿齊。
 
 ### Agent 記憶（規格 §41）
 

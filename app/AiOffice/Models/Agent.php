@@ -40,16 +40,19 @@ class Agent extends Model
         return $this->hasMany(AgentPermission::class);
     }
 
+    /** @return HasMany<AgentMemory, $this> */
     public function memories(): HasMany
     {
         return $this->hasMany(AgentMemory::class);
     }
 
+    /** @return HasMany<Task, $this> */
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class, 'assigned_agent_id');
     }
 
+    /** @return HasMany<AgentError, $this> */
     public function errors(): HasMany
     {
         return $this->hasMany(AgentError::class);

@@ -1110,12 +1110,17 @@ Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是
       掛在 Dashboard，`source` 欄位與畫面上的「應用層量測」字樣都是硬性要求，
       不是裝飾。後端 6 測試＋前端 6 測試，OpenAPI／api.md 同步更新。
 
-- [ ] **`AgentDetailView`（AI Office §47、plan L189）**
-      不存在。`AgentsView.vue` 的右欄只有：可用工具／權限／記得的事／system prompt。
-      §47 還要 Current Task、Recent Tasks、Recent Errors、Success Rate、Average Duration、
-      Token Usage——後三個現在只在 `/ai-office/usage` 的 `AgentPerformanceTable` 裡，
-      看單一 agent 要跨頁湊。資料面幾乎都有（`ai_office_agent_errors`、`task_runs`
-      都有在寫），缺的是端點聚合與頁面。
+- [x] **`AgentDetailView`（AI Office §47、plan L189）** ✅ 2026-09-06
+      沒有另開一條路由頁——`AgentsView.vue` 原本就是「點卡片在同頁展開詳情
+      面板」的設計（不是獨立頁面），沿用同一個機制把 §47 缺的六樣併進去，
+      沒有理由為了跟規格的頁面清單字面對齊而多開一條路由、複製一份載入/
+      錯誤處理邏輯。`GET /ai-office/agents/{id}` 加 `current_task`（狀態
+      assigned/running 的那筆，沒有是 `null` 不是缺欄位）、`recent_tasks`／
+      `recent_errors`（最近 10 筆）、`performance`（跟 `/stats/agents` 同一套
+      `AgentPerformanceService`，避免兩套聚合邏輯要對兩次帳）。後端 6 測試
+      （`AgentDetailTest`）＋前端 2 測試更新，PHPStan 途中抓到 `Agent::tasks()`/
+      `errors()` 缺 `HasMany<T, $this>` 泛型標註（現有 `tools()`/`permissions()`
+      有，這兩個沒有），順手補上。
 
 - [ ] **`LogsView`（AI Office §44 pages、plan L189）**
       不存在。目前只有專案內的 ActivityFeed（`/ai-office/projects/{id}`），

@@ -46,6 +46,34 @@ export interface AiOfficeAgent {
     tools?: string[];
     permissions?: Record<string, string>;
     active_task_count?: number;
+    /**
+     * 規格第 47 節 `AgentDetailView`：只有 `GET /agents/{id}` 才有這幾個欄位。
+     * `current_task` 沒有手上任務時是 `null`，不是缺欄位。
+     */
+    current_task?: AiOfficeTask | null;
+    recent_tasks?: AiOfficeTask[];
+    recent_errors?: AgentRecentError[];
+    performance?: AgentPerformanceSummary;
+}
+
+/** `AgentDetailView` 的效能區塊，跟 `/ai-office/stats/agents` 同一套數字。 */
+export interface AgentPerformanceSummary {
+    tasks: number;
+    completed: number;
+    failed: number;
+    success_rate: number | null;
+    avg_duration_ms: number | null;
+    total_tokens: number;
+    estimated_cost: string;
+}
+
+export interface AgentRecentError {
+    id: number;
+    type: string;
+    message: string;
+    task_id: number | null;
+    project_id: number | null;
+    created_at: string | null;
 }
 
 export interface AiOfficeTask {

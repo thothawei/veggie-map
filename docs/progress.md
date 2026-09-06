@@ -4768,3 +4768,54 @@ metrics，**但 UI 必須標示資料來源、不要假裝是真的 host CPU**�
   這次沒有為了純視覺驗證去問）——用元件測試（實際掛載 Vue 元件斷言渲染
   文字）＋直接 curl 真實 API 端點取代，足以驗證資料流與畫面邏輯，但沒有
   親眼看過瀏覽器裡的排版，如果版面有 CSS 層級的問題不會被這次驗證抓到。
+
+## 2026-09-06 — AI Office `AgentDetailView`（規格 §47，todo.md P1 第二項）
+
+**做的事**：todo.md 列的缺口是「元件不存在，§47 要 Current Task、Recent
+Tasks、Recent Errors、Success Rate、Average Duration、Token Usage，後三個
+現在要跨到 `/ai-office/usage` 湊」。
+
+**先查證再決定怎麼做**：`AgentsView.vue` 原本的設計就不是獨立路由頁——
+點 Agent 卡片會在同一頁往下展開一個詳情面板（`agents.detail`），跟
+`ProjectDetailView` 那種獨立路由完全是兩套模式。規格 §44 的頁面清單字面上
+寫的是 `AgentDetailView`，但那份清單是「1:1 對應成 Vue 元件」的規格意圖，
+不是要求每個名字都得是一條路由。**決定**：不多開一條路由、不複製一份
+loading／error 處理邏輯去包裝同一批資料，直接把 §47 缺的六樣併進現有面板。
+這個決定跟前面 B1「沒有加獨立排序控制」是同一種判斷方式——先問「規格要的
+內容有沒有到位」，不是「規格寫的名字有沒有逐字出現在檔名裡」。
+
+**後端**：新增 `AgentDetailService::detail()`，`GET /ai-office/agents/{id}`
+併入四個欄位：
+
+- `current_task`：狀態 `assigned`／`running` 的那一筆（`orderByDesc('started_at')`
+  防萬一 `max_concurrency > 1` 有多筆），沒有回 `null`。
+- `recent_tasks`／`recent_errors`：最近 10 筆，`orderByDesc('created_at')`。
+- `performance`：**刻意重用 `AgentPerformanceService::forAll()`**，從結果裡
+  抓自己那筆，不另外寫一套只算單一 Agent 的聚合查詢——Agent 數量小（seeder
+  只有 7 個），為了省三個 groupBy 查詢换來兩套要各自維護、可能對不上帳的
+  統計邏輯不划算。這樣 `AgentDetailView` 的效能數字永遠跟 `/stats/agents`
+  一致，不會出現「同一個 Agent 兩個地方顯示不同成功率」的漂移。
+
+**做的時候 PHPStan 抓到一個既有的小缺口**：`Agent::tasks()`／`errors()`
+沒有 `@return HasMany<T, $this>` 泛型標註（`tools()`／`permissions()` 有），
+新的 `->map(fn (AgentError $error) => ...)` 因此推不出型別，順手補上兩個
+方法的標註，不是這次新引入的問題但一併修掉。
+
+**前端**：`AgentsView.vue` 的詳情面板加四個區塊——效能（成功率／平均耗時／
+Token 用量三格，`success_rate`／`avg_duration_ms` 是 `null` 時顯示「尚無
+資料」不是 `0%`／`0 ms`，跟這個 repo 一貫的「0 跟沒資料是兩件事」原則一致）、
+目前任務、最近任務、最近錯誤。
+
+**驗證**
+
+- 後端 6 條新測試（`AgentDetailTest`）：current_task 挑對狀態、沒有在跑的
+  任務時回 null、recent_tasks/recent_errors 新到舊排序與筆數、performance
+  數字對照手算期望值（不是照實作輸出回填）、沒有歷史紀錄的 Agent 回 null
+  不是 0。後端全套 **729** 條全綠（4 skipped），PHPStan 0 error。
+- 前端更新 2 條既有測試（補上新欄位的 mock）＋新增 2 條：顯示目前任務／
+  最近任務／最近錯誤／效能數字四格、沒有資料時老實顯示「尚無資料」而不是
+  0。前端全套 **427** 條全綠，eslint／vue-tsc／`npm run build` 乾淨。
+- `docs/api.md` 新增「Agent 詳情併入的效能與任務資訊」一節，含範例 JSON
+  與每個欄位的語意（尤其是 `current_task` 為 null 時代表什麼）。
+- 沒有新增路由，`OpenApiContractTest`／`openapi.yaml` 不需要改動。
+- 一樣沒做真瀏覽器點擊驗證（同上一則的理由：沒有已知的 admin 密碼）。

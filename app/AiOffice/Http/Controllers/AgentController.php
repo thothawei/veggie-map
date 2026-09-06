@@ -6,6 +6,7 @@ use App\AiOffice\Http\Resources\AgentMemoryResource;
 use App\AiOffice\Http\Resources\AgentResource;
 use App\AiOffice\Models\Agent;
 use App\AiOffice\Models\AgentMemory;
+use App\AiOffice\Services\AgentDetailService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -78,7 +79,13 @@ class AgentController extends Controller
         ]);
     }
 
-    public function show(Agent $agent): JsonResponse
+    /**
+     * 詳細模式（規格第 47 節 `AgentDetailView`）：System prompt／工具／權限之外，
+     * 併入 Current Task、Recent Tasks、Recent Errors、Success Rate、
+     * Average Duration、Token Usage——原本要看這些得跨到 `/ai-office/usage`
+     * 湊，現在單一 Agent 的詳情頁一次拿齊。
+     */
+    public function show(Agent $agent, AgentDetailService $detail): JsonResponse
     {
         $this->authorize('view', $agent);
 
@@ -86,7 +93,7 @@ class AgentController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => (new AgentResource($agent, detailed: true))->resolve(),
+            'data' => (new AgentResource($agent, detailed: true))->resolve() + $detail->detail($agent),
         ]);
     }
 }
