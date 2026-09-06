@@ -180,6 +180,25 @@ export interface AiOfficeDashboard {
     approvals: { pending: number };
 }
 
+/**
+ * `GET /resource-usage`（規格第 39、44 節）。`source` 永遠是 `'application'`——
+ * 這不是真的 host CPU/Memory 監控，畫面上要照樣標出來，不能省略（見後端
+ * ResourceMonitorService 開頭的說明）。
+ */
+export interface ResourceUsageSnapshot {
+    source: 'application';
+    host_load: { available: boolean; one: number | null; five: number | null; fifteen: number | null };
+    php_memory: { used_bytes: number; peak_bytes: number; limit: string };
+    queue: { connection: string; queue: string; pending_jobs: number };
+    tasks: { running_tasks: number; waiting_review_tasks: number; working_agents: number };
+    sandbox: {
+        docker_available: boolean;
+        docker_tool_enabled: boolean;
+        cpu_limit: string;
+        memory_limit_mb: number;
+    };
+}
+
 /** 規格第 34 節：Agent 之間的訊息。 */
 export interface AiOfficeMessageParty {
     id: number;

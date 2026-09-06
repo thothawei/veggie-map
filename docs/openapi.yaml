@@ -1367,6 +1367,19 @@ paths:
       responses:
         "200": { description: OK }
 
+  /ai-office/resource-usage:
+    get:
+      operationId: aiOfficeResourceUsage
+      tags: [AI Office]
+      summary: >-
+        系統資源快照（規格 §39、§44 ResourceUsage）。`source` 固定回 `application`——
+        不是真的 host CPU/Memory，只有 application-level 指標（PHP process 記憶體、
+        host load average、佇列與任務量），這是規格 §39 自己留的退路，但要求 UI
+        必須標示資料來源。
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+
   /ai-office/projects/{project}/activities:
     get:
       operationId: listAiOfficeActivities

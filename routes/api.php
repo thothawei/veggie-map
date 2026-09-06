@@ -7,6 +7,7 @@ use App\AiOffice\Http\Controllers\DashboardController as AiOfficeDashboardContro
 use App\AiOffice\Http\Controllers\HealthController as AiOfficeHealthController;
 use App\AiOffice\Http\Controllers\MessageController as AiOfficeMessageController;
 use App\AiOffice\Http\Controllers\ProjectController as AiOfficeProjectController;
+use App\AiOffice\Http\Controllers\ResourceUsageController as AiOfficeResourceUsageController;
 use App\AiOffice\Http\Controllers\TaskController as AiOfficeTaskController;
 use App\AiOffice\Http\Controllers\TaskDependencyController as AiOfficeTaskDependencyController;
 use App\AiOffice\Http\Controllers\UsageController as AiOfficeUsageController;
@@ -102,6 +103,10 @@ Route::middleware('throttle:api')->group(function () {
             // 用量／成本／效能（規格第 38、40 節）。唯讀，viewer 也看得到。
             Route::get('/usage', [AiOfficeUsageController::class, 'index']);
             Route::get('/stats/agents', [AiOfficeUsageController::class, 'agents']);
+
+            // ResourceUsage（規格第 39、44 節）：application-level 指標，不是真的
+            // host CPU/Memory——見 ResourceMonitorService 開頭的說明。
+            Route::get('/resource-usage', [AiOfficeResourceUsageController::class, 'show']);
 
             // 事件流（規格第 35／36 節）。SSE 本身在 auth:sanctum 群組外面另外掛，
             // 因為 EventSource 帶不了 Authorization 標頭，改用這裡發的一次性票。

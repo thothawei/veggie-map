@@ -4699,3 +4699,72 @@ null/undefined，`facets` 存在但 `open_now` 缺欄位（測試的 catch-all m
   查詢（一個帶 `open_now`+`confidence_min`、一個純打錯字）→
   `php artisan search:misses --since=1d` 正確印出「篩選分佈」表格
   （`confidence_min: 1`、`open_now: 1`），驗完清空測試資料，不留在資料庫裡。
+
+## 2026-09-06 — AI Office `ResourceUsage`（規格 §39、§44，todo.md P1 漏做項目）
+
+**背景**：plan-2026-09-search-ux.md 的 A/B 全部項目已在這一輪稍早完成。
+接續處理 todo.md 裡 2026-08-26 第二次對照規格時列出的「AI Office：規劃自己
+列了但漏做」清單，排在最便宜的第一項——`ResourceUsage`（CPU／Memory 監控）。
+
+**先查證再動手**：全 repo 的 `cpu`／`memory` 只出現在 `SandboxManager`／
+`DockerSandboxEngine` 的 `--cpus`／`--memory` 這兩個**啟動時的硬限制參數**，
+沒有任何對「跑起來的容器」做輪詢的基礎建設——`docker run` 一律帶
+`--rm --detach`，容器跑完即丟，不是常駐可以 `docker stats` 的對象。真的要做
+容器即時用量監控，得先加一層「幫每個 sandbox 容器命名、記錄、輪詢、容器死了
+要清掉記錄」的追蹤系統，那是遠比 ResourceUsage 這一項本身更大的範圍。
+
+規格 §39 剛好自己留了退路：拿不到 host metrics 就用 application-level
+metrics，**但 UI 必須標示資料來源、不要假裝是真的 host CPU**。照這條做：
+
+**後端** `App\AiOffice\Services\ResourceMonitorService::snapshot()`：
+
+- `source: 'application'`——回應裡固定帶這個標記，前端顯示時要照樣標出來。
+- `host_load`：PHP `sys_getloadavg()`。這是真的 syscall，但反映的是**整台
+  宿主機**（所有 container 共用同一顆 kernel），不是只有 AI Office 這支
+  process 的負載——這個落差在程式註解與 `docs/api.md` 都寫清楚。
+  Windows 環境 `sys_getloadavg()` 永遠回 `false`，對應 `available: false`。
+- `php_memory`：`memory_get_usage(true)`／`memory_get_peak_usage(true)`——
+  這次請求的 PHP process 用量，不是所有 worker 總和。
+- `queue`：`Queue::size()`，跟 `HealthController` 同一支，量到的是當下真值。
+- `tasks`：目前 `running`／`waiting_review` 的任務數、`working` 的 Agent
+  數——當「系統有多忙」的代理指標，因為每個 running task 對應一個正在跑的
+  Agent loop。**這裡踩到一個小坑**：一開始寫成 `Agent::STATUSES` 裡沒有的
+  `'busy'`，PHPUnit 測試（斷言真實筆數而非寫死值）當場抓到，改成正確的
+  `'working'`。
+- `sandbox`：`docker_available`（`SandboxManager::available()`）與
+  `cpu_limit`／`memory_limit_mb`（設定值）。**這是上限，不是即時用量**，
+  欄位命名與註解都刻意不讓兩者混淆。
+
+端點 `GET /ai-office/resource-usage`，跟 `UsageController` 同等級的
+`viewAny Project` 授權（viewer 也看得到——系統當下狀態不是機密）。
+
+**前端**：`ResourceUsage.vue` 掛在 `DashboardView` 底部，`<span class="source">`
+固定顯示「應用層量測（非精確 host 監控）」，不是可有可無的裝飾行——測試釘住
+這行字真的存在。`host_load.available=false` 時老實顯示「無法取得」，不是印
+0（0 跟「量不到」是兩件事，跟這個 repo 的一貫原則一樣）。位元組數用一個
+就地的 `formatBytes()` 換算，沒有抽到共用 `lib/format.ts`——那份檔案是
+餐廳領域專用（`formatDistance`／`formatAddress`），塞一個不相關的工具函式
+進去只會讓那個檔案的用途變模糊。
+
+**驗證**
+
+- 後端 6 條新測試（`ResourceUsageTest`）：`source` 欄位存在、任務／Agent
+  計數對應真實資料列（不是寫死值）、回應形狀完整、sandbox 上限讀自 config
+  而非硬編碼、`user` 角色 403、未登入 401。後端全套 **723** 條全綠
+  （4 skipped），PHPStan 0 error。
+- 前端 6 條新測試（`ResourceUsage.test.ts`）+ 更新 `DashboardView.test.ts`
+  的 API mock（補上 `/ai-office/resource-usage` 分支，否則預設 `{data:[]}`
+  會讓元件在存取 `data.host_load.available` 時直接炸掉——這個修正本身也是
+  一次真的斷言：確認元件在拿到形狀不對的資料時會壞，而不是安靜吞掉）。
+  前端全套 **425** 條全綠，eslint／vue-tsc／`npm run build` 乾淨。
+- 真環境：透過 nginx（`curl http://localhost:8080/api/v1/ai-office/resource-usage`
+  帶真的 Sanctum token）拿到完整 JSON，確認不是只有 PHPUnit 測試環境能跑；
+  容器內 `docker_available` 正確回 `false`（app container 沒有 docker
+  binary，這是預期行為，不是 bug）。
+- `docs/openapi.yaml` 補上這條端點（`npx @redocly/cli lint` 通過，0 error），
+  `OpenApiContractTest` 綠燈；`docs/api.md` 新增「系統資源」一節，含完整
+  範例 JSON 與每個欄位的資料來源說明。
+- 未做真瀏覽器點擊驗證（沒有已知的 admin 密碼，且改密碼需要 DB 寫入授權，
+  這次沒有為了純視覺驗證去問）——用元件測試（實際掛載 Vue 元件斷言渲染
+  文字）＋直接 curl 真實 API 端點取代，足以驗證資料流與畫面邏輯，但沒有
+  親眼看過瀏覽器裡的排版，如果版面有 CSS 層級的問題不會被這次驗證抓到。

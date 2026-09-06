@@ -88,6 +88,21 @@ describe('DashboardView', () => {
                 return Promise.resolve({ data: { data: [{ id: 3, status: 'pending', action: 'git_push', risk_level: 'high' }] } });
             }
 
+            if (url === '/ai-office/resource-usage') {
+                return Promise.resolve({
+                    data: {
+                        data: {
+                            source: 'application',
+                            host_load: { available: true, one: 0.5, five: 0.4, fifteen: 0.3 },
+                            php_memory: { used_bytes: 1048576, peak_bytes: 2097152, limit: '128M' },
+                            queue: { connection: 'redis', queue: 'ai-office', pending_jobs: 0 },
+                            tasks: { running_tasks: 0, waiting_review_tasks: 0, working_agents: 0 },
+                            sandbox: { docker_available: true, docker_tool_enabled: false, cpu_limit: '1.0', memory_limit_mb: 512 },
+                        },
+                    },
+                });
+            }
+
             return Promise.resolve({ data: { data: [] } });
         });
     });
@@ -120,6 +135,7 @@ describe('DashboardView', () => {
     it('dashboard 端點失敗時整排統計不顯示，不用 0 佔位', async () => {
         get.mockImplementation((url: string) => {
             if (url === '/ai-office/dashboard') return Promise.reject(new Error('boom'));
+            if (url === '/ai-office/resource-usage') return Promise.reject(new Error('boom'));
 
             return Promise.resolve({ data: { data: [] } });
         });

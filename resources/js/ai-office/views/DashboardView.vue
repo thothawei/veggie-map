@@ -5,6 +5,7 @@ import AiOfficeShell from '../components/AiOfficeShell.vue';
 import CommandCenter from '../components/dashboard/CommandCenter.vue';
 import StatisticsPanel from '../components/dashboard/StatisticsPanel.vue';
 import ApprovalPanel from '../components/dashboard/ApprovalPanel.vue';
+import ResourceUsage from '../components/dashboard/ResourceUsage.vue';
 import OfficeMap from '../components/office/OfficeMap.vue';
 import { useAgentsStore } from '../stores/agents';
 import { useApprovalsStore } from '../stores/approvals';
@@ -12,7 +13,8 @@ import { useProjectsStore } from '../stores/projects';
 import { useAuthStore } from '@/stores/auth';
 import { extractApiErrorMessage } from '@/lib/apiError';
 import { fetchDashboard } from '../api/dashboard';
-import type { AiOfficeDashboard } from '../types';
+import { fetchResourceUsage } from '../api/resourceUsage';
+import type { AiOfficeDashboard, ResourceUsageSnapshot } from '../types';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -37,6 +39,8 @@ const canApprove = computed(() => ['admin', 'manager'].includes(auth.user?.role 
  * 「今天沒有完成任何任務」是兩件事。
  */
 const dashboard = ref<AiOfficeDashboard | null>(null);
+const resourceUsage = ref<ResourceUsageSnapshot | null>(null);
+const resourceUsageLoading = ref(true);
 
 const stats = computed(() => {
     const data = dashboard.value;
@@ -69,6 +73,17 @@ async function loadDashboard() {
     }
 }
 
+async function loadResourceUsage() {
+    resourceUsageLoading.value = true;
+    try {
+        resourceUsage.value = await fetchResourceUsage();
+    } catch {
+        resourceUsage.value = null;
+    } finally {
+        resourceUsageLoading.value = false;
+    }
+}
+
 async function create(payload: { name: string; description: string | null }) {
     createError.value = null;
     try {
@@ -88,6 +103,7 @@ function openProject(id: number) {
 
 onMounted(() => {
     void loadDashboard();
+    void loadResourceUsage();
     void projects.fetchAll();
     void agents.fetchAll();
     void approvals.fetchPending();
@@ -118,6 +134,8 @@ onMounted(() => {
             />
         </div>
 
+        <ResourceUsage class="panel resource-block" :snapshot="resourceUsage" :loading="resourceUsageLoading" />
+
         <!-- 總覽沒有專案脈絡，所以只畫誰在什麼狀態，不畫在做哪個任務。 -->
         <OfficeMap
             class="panel agents"
@@ -137,6 +155,10 @@ onMounted(() => {
 }
 
 .agents {
+    margin-top: 0.75rem;
+}
+
+.resource-block {
     margin-top: 0.75rem;
 }
 

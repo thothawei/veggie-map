@@ -1100,12 +1100,15 @@ Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是
 
       前端還沒有按鈕（`TaskDetail` 未接），端點與合約先到位。
 
-- [ ] **`ResourceUsage`：CPU／Memory 監控（AI Office §39、§44、plan L185）**
-      元件不存在。全 repo 的 `cpu` 只出現在 `DockerSandboxEngine`／`SandboxManager`
-      的 `--cpus` 限制。Token 用量有完整報表（`/ai-office/usage`），CPU／Memory 完全沒有。
-      §39 已經預先授權「取不到 host metrics 就用 application-level metrics，
-      **但 UI 必須標示資料來源、不要假裝是真的 host CPU**」——照這條做，
-      別為了畫一個好看的儀表去讀 host `/proc`。
+- [x] **`ResourceUsage`：CPU／Memory 監控（AI Office §39、§44、plan L185）**
+      ✅ 2026-09-06。查證後容器是 `--rm --detach` 跑完即丟，沒有可輪詢的常駐
+      對象，真的要做即時容器監控是遠比這項本身更大的範圍。照 §39 的退路做
+      application-level metrics：`sys_getloadavg()`（host load，標明反映整台
+      機器不是單一 process）、PHP process 記憶體、佇列待處理數、running/
+      waiting_review 任務數與 working Agent 數（當代理指標）、sandbox 設定
+      上限（不是即時用量）。`GET /ai-office/resource-usage`＋`ResourceUsage.vue`
+      掛在 Dashboard，`source` 欄位與畫面上的「應用層量測」字樣都是硬性要求，
+      不是裝飾。後端 6 測試＋前端 6 測試，OpenAPI／api.md 同步更新。
 
 - [ ] **`AgentDetailView`（AI Office §47、plan L189）**
       不存在。`AgentsView.vue` 的右欄只有：可用工具／權限／記得的事／system prompt。

@@ -446,6 +446,7 @@ Controller 只做「呼叫 Service／回傳 Resource」，不做欄位驗證與�
 | GET | `/ai-office/agents/{id}/memories` | 這個 Agent 記得的事（`?project_id=`、`?memory_type=`） | 唯讀 |
 | GET | `/ai-office/usage` | 用量與成本報表（`?project_id=`、`?agent_id=`、`?from=`、`?to=`） | 唯讀 |
 | GET | `/ai-office/stats/agents` | 每位 Agent 的效能統計（`?project_id=`） | 唯讀 |
+| GET | `/ai-office/resource-usage` | 系統資源快照（application-level，非真的 host CPU/Memory） | 唯讀 |
 | POST | `/ai-office/projects/{id}/events/ticket` | 換一張開 SSE 用的一次性票 | 唯讀 |
 | GET | `/ai-office/projects/{id}/events` | SSE 事件串流（`?ticket=`、`?after_id=`） | 憑票，票綁使用者與專案 |
 
@@ -516,6 +517,35 @@ new EventSource('/api/v1/ai-office/projects/12/events?ticket=…&after_id=348')
 success_rate／avg_duration_ms／total_tokens／estimated_cost`。兩個地方刻意回 `null` 而不是 0：
 沒接過任務的人沒有成功率、沒有成功執行過的人沒有平均耗時——0 和「還沒有資料」不是同一件事。
 平均耗時只算 `status=completed` 的執行，否則「失敗得很快」會被算成效率高。
+
+### 系統資源（規格 §39、§44 `ResourceUsage`）
+
+`GET /ai-office/resource-usage` 回應 `data.source` 固定是 `"application"`——
+規格 §39 自己留了退路：拿不到 host CPU/Memory 就用 application-level 指標，
+**但 UI 必須標示資料來源，不能假裝是真的 host 監控**。這個 repo 沒有對 sandbox
+容器做 `docker stats` 輪詢的基礎建設（容器是 `--rm --detach` 跑完即丟，不是常駐
+可輪詢的對象），所以回應的是老實能量到的訊號：
+
+```json
+{
+  "success": true,
+  "data": {
+    "source": "application",
+    "host_load": { "available": true, "one": 0.52, "five": 0.61, "fifteen": 0.58 },
+    "php_memory": { "used_bytes": 4194304, "peak_bytes": 4194304, "limit": "128M" },
+    "queue": { "connection": "redis", "queue": "ai-office", "pending_jobs": 0 },
+    "tasks": { "running_tasks": 0, "waiting_review_tasks": 0, "working_agents": 0 },
+    "sandbox": { "docker_available": false, "docker_tool_enabled": false, "cpu_limit": "1.0", "memory_limit_mb": 512 }
+  }
+}
+```
+
+- `host_load` 是 `sys_getloadavg()`——反映整台宿主機（所有 container 共用同一顆
+  kernel），不是只有這支 PHP process，Windows 環境永遠 `available: false`。
+- `php_memory` 是**這次請求**的 PHP process 用量，不是所有 worker 的總和。
+- `tasks` 用「目前 `running`／`waiting_review` 的任務數、`working` 的 Agent 數」
+  當系統忙碌程度的代理指標——每個 running task 對應一個正在跑的 Agent loop。
+- `sandbox` 回的是**設定的上限**（`cpu_limit`／`memory_limit_mb`），不是即時用量。
 
 ### Agent 記憶（規格 §41）
 
