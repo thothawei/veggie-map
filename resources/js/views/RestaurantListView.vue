@@ -9,7 +9,7 @@ import { ALL_CITIES, useCities } from '@/composables/useCities';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
 import { formatAddress, formatCuisines, formatMatchReasons, formatOpenStatus } from '@/lib/format';
 import { googleMapsUrl } from '@/lib/geo';
-import type { ApiSuccess, ExpandedTerm, Relaxation, Restaurant } from '@/types';
+import type { ApiSuccess, DidYouMean, ExpandedTerm, Relaxation, Restaurant } from '@/types';
 
 const router = useRouter();
 const route = useRoute();
@@ -43,6 +43,12 @@ const expandedTerms = ref<ExpandedTerm[]>([]);
  * 使用者當下的問題不是「沒有店」而是「我做錯了什麼」，四個篩選任一個都可能是兇手。
  */
 const relaxations = ref<Relaxation[]>([]);
+
+/**
+ * 「你是不是要找…」。同樣只在 0 筆時後端才回，而且**不自動改寫查詢**——
+ * 點下去才會換成那個詞，使用者因此永遠知道自己看的是哪一個查詢的結果。
+ */
+const didYouMean = ref<DidYouMean[]>([]);
 
 /**
  * 按下放寬按鈕＝把那個條件從網址拿掉（或改成後端指定的值）。
@@ -196,6 +202,7 @@ async function search(reset = true) {
         nextCursor.value = (response.data.meta?.next_cursor as string | null) ?? null;
         expandedTerms.value = (response.data.meta?.expanded_terms as ExpandedTerm[] | undefined) ?? [];
         relaxations.value = (response.data.meta?.relaxations as Relaxation[] | undefined) ?? [];
+        didYouMean.value = (response.data.meta?.did_you_mean as DidYouMean[] | undefined) ?? [];
     } catch (error: unknown) {
         if (seq !== requestSeq) return;
 
@@ -209,6 +216,7 @@ async function search(reset = true) {
             nextCursor.value = null;
             expandedTerms.value = [];
             relaxations.value = [];
+            didYouMean.value = [];
         }
     } finally {
         if (seq === requestSeq) {
@@ -452,6 +460,23 @@ watch(committedKeyword, (value) => {
         <div v-else-if="!loading && restaurants.length === 0" class="notice empty-state">
             <p>{{ emptyMessage }}</p>
 
+            <!--
+                「你是不是要找…」排在放寬條件**之前**：打錯字的時候，錯字才是
+                真正的原因，先叫使用者去放寬篩選等於指錯方向。
+                點下去才換查詢——不自動改寫，他因此永遠知道看的是哪一個查詢的結果。
+            -->
+            <p v-if="didYouMean.length" class="did-you-mean">
+                你是不是要找
+                <button
+                    v-for="suggestion in didYouMean"
+                    :key="suggestion.term"
+                    type="button"
+                    class="suggestion"
+                    @click="searchVariant(suggestion.term)"
+                >{{ suggestion.term }}</button>
+                ？
+            </p>
+
             <div v-if="relaxations.length" class="relaxations">
                 <p class="relaxations-lead">試試放寬這些條件：</p>
                 <button
@@ -464,10 +489,11 @@ watch(committedKeyword, (value) => {
             </div>
 
             <!--
-                沒有任何可放寬的條件時才退回靜態建議——那時候「換個關鍵字」
-                才是誠實的建議，而不是一句安慰。
+                沒有任何可按的下一步時才退回靜態建議——那時候「換個關鍵字」才是
+                誠實的建議，而不是一句安慰。已經給了錯字建議就不必再說一次
+                「換個關鍵字」，那是同一件事的兩種講法。
             -->
-            <p v-else-if="emptySuggestions.length" class="empty-suggestions">
+            <p v-else-if="!didYouMean.length && emptySuggestions.length" class="empty-suggestions">
                 {{ emptySuggestions.join('，或') }}。
             </p>
         </div>
@@ -668,6 +694,22 @@ li button:hover {
 
 .empty-suggestions {
     font-size: 0.9rem;
+}
+
+.did-you-mean {
+    font-size: 0.95rem;
+    color: #2d3748;
+}
+
+.did-you-mean .suggestion {
+    margin: 0 0.15rem;
+    border: none;
+    background: none;
+    color: #2f855a;
+    font-weight: 600;
+    font-size: inherit;
+    cursor: pointer;
+    text-decoration: underline;
 }
 
 .notice.error {

@@ -1435,6 +1435,26 @@ components:
         per_page: { type: integer }
         next_cursor: { type: string, nullable: true }
         prev_cursor: { type: string, nullable: true }
+        did_you_mean:
+          type: array
+          description: >
+            「你是不是要找…」。**只在結果為 0 筆且有 keyword 時出現**，而且
+            **不會自動改寫查詢**——data 仍然是使用者原本那個查詢的結果（0 筆），
+            這只是建議，要不要換由使用者決定。自動改寫會讓他不知道自己看的是
+            別的查詢的結果，改錯時也沒有回頭路。
+            相似度用**字元層級**的編輯距離（不是 PHP 內建的 levenshtein()，
+            那是 byte-based，UTF-8 中日文一個字 3 bytes，距離跟「差幾個字」無關）。
+            候選是同義詞表、料理種類 label、行政區、店名四份小清單。
+            門檻與筆數上限在 config/veggiemap.php 的 search.did_you_mean。
+          items:
+            type: object
+            properties:
+              term: { type: string, example: 拉麵 }
+              score:
+                type: number
+                format: float
+                description: 0–1 的相似度，分數高的在前
+                example: 0.5
         relaxations:
           type: array
           description: >

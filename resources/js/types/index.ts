@@ -201,6 +201,16 @@ export interface Relaxation {
     count: number;
 }
 
+/**
+ * 「你是不是要找…」。只在 0 筆時出現，而且**不會自動改寫查詢**——使用者要自己點，
+ * 否則他不會知道自己看的是另一個查詢的結果。
+ */
+export interface DidYouMean {
+    term: string;
+    /** 0–1 的相似度，分數高的在前。 */
+    score: number;
+}
+
 export interface ApiSuccess<T> {
     success: true;
     data: T;

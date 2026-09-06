@@ -72,6 +72,17 @@ class RestaurantController extends Controller
             if ($relaxations !== []) {
                 $meta['relaxations'] = $relaxations;
             }
+
+            // 「你是不是要找…」。同樣只在 0 筆時跑，而且要有關鍵字才有意義——
+            // 沒打字的人不會打錯字。**不自動改寫查詢**：使用者要自己點，
+            // 否則他不會知道自己看的是另一個查詢的結果（見 DidYouMean）。
+            if (! empty($validated['keyword'])) {
+                $didYouMean = $this->restaurants->didYouMean((string) $validated['keyword']);
+
+                if ($didYouMean !== []) {
+                    $meta['did_you_mean'] = $didYouMean;
+                }
+            }
         }
 
         return response()->json([

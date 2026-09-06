@@ -6,6 +6,7 @@ use App\Models\Feature;
 use App\Models\MenuItem;
 use App\Models\Restaurant;
 use App\Models\RestaurantSlugAlias;
+use App\Repositories\Search\DidYouMean;
 use App\Repositories\Search\KeywordSearch;
 use App\Support\CityCatalog;
 use App\Support\CuisineCatalog;
@@ -349,6 +350,47 @@ class RestaurantRepository
         }
 
         return $relaxations;
+    }
+
+    /**
+     * 零結果時的「你是不是要找…」。
+     *
+     * 候選集合刻意不是整張表，是四份小清單：**同義詞表的詞**、店名、料理種類的
+     * label、行政區。2026-09-06 實測共 120 + 1167 + 42 + 64 筆，撈出來 2.5ms、
+     * 整段 4.6–10.6ms，在 PHP 端算相似度完全可行。資料量長大時再改成只取同
+     * bbox 內的候選。
+     *
+     * **同義詞表排在最前面**是實測之後才加的：一開始只有後三份，結果日文使用者
+     * 打錯的「ラーメソ」拿不到建議——候選是**完整店名**「ラーメン 麺尊 RAGE」，
+     * 跟一個四字的查詢整體相似度太低，還會先被長度比例那一刀砍掉。而同義詞表
+     * 本來就是「使用者會打的詞」的清單（120 個詞，含 ラーメン／vegetarian），
+     * 正是 did-you-mean 最該比對的東西。
+     *
+     * **不自動改寫查詢**——使用者要自己點。理由見 DidYouMean 的類別註解。
+     *
+     * @return list<array{term: string, score: float}>
+     */
+    public function didYouMean(string $keyword): array
+    {
+        /** @var list<list<string>> $synonymGroups */
+        $synonymGroups = config('veggiemap.search.synonyms', []);
+        $synonyms = $synonymGroups === [] ? [] : array_values(array_unique(array_merge(...$synonymGroups)));
+
+        $names = Restaurant::query()
+            ->where('status', 'active')
+            ->pluck('name')
+            ->all();
+
+        $districts = Restaurant::query()
+            ->where('status', 'active')
+            ->whereNotNull('district')
+            ->distinct()
+            ->pluck('district')
+            ->all();
+
+        $cuisines = array_column(CuisineCatalog::types(), 'label');
+
+        return DidYouMean::suggest($keyword, [...$synonyms, ...$cuisines, ...$districts, ...$names]);
     }
 
     /**

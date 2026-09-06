@@ -658,6 +658,52 @@ describe('RestaurantListView 空結果的建議', () => {
         expect(wrapper.find('.relaxation').exists()).toBe(false);
         expect(wrapper.text()).toContain('關掉「營業中」');
     });
+
+    /**
+     * 打錯字時，錯字才是真正的原因——先叫使用者去放寬篩選等於指錯方向，
+     * 所以「你是不是要找」排在放寬按鈕之前。
+     */
+    it('打錯字時給出「你是不是要找」，而且不自動改寫查詢', async () => {
+        listPayload = {
+            data: [],
+            meta: {
+                next_cursor: null,
+                did_you_mean: [{ term: '拉麵', score: 0.5 }],
+            },
+        };
+
+        const { wrapper, router } = await mountList('/restaurants?keyword=拉面');
+
+        expect(wrapper.find('.did-you-mean').text()).toContain('你是不是要找');
+        expect(wrapper.find('.did-you-mean .suggestion').text()).toBe('拉麵');
+        // 不自動改寫：使用者沒點之前，網址上還是他原本打的那個詞。
+        expect(router.currentRoute.value.query.keyword).toBe('拉面');
+    });
+
+    it('點了建議才換成那個詞', async () => {
+        listPayload = {
+            data: [],
+            meta: { next_cursor: null, did_you_mean: [{ term: '拉麵', score: 0.5 }] },
+        };
+
+        const { wrapper, router } = await mountList('/restaurants?keyword=拉面');
+
+        await wrapper.find('.did-you-mean .suggestion').trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.keyword).toBe('拉麵');
+    });
+
+    it('已經給了錯字建議就不再說「換個關鍵字」，那是同一件事的兩種講法', async () => {
+        listPayload = {
+            data: [],
+            meta: { next_cursor: null, did_you_mean: [{ term: '拉麵', score: 0.5 }] },
+        };
+
+        const { wrapper } = await mountList('/restaurants?keyword=拉面');
+
+        expect(wrapper.find('.empty-suggestions').exists()).toBe(false);
+    });
 });
 
 describe('RestaurantListView 命中原因', () => {
