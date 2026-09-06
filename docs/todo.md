@@ -98,7 +98,10 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
       「更多篩選」；FilterDrawer 是共用元件，Home／List 兩頁都吃到這個改動。
       底部「顯示 N 家結果」用現有已查到的筆數（不是 B4 的預測值，B4 還沒做）
 - [ ] B4 每個篩選帶「會剩幾家」（`/restaurants/facets`，先量成本）
-- [ ] B5 載入 skeleton ＋ `aria-busy`
+- [x] B5 載入 skeleton ＋ `aria-busy` ✅ 2026-09-06
+      列表頁三張卡片形狀 skeleton（只在第一批，「載入更多」維持原本的按鈕
+      文字，不疊 skeleton）；首頁地圖淡遮罩＋spinner＋sheet 展開時的 skeleton
+      卡片。兩邊都用 `aria-busy`，已有舊結果時重查不拿 skeleton 蓋掉舊清單
 - [x] B6 空狀態改成可按的下一步（接 A3）✅ 2026-09-06——A4 的「你是不是要找」待 A4 完成後接上
 - [x] B7 圖例補第三種 `unknown` ✅ 2026-09-06——查了：現況 **0 家**會出現灰點
       （1167 家全是 exclusive 576／friendly 591）。所以改成「真的有灰點時才列那一項」，

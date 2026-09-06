@@ -4504,3 +4504,41 @@ CSS 原始碼看不出來——這條規則本身完全沒有語法錯誤。
 
 **下一步**：B0–B3 全部完成。剩 B4（每個篩選帶「會剩幾家」，需要
 `/restaurants/facets`，先量成本）與 A7／B4 一起等 A8 的資料先跑一段時間。
+
+
+## 2026-09-06 — B5：載入 skeleton ＋ aria-busy
+
+**做什麼**：把「一行載入中…」（列表頁其實連這行都沒有，第一次載入完全是
+空白）換成看得出「正在動」的東西：
+
+- **列表頁**：第一批載入（換搜尋條件、重置）顯示三張卡片形狀的 skeleton
+  （shimmer 動畫，形狀照抄真卡片的 padding／radius／margin，結果一到不會
+  跳版）。**只在第一批**——「載入更多」已經有「載入更多…」的按鈕文字，
+  再疊三張假卡片會讓人以為清單被清空重來。
+- **首頁地圖**：淡遮罩（`rgba(255,255,255,0.35)`，看得見底下的地圖與
+  marker）＋轉圈 spinner，蓋在整個 `.map-shell` 上。底部 sheet 展開時，
+  如果還沒有任何結果（`loading && !hasResults`），`.cards` 區塊顯示三張
+  skeleton 卡片；**已經有舊結果時重查**（移動地圖、換篩選）只顯示地圖遮罩，
+  舊清單留著不被 skeleton 蓋掉——不然每次移動地圖清單都會閃一次空白。
+- 兩邊的 skeleton／遮罩都帶 `aria-busy="true"`，skeleton 卡片本身
+  `aria-hidden="true"`（假內容不該被讀出來），`prefers-reduced-motion`
+  關掉 shimmer／spinner 動畫。
+
+**驗證**
+
+- 新增 4 條測試：List 2 條（第一批顯示 skeleton＋aria-busy、載入更多不顯示
+  skeleton）、Home 2 條（地圖遮罩＋sheet skeleton＋aria-busy、已有結果時
+  重查不換掉舊清單）。用一個手動控制 resolve 時機的 promise 卡住
+  `/restaurants`，其他 URL 委派給原本的 mock 實作，避免整個畫面被一起卡住。
+  全套 404 條全綠，eslint／vue-tsc／`npm run build` 乾淨。
+- 反向驗證：拿掉 List skeleton 的 `aria-busy` 屬性 → 1 條紅。
+- 真瀏覽器：本機後端回應太快，自然操作抓不到過渡態的畫面；改用注入原始
+  HTML 的方式想拍截圖，結果發現**這條路走不通**——scoped CSS 的
+  `[data-v-hash]` 屬性只有 Vue 自己 render 出來的節點才有，手動塞進去的
+  HTML 拿不到樣式，螢幕上什麼都看不出來。這不是產品的 bug，是這個驗證
+  手法本身的侷限；skeleton 的標記與樣式已經由單元測試（含 aria-busy）
+  精確驗證過，維持「已改，這一段沒有用真瀏覽器肉眼確認到動畫效果」的誠實
+  說法，不是「畫面確認過」。
+
+**下一步**：A1–A9、B0–B3、B5–B8 全部完成。只剩 B4（每個篩選帶「會剩幾家」，
+`/restaurants/facets`，要先量成本），等 A8 的資料多跑一段時間再一起評估。

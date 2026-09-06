@@ -238,6 +238,69 @@ describe('RestaurantListView 分頁與計數', () => {
         expect(wrapper.findAll('li')).toHaveLength(2);
     });
 
+    /**
+     * B5：第一次載入時要看得到「正在動」的東西，不是一片空白等結果彈出來。
+     * 用一個手動控制何時 resolve 的 promise 卡住 `/restaurants`，其他 URL
+     * 照舊委派給原本的 mock 實作——不然 `/cities`／`/diets`／`/features`
+     * 也會被一起卡住，畫面會卡在別的地方，不是在測我們要測的這件事。
+     */
+    it('第一次載入顯示三張卡片形狀的 skeleton，不是空白，而且帶 aria-busy', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const flexibleGet = get as any;
+        const originalImpl = flexibleGet.getMockImplementation();
+        let resolveRestaurants: (value: unknown) => void = () => {};
+
+        flexibleGet.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+            if (url === '/restaurants') {
+                return new Promise((resolve) => {
+                    resolveRestaurants = resolve;
+                });
+            }
+
+            return originalImpl(url, config);
+        });
+
+        try {
+            const { wrapper } = await mountList('/restaurants?city=taipei');
+
+            const skeleton = wrapper.find('.skeleton-list');
+            expect(skeleton.exists()).toBe(true);
+            expect(skeleton.attributes('aria-busy')).toBe('true');
+            expect(wrapper.findAll('.skeleton-card')).toHaveLength(3);
+
+            resolveRestaurants({ data: { data: [fakeRestaurant(1)], meta: { next_cursor: null } } });
+            await flushPromises();
+
+            expect(wrapper.find('.skeleton-list').exists()).toBe(false);
+            expect(wrapper.findAll('li')).toHaveLength(1);
+        } finally {
+            flexibleGet.mockImplementation(originalImpl);
+        }
+    });
+
+    /** 「載入更多」不該把已經看到的清單換成 skeleton——那會讓人以為清單被清空重來。 */
+    it('載入更多的時候不顯示 skeleton，舊清單留著', async () => {
+        listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: 'cur-1' } };
+        const { wrapper } = await mountList('/restaurants?city=taipei');
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const flexibleGet = get as any;
+        const originalImpl = flexibleGet.getMockImplementation();
+
+        flexibleGet.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+            if (url === '/restaurants') return new Promise(() => {});
+
+            return originalImpl(url, config);
+        });
+
+        await wrapper.find('.more').trigger('click');
+
+        expect(wrapper.find('.skeleton-list').exists()).toBe(false);
+        expect(wrapper.findAll('li')).toHaveLength(1);
+
+        flexibleGet.mockImplementation(originalImpl);
+    });
+
     it('查詢失敗時顯示錯誤，不是靜默留著舊資料', async () => {
         listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
         const { wrapper } = await mountList('/restaurants?city=taipei');

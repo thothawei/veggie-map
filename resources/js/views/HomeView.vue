@@ -454,6 +454,15 @@ watch(sheetExpanded, (expanded) => {
                 </li>
             </ul>
 
+            <!--
+              地圖上的淡遮罩＋spinner（B5）。取代原本什麼都不顯示的空窗期——
+              地圖本身還在（marker 是舊的沒關係，下面的 `.map-badge` 已經另外
+              顯示「載入中…」），遮罩只是讓使用者知道畫面正在動、不是卡住了。
+            -->
+            <div v-if="loading" class="map-loading-overlay" aria-busy="true" aria-label="地圖資料載入中">
+                <span class="spinner" aria-hidden="true"></span>
+            </div>
+
             <!-- 角落控制項：定位鈕移到這裡，跟圖例分居地圖左右下角。 -->
             <button type="button" class="locate-button" @click="handleLocate">📍 使用目前位置</button>
 
@@ -488,7 +497,17 @@ watch(sheetExpanded, (expanded) => {
                 </button>
 
                 <div id="result-sheet-body" class="sheet-body" :hidden="!sheetExpanded">
-                    <section v-if="showEmptyState" class="empty-state">
+                    <!-- 載入 skeleton（B5）：只在還沒有任何結果可以顯示時才蓋掉整片，
+                         已經有舊結果、正在重查時讓舊清單留著，不要每次都閃一次空白。 -->
+                    <div v-if="loading && !hasResults" class="cards" aria-busy="true" aria-label="正在載入餐廳清單">
+                        <div v-for="n in 3" :key="n" class="result-card skeleton-card" aria-hidden="true">
+                            <span class="skeleton-line skeleton-title"></span>
+                            <span class="skeleton-line skeleton-badge"></span>
+                            <span class="skeleton-line skeleton-text"></span>
+                        </div>
+                    </div>
+
+                    <section v-else-if="showEmptyState" class="empty-state">
                         <p class="empty-title">
                             <template v-if="keyword">找不到符合「{{ keyword }}」的餐廳</template>
                             <template v-else>這個範圍還沒有素食餐廳</template>
@@ -620,6 +639,88 @@ watch(sheetExpanded, (expanded) => {
     justify-content: center;
     background: var(--vm-ink-50);
     color: var(--vm-ink-500);
+}
+
+/* 地圖上的淡遮罩＋spinner（B5）。淡到還看得見底下的地圖與 marker——
+   使用者要知道的是「正在動」，不是「畫面被蓋住了」。 */
+.map-loading-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.35);
+    pointer-events: none;
+}
+
+.spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 3px solid var(--vm-ink-200);
+    border-top-color: var(--vm-green-600);
+    border-radius: 50%;
+    animation: spinner-spin 0.7s linear infinite;
+}
+
+@keyframes spinner-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation: none;
+    }
+}
+
+/*
+ * 載入 skeleton（B5）。跟 RestaurantListView 那份是同樣的視覺語言，但兩邊
+ * 是各自 scoped 的 style，沒有共用檔案——這五個檔案的改動範圍本來就不含
+ * 抽一個共用元件出來，重複這幾條規則比新增一個共用檔案的風險小。
+ */
+.skeleton-card {
+    gap: 0.5rem;
+    cursor: default;
+}
+
+.skeleton-line {
+    display: block;
+    height: 0.9rem;
+    border-radius: var(--vm-radius-sm);
+    background: linear-gradient(90deg, var(--vm-ink-100) 25%, var(--vm-ink-200) 37%, var(--vm-ink-100) 63%);
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+.skeleton-title {
+    width: 60%;
+}
+
+.skeleton-badge {
+    width: 30%;
+    height: 0.75rem;
+}
+
+.skeleton-text {
+    width: 85%;
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0 50%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton-line {
+        animation: none;
+    }
 }
 
 /*

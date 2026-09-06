@@ -399,7 +399,22 @@ watch(committedKeyword, (value) => {
             {{ scopeLabel }}：{{ restaurants.length }}{{ nextCursor ? '+' : '' }} 家
         </p>
 
-        <ul>
+        <!--
+          載入 skeleton（B5）。**只在第一批（換搜尋條件、重置）才顯示**——
+          「載入更多」是接在既有清單後面，那邊已經有「載入更多…」的按鈕文字
+          可以看，再疊三張假卡片只會讓使用者以為清單被清空重來。
+          `aria-busy` 讓讀螢幕使用者知道畫面正在動，不是卡住了。
+        -->
+        <ul v-if="loading && restaurants.length === 0" class="skeleton-list" aria-busy="true" aria-label="正在載入餐廳清單">
+            <li v-for="n in 3" :key="n" class="skeleton-card" aria-hidden="true">
+                <span class="skeleton-line skeleton-title"></span>
+                <span class="skeleton-line skeleton-badge"></span>
+                <span class="skeleton-line skeleton-text"></span>
+                <span class="skeleton-line skeleton-text short"></span>
+            </li>
+        </ul>
+
+        <ul v-else>
             <li v-for="restaurant in restaurants" :key="restaurant.id">
                 <!--
                     三層資訊，不是把所有欄位平鋪成同一層的 <span>（那樣每一項都
@@ -582,6 +597,63 @@ watch(committedKeyword, (value) => {
 ul {
     list-style: none;
     padding: 0;
+}
+
+/*
+ * 載入 skeleton（B5）。形狀比照真的卡片（`li button` 的 padding／radius／
+ * margin-bottom 完全照抄），這樣結果一到，skeleton 換成真卡片時版面不會跳。
+ */
+.skeleton-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--vm-ink-200);
+    border-radius: var(--vm-radius-lg);
+    background: var(--vm-white);
+}
+
+.skeleton-line {
+    display: block;
+    height: 0.9rem;
+    border-radius: var(--vm-radius-sm);
+    background: linear-gradient(90deg, var(--vm-ink-100) 25%, var(--vm-ink-200) 37%, var(--vm-ink-100) 63%);
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+.skeleton-title {
+    width: 45%;
+}
+
+.skeleton-badge {
+    width: 25%;
+    height: 0.75rem;
+}
+
+.skeleton-text {
+    width: 80%;
+}
+
+.skeleton-text.short {
+    width: 55%;
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0 50%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton-line {
+        animation: none;
+    }
 }
 
 li button {

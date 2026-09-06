@@ -392,6 +392,88 @@ describe('HomeView 地圖↔清單連動（B2）', () => {
     });
 });
 
+describe('HomeView 載入 skeleton（B5）', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    /**
+     * 用一個手動控制何時 resolve 的 promise 卡住 `/restaurants`，其他 URL
+     * （`/cities`／`/restaurants/recommended`／`/diets`）照舊委派給原本的
+     * mock 實作，不然畫面會卡在別的地方，不是在測我們要測的這件事。
+     */
+    it('地圖上出現淡遮罩＋spinner，sheet 展開時看得到 skeleton 卡片，都帶 aria-busy', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const flexibleGet = get as any;
+        const originalImpl = flexibleGet.getMockImplementation();
+        let resolveRestaurants: (value: unknown) => void = () => {};
+
+        flexibleGet.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+            if (url === '/restaurants') {
+                return new Promise((resolve) => {
+                    resolveRestaurants = resolve;
+                });
+            }
+
+            return originalImpl(url, config);
+        });
+
+        try {
+            const { wrapper } = await mountHome('/?city=taipei');
+
+            const overlay = wrapper.find('.map-loading-overlay');
+            expect(overlay.exists()).toBe(true);
+            expect(overlay.attributes('aria-busy')).toBe('true');
+
+            await wrapper.find('.sheet-toggle').trigger('click');
+            const skeletonCards = wrapper.findAll('.cards .skeleton-card');
+            expect(skeletonCards).toHaveLength(3);
+            expect(wrapper.find('.sheet-body .cards').attributes('aria-busy')).toBe('true');
+
+            resolveRestaurants({ data: { data: [fakeRestaurant(1)], meta: { next_cursor: null } } });
+            await flushPromises();
+
+            expect(wrapper.find('.map-loading-overlay').exists()).toBe(false);
+            expect(wrapper.findAll('.skeleton-card')).toHaveLength(0);
+        } finally {
+            flexibleGet.mockImplementation(originalImpl);
+        }
+    });
+
+    /** 重查（例如移動地圖）時已經有舊結果，遮罩可以蓋，但不該把舊清單換成 skeleton 卡片。 */
+    it('已經有結果時重新查詢，只有地圖遮罩，清單不會被 skeleton 取代', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+        const { wrapper } = await mountHome('/?city=taipei');
+        await wrapper.find('.sheet-toggle').trigger('click');
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const flexibleGet = get as any;
+        const originalImpl = flexibleGet.getMockImplementation();
+
+        flexibleGet.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+            if (url === '/restaurants') return new Promise(() => {});
+
+            return originalImpl(url, config);
+        });
+
+        wrapper.findComponent({ name: 'RestaurantMap' }).vm.$emit('bounds-changed', {
+            minLat: 24.9, minLng: 121.4, maxLat: 25.1, maxLng: 121.7,
+        });
+        await flushPromises();
+
+        expect(wrapper.find('.map-loading-overlay').exists()).toBe(true);
+        expect(wrapper.findAll('.skeleton-card')).toHaveLength(0);
+        expect(wrapper.findAll('.result-card')).toHaveLength(1);
+
+        flexibleGet.mockImplementation(originalImpl);
+    });
+});
+
 describe('HomeView 地圖圖例', () => {
     beforeEach(() => {
         vi.clearAllMocks();
