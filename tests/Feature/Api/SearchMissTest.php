@@ -124,4 +124,44 @@ class SearchMissTest extends TestCase
             $this->assertNotContains($forbidden, $columns, "search_misses 不該有 {$forbidden} 欄位");
         }
     }
+
+    /**
+     * B4 量體評估：只知道「有沒有開篩選」（`had_filters`）回答不出「是哪一個」，
+     * 累積再多真實流量也決定不了 B3 常駐 quick filter 該是哪三個。這裡記的是
+     * 開了哪些鍵，不是只有一個布林值。
+     */
+    public function test_active_filters_records_which_keys_were_open(): void
+    {
+        $this->getJson('/api/v1/restaurants?keyword=不存在&open_now=1&confidence_min=60')->assertOk();
+
+        $this->assertEqualsCanonicalizing(
+            ['open_now', 'confidence_min'],
+            SearchMiss::sole()->active_filters,
+        );
+    }
+
+    public function test_active_filters_is_null_when_no_filters_are_open(): void
+    {
+        $this->getJson('/api/v1/restaurants?keyword=不存在')->assertOk();
+
+        $this->assertNull(SearchMiss::sole()->active_filters);
+    }
+
+    /** venue_scope 等於預設值不算「開了」，這裡跟 had_filters 是同一個判準。 */
+    public function test_active_filters_excludes_venue_scope_at_its_default_value(): void
+    {
+        $this->getJson('/api/v1/restaurants?keyword=不存在&venue_scope=exclusive')->assertOk();
+
+        $this->assertNull(SearchMiss::sole()->active_filters);
+    }
+
+    /** 只記鍵名不記值——跟這張表一貫的原則一樣，這是產品訊號不是使用者追蹤。 */
+    public function test_active_filters_stores_only_key_names_not_values(): void
+    {
+        $this->getJson('/api/v1/restaurants?keyword=不存在&confidence_min=60')->assertOk();
+
+        $miss = SearchMiss::sole();
+        $this->assertSame(['confidence_min'], $miss->active_filters);
+        $this->assertStringNotContainsString('60', json_encode($miss->active_filters));
+    }
 }

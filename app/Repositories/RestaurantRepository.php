@@ -463,12 +463,18 @@ class RestaurantRepository
     public function recordMiss(array $filters): void
     {
         $keyword = isset($filters['keyword']) ? trim((string) $filters['keyword']) : '';
+        $activeFilters = $this->activeFilterKeys($filters);
 
         SearchMiss::create([
             'keyword' => $keyword !== '' ? $keyword : null,
             'normalized' => $keyword !== '' ? self::normalizeForMissReport($keyword) : null,
             'result_count' => 0,
-            'had_filters' => $this->hasNonKeywordFilters($filters),
+            'had_filters' => $activeFilters !== [],
+            // B4 量體評估發現：只記布林值回答不出「是哪一個篩選」，累積再多真實
+            // 流量也決定不了「哪三個是最常用的 quick filter」（B3 現在的三個是
+            // 規劃暫定，不是量出來的）。只記鍵名不記值——跟這張表一貫的原則
+            // 一樣，這是產品訊號不是使用者追蹤。
+            'active_filters' => $activeFilters !== [] ? $activeFilters : null,
             'created_at' => now(),
         ]);
     }
@@ -484,13 +490,16 @@ class RestaurantRepository
     }
 
     /**
-     * 除了 keyword 之外還有沒有開別的篩選。分得出「單純這個詞查不到」跟
+     * 除了 keyword 之外還開了哪些篩選鍵。分得出「單純這個詞查不到」跟
      * 「詞查得到，但篩選太嚴」是兩個完全不同的處置方向——前者該加同義詞，
-     * 後者該檢討的是篩選門檻，不是詞表。
+     * 後者該檢討的是篩選門檻，不是詞表；回傳鍵名的列表（而不是單純的布林值）
+     * 是為了 B4 的量體評估——只知道「有沒有開」回答不出「哪一個篩選」最常
+     * 跟零結果一起出現，決定不了 B3 常駐 quick filter 該是哪三個。
      *
      * @param  array<string, mixed>  $filters
+     * @return list<string>
      */
-    private function hasNonKeywordFilters(array $filters): bool
+    private function activeFilterKeys(array $filters): array
     {
         $scopeParam = DietCatalog::venueScopeParam();
 
@@ -498,6 +507,8 @@ class RestaurantRepository
             'diet', $scopeParam, 'price_level', 'confidence_min', 'open_now',
             'bbox', 'city', 'district', ...Feature::CODES,
         ];
+
+        $active = [];
 
         foreach ($keys as $key) {
             $value = $filters[$key] ?? null;
@@ -512,10 +523,10 @@ class RestaurantRepository
                 continue;
             }
 
-            return true;
+            $active[] = $key;
         }
 
-        return false;
+        return $active;
     }
 
     /**

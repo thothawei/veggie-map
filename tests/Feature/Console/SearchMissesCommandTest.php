@@ -11,13 +11,20 @@ class SearchMissesCommandTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function miss(string $keyword, ?string $normalized = null, bool $hadFilters = false, ?string $createdAt = null): SearchMiss
-    {
+    /** @param  list<string>|null  $activeFilters */
+    private function miss(
+        string $keyword,
+        ?string $normalized = null,
+        bool $hadFilters = false,
+        ?string $createdAt = null,
+        ?array $activeFilters = null,
+    ): SearchMiss {
         return SearchMiss::create([
             'keyword' => $keyword,
             'normalized' => $normalized ?? mb_strtolower($keyword),
             'result_count' => 0,
             'had_filters' => $hadFilters,
+            'active_filters' => $activeFilters,
             'created_at' => $createdAt ?? now(),
         ]);
     }
@@ -82,6 +89,49 @@ class SearchMissesCommandTest extends TestCase
 
         $this->artisan('search:misses')
             ->expectsOutputToContain('沒有下關鍵字')
+            ->assertSuccessful();
+    }
+
+    /**
+     * B4 量體評估：哪個篩選鍵最常跟零結果一起出現，是決定 B3 常駐 quick
+     * filter 該是哪三個的依據——這條守的是排行榜數字算得對。
+     */
+    public function test_filter_breakdown_ranks_by_how_often_each_key_appears(): void
+    {
+        $this->miss('拉麵', hadFilters: true, activeFilters: ['open_now']);
+        $this->miss('滷味', hadFilters: true, activeFilters: ['open_now', 'confidence_min']);
+        $this->miss('火鍋', hadFilters: true, activeFilters: ['diet']);
+
+        $this->artisan('search:misses')
+            ->expectsOutputToContain('篩選分佈')
+            ->expectsOutputToContain('open_now')
+            ->expectsOutputToContain('confidence_min')
+            ->expectsOutputToContain('diet')
+            ->assertSuccessful();
+    }
+
+    public function test_filter_breakdown_says_no_data_yet_when_nothing_had_filters(): void
+    {
+        $this->miss('拉麵');
+
+        $this->artisan('search:misses')
+            ->expectsOutputToContain('還沒有資料可以回答哪三個該常駐')
+            ->assertSuccessful();
+    }
+
+    /** 反向驗證用的判準：跳出保留期限的資料不該混進排行榜。 */
+    public function test_filter_breakdown_only_looks_back_the_requested_window(): void
+    {
+        // 太久以前的那筆帶了 open_now，如果視窗判斷失效，它會混進排行榜；
+        // 另外放一筆在視窗內、沒有篩選的 miss，讓指令走到列印排行榜那一段
+        // （不然全部 miss 都太舊，指令會在更前面的「沒有任何零結果查詢」
+        // 分支就先結束，根本測不到這裡要測的東西）。
+        $this->miss('太久以前', hadFilters: true, activeFilters: ['open_now'], createdAt: now()->subDays(30));
+        $this->miss('最近', createdAt: now()->subHours(1));
+
+        $this->artisan('search:misses', ['--since' => '7d'])
+            ->expectsOutputToContain('還沒有資料可以回答哪三個該常駐')
+            ->doesntExpectOutputToContain('open_now')
             ->assertSuccessful();
     }
 }

@@ -4654,3 +4654,48 @@ null/undefined，`facets` 存在但 `open_now` 缺欄位（測試的 catch-all m
 
 **做到這裡，plan-2026-09-search-ux.md 這一批加上過程中發現的所有缺口
 （單字剝離擴散、首頁排序控制項）都已經處理完畢。**
+
+## 2026-09-06 — B4 剩下的量體評估：查證結果是「還做不了」
+
+**做的事**：使用者要我把 B3/B4 留著的「哪三個該常駐 quick filter，等 A8
+資料再定」這件事做掉。查證後發現兩個問題疊在一起：
+
+1. **量體不夠**：`search_misses` 資料庫裡只有 1 筆，是我自己測 A4 時
+   （`?keyword=素時`）留下的，不是真實使用者行為——A8 才剛在這個 session
+   上線，這是本機開發環境，本來就不會有真實流量。
+2. **就算量體夠也答不出來**：A8 原本的 `had_filters` 只是一個布林值，
+   記的是「有沒有開任何篩選」，不記「是哪一個」。就算累積一千筆真實 miss，
+   也沒辦法回答「venue_scope／open_now／confidence_min 哪個最常跟零結果
+   一起出現」——這個問題從 schema 設計那天起就答不出來，不是資料不夠的問題。
+
+**做了什麼（經使用者同意才 migrate）**：
+
+- `search_misses` 加 `active_filters`（JSON，nullable）欄位，只記開了哪些
+  篩選**鍵名**（例如 `["open_now","confidence_min"]`），不記值——跟這張表
+  一貫的隱私原則一樣，這是產品訊號不是使用者追蹤。
+- `RestaurantRepository::hasNonKeywordFilters()`（布林）重構成
+  `activeFilterKeys()`（回傳鍵名列表），`had_filters` 從這個列表推導
+  （`!== []`），不是另外維護兩套邏輯。
+- `php artisan search:misses` 新增「篩選分佈」排行榜區塊：拉出這段期間
+  `had_filters=true` 的 `active_filters`，在 PHP 端統計每個鍵出現幾次
+  （JSON 陣列聚合在 PHP 算，不用 MySQL 8 的 JSON_TABLE，miss 本來就是
+  少數事件，量體用不到 SQL 端聚合）。
+
+**結論（誠實回報，不是硬做出一個答案）**：**B3 現在的三個常駐 quick filter
+（店家類型／營業中／高度可信）維持不變**——沒有真實資料可以支持換掉它們，
+換了才是憑猜，跟這一輪要拿掉的「憑猜」是同一件事。schema 補上之後，下次
+接手只要跑 `php artisan search:misses --since=30d`（或更久），看「篩選分佈」
+排行榜哪個鍵最常出現，那才是有數據支持的調整依據。
+
+**驗證**
+
+- 後端新增 8 條測試：`SearchMissTest` 4 條（`active_filters` 記錄哪些鍵、
+  沒開篩選時是 null、venue_scope 預設值不算、只記鍵名不記值）、
+  `SearchMissesCommandTest` 3 條（排行榜算得對、沒資料時明說「還沒有資料」、
+  只看視窗內的資料）。後端全套 717 條全綠，Pint／PHPStan 乾淨。
+- 反向驗證：拿掉「篩選分佈」的 `where('had_filters', true)` 過濾條件 →
+  2 條紅（沒開篩選的 miss 混進排行榜、視窗外的舊資料混進來）。
+- 真環境：`php artisan tinker` 清空 `search_misses` → 打兩個會零結果的
+  查詢（一個帶 `open_now`+`confidence_min`、一個純打錯字）→
+  `php artisan search:misses --since=1d` 正確印出「篩選分佈」表格
+  （`confidence_min: 1`、`open_now: 1`），驗完清空測試資料，不留在資料庫裡。
