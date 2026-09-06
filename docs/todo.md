@@ -41,7 +41,10 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
       但要先量會不會傷到現有的複合詞搜尋（麵店→麵、早餐店→早餐 都是兩字以上，
       初步看不受影響）。**先量再改**。
 - [ ] A5 搜尋範圍變成明確的控制項（`?scope=map|city|all`，API 不用改）
-- [ ] A6 建議清單的鍵盤操作與 combobox a11y（保留既有的 `@mousedown.prevent`）
+- [x] A6 建議清單的鍵盤操作與 combobox a11y（保留既有的 `@mousedown.prevent`）✅ 2026-09-06
+      候選攤平成單一 `options` 陣列（不然 ↑↓ 要在四個 v-for 之間自己算位移）；
+      **真瀏覽器實測抓到 jsdom 看不到的事**：Chrome 對 `<input type="search">`
+      的原生 Esc 就是清空輸入框，清單開著時要 `preventDefault`
 - [ ] A7 最近搜尋（localStorage，不做熱門搜尋）
 - [ ] A8 零結果查詢紀錄 ＋ `search:misses` 指令（不記 IP／user）
 - [ ] A9 搜尋效能 benchmark 測試（不上 FULLTEXT，先立量測線）

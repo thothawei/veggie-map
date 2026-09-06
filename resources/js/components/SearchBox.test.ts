@@ -248,3 +248,197 @@ describe('SearchBox 「找不到地點」的時機', () => {
         expect(wrapper.text()).not.toContain('找不到符合的地點');
     });
 });
+
+describe('SearchBox 鍵盤操作與 a11y（A6）', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        get.mockReset();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    function suggestPayload(data: Partial<{
+        restaurants: unknown[];
+        cuisines: unknown[];
+        districts: unknown[];
+    }>) {
+        return {
+            data: {
+                data: { restaurants: [], cuisines: [], districts: [], ...data },
+            },
+        };
+    }
+
+    /** 三個候選：搜尋餐廳（永遠第一）／店名／料理種類。 */
+    function mountWithSuggestions() {
+        get.mockResolvedValue(suggestPayload({
+            restaurants: [{ id: 7, name: '十方齋', slug: 'a', address: '公益路 1 號', city: '台中市', district: '西區' }],
+            cuisines: [{ code: 'japanese', label: '日式料理' }],
+        }));
+
+        return mount(SearchBox);
+    }
+
+    async function typeAndSettle(wrapper: ReturnType<typeof mount>, value: string) {
+        await wrapper.find('input').setValue(value);
+        await vi.advanceTimersByTimeAsync(300);
+        await flushPromises();
+    }
+
+    it('輸入框有 combobox 語意，清單有 listbox 語意', async () => {
+        const wrapper = mountWithSuggestions();
+        const input = wrapper.find('input');
+
+        expect(input.attributes('role')).toBe('combobox');
+        expect(input.attributes('aria-expanded')).toBe('false');
+
+        await typeAndSettle(wrapper, '十方');
+
+        const list = wrapper.find('[role="listbox"]');
+        expect(wrapper.find('input').attributes('aria-expanded')).toBe('true');
+        expect(wrapper.find('input').attributes('aria-controls')).toBe(list.attributes('id'));
+        expect(wrapper.findAll('[role="option"]').length).toBe(3);
+    });
+
+    it('只用鍵盤能走到第三個建議並選取', async () => {
+        const wrapper = mountWithSuggestions();
+        await typeAndSettle(wrapper, '十方');
+
+        const input = wrapper.find('input');
+        await input.trigger('keydown', { key: 'ArrowDown' });
+        await input.trigger('keydown', { key: 'ArrowDown' });
+        await input.trigger('keydown', { key: 'ArrowDown' });
+
+        // 第三項是料理種類「日式料理」。
+        expect(wrapper.findAll('[role="option"]')[2].attributes('aria-selected')).toBe('true');
+
+        await input.trigger('keydown', { key: 'Enter' });
+
+        expect(wrapper.emitted('keyword-search')?.[0]).toEqual(['日式料理']);
+        expect(wrapper.find('[role="listbox"]').exists()).toBe(false);
+    });
+
+    /**
+     * 反向驗證用的那條：把 aria-activedescendant 的更新拿掉，讀螢幕使用者
+     * 完全不知道游標移到哪一項，這條會紅。
+     */
+    it('aria-activedescendant 指向目前那一項，關掉清單就不再指', async () => {
+        const wrapper = mountWithSuggestions();
+        await typeAndSettle(wrapper, '十方');
+
+        const input = wrapper.find('input');
+        expect(input.attributes('aria-activedescendant')).toBeUndefined();
+
+        await input.trigger('keydown', { key: 'ArrowDown' });
+
+        const active = wrapper.findAll('[role="option"]')[0];
+        expect(wrapper.find('input').attributes('aria-activedescendant')).toBe(active.attributes('id'));
+
+        await input.trigger('keydown', { key: 'Escape' });
+
+        expect(wrapper.find('input').attributes('aria-activedescendant')).toBeUndefined();
+    });
+
+    it('↑ 從最後一項開始，↓ 到底會繞回第一項', async () => {
+        const wrapper = mountWithSuggestions();
+        await typeAndSettle(wrapper, '十方');
+
+        const input = wrapper.find('input');
+        await input.trigger('keydown', { key: 'ArrowUp' });
+        expect(wrapper.findAll('[role="option"]')[2].attributes('aria-selected')).toBe('true');
+
+        await input.trigger('keydown', { key: 'ArrowDown' });
+        expect(wrapper.findAll('[role="option"]')[0].attributes('aria-selected')).toBe('true');
+    });
+
+    it('Esc 關掉清單但留著使用者打的字', async () => {
+        const wrapper = mountWithSuggestions();
+        await typeAndSettle(wrapper, '十方');
+
+        await wrapper.find('input').trigger('keydown', { key: 'Escape' });
+
+        expect(wrapper.find('[role="listbox"]').exists()).toBe(false);
+        expect((wrapper.find('input').element as HTMLInputElement).value).toBe('十方');
+    });
+
+    /**
+     * 2026-09-06 真瀏覽器實測：Chrome 對 `<input type="search">` 的原生 Esc 行為是
+     * **清空輸入框**。jsdom 沒有這個行為，所以上面那條「留著使用者打的字」在沒有
+     * preventDefault 的版本照樣是綠的——這條直接測 defaultPrevented 才守得住。
+     */
+    it('清單開著時 Esc 要擋掉瀏覽器原生的「清空搜尋框」', async () => {
+        const wrapper = mountWithSuggestions();
+        await typeAndSettle(wrapper, '十方');
+
+        const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+        wrapper.find('input').element.dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('清單已經關著時 Esc 不攔截，使用者仍然清得掉輸入框', async () => {
+        const wrapper = mountWithSuggestions();
+        await typeAndSettle(wrapper, '十方');
+        await wrapper.find('input').trigger('keydown', { key: 'Escape' });
+
+        const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+        wrapper.find('input').element.dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('Tab 關掉清單、不幫使用者選任何一項', async () => {
+        const wrapper = mountWithSuggestions();
+        await typeAndSettle(wrapper, '十方');
+
+        const input = wrapper.find('input');
+        await input.trigger('keydown', { key: 'ArrowDown' });
+        await input.trigger('keydown', { key: 'Tab' });
+
+        expect(wrapper.find('[role="listbox"]').exists()).toBe(false);
+        expect(wrapper.emitted('keyword-search')).toBeFalsy();
+        expect(wrapper.emitted('restaurant-selected')).toBeFalsy();
+    });
+
+    it('沒有停在任何候選上時，Enter 維持送出地點查詢', async () => {
+        get.mockImplementation((url: string) => {
+            if (url === '/geocode') return Promise.resolve({ data: { data: [] } });
+
+            return Promise.resolve({ data: { data: { restaurants: [], cuisines: [], districts: [] } } });
+        });
+
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '台中一中街');
+        await wrapper.find('input').trigger('keydown', { key: 'Enter' });
+        await flushPromises();
+
+        expect(get).toHaveBeenCalledWith('/geocode', { params: { q: '台中一中街' } });
+    });
+
+    it('候選內容換了就把游標收回去，Enter 不會選到使用者沒看過的那一項', async () => {
+        const wrapper = mountWithSuggestions();
+        await typeAndSettle(wrapper, '十方');
+        await wrapper.find('input').trigger('keydown', { key: 'ArrowDown' });
+        await wrapper.find('input').trigger('keydown', { key: 'ArrowDown' });
+
+        get.mockResolvedValue(suggestPayload({
+            restaurants: [{ id: 99, name: '十方齋二店', slug: 'b', address: null, city: null, district: null }],
+        }));
+        await typeAndSettle(wrapper, '十方齋');
+
+        expect(wrapper.find('input').attributes('aria-activedescendant')).toBeUndefined();
+        expect(wrapper.findAll('[aria-selected="true"]')).toHaveLength(0);
+    });
+
+    it('滑鼠點候選仍然是 mousedown.prevent，不然 blur 會先把清單關掉', async () => {
+        const wrapper = mountWithSuggestions();
+        await typeAndSettle(wrapper, '十方');
+
+        const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+        wrapper.findAll('[role="option"]')[1].element.dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(true);
+    });
+});

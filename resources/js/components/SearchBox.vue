@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import client from '@/api/client';
 import { extractApiErrorMessage } from '@/lib/apiError';
 import type { ApiSuccess, GeocodedPlace, RestaurantSuggestions, SuggestedRestaurant } from '@/types';
@@ -180,6 +180,168 @@ function select(place: GeocodedPlace) {
     showResults.value = false;
     emit('place-selected', place);
 }
+
+/* ---------- 鍵盤操作與 combobox 語意（A6） ---------- */
+
+/**
+ * 下拉裡的可選項攤平成一個陣列。清單本身是異質的（搜尋餐廳／店名／料理種類／
+ * 行政區／地點），但鍵盤只認得「第幾個」——不攤平的話 ↑↓ 要在四個 v-for 之間
+ * 自己算位移，多一種候選就會錯一次。`empty-item` 不進來：它是說明不是選項。
+ */
+type Option =
+    | { kind: 'keyword'; key: string }
+    | { kind: 'restaurant'; key: string; restaurant: SuggestedRestaurant }
+    | { kind: 'cuisine'; key: string; label: string }
+    | { kind: 'district'; key: string; city: string; district: string }
+    | { kind: 'place'; key: string; place: GeocodedPlace };
+
+const options = computed<Option[]>(() => {
+    const list: Option[] = [{ kind: 'keyword', key: 'keyword' }];
+
+    for (const restaurant of suggestions.value.restaurants) {
+        list.push({ kind: 'restaurant', key: `r-${restaurant.id}`, restaurant });
+    }
+
+    for (const cuisine of suggestions.value.cuisines) {
+        list.push({ kind: 'cuisine', key: `c-${cuisine.code}`, label: cuisine.label });
+    }
+
+    for (const district of suggestions.value.districts) {
+        list.push({
+            kind: 'district',
+            key: `d-${district.city}-${district.district}`,
+            city: district.city,
+            district: district.district,
+        });
+    }
+
+    for (const place of results.value) {
+        list.push({ kind: 'place', key: `p-${place.display_name}`, place });
+    }
+
+    return list;
+});
+
+/** 同一頁可能有兩個搜尋框（首頁浮動列／列表頁），id 必須每個實例不同。 */
+const uid = useId();
+const listboxId = `${uid}-listbox`;
+const activeIndex = ref(-1);
+const listEl = ref<HTMLElement | null>(null);
+
+function optionId(index: number): string {
+    return `${uid}-option-${index}`;
+}
+
+const activeDescendant = computed(() =>
+    showResults.value && activeIndex.value >= 0 ? optionId(activeIndex.value) : undefined,
+);
+
+/**
+ * 候選內容一變（打字、建議回來、地點回來）就把游標收回去。留在原位的話，
+ * 第 3 項本來是「日式料理」，重查之後同一個位置變成別家店，Enter 會選到
+ * 使用者沒看過的東西。
+ */
+watch(options, () => {
+    activeIndex.value = -1;
+});
+
+watch(showResults, (open) => {
+    if (!open) activeIndex.value = -1;
+});
+
+function move(delta: number) {
+    const count = options.value.length;
+
+    if (count === 0) return;
+
+    // 還沒選任何一項時，↑ 從最後一項開始，↓ 從第一項開始。
+    const next = activeIndex.value < 0
+        ? (delta > 0 ? 0 : count - 1)
+        : (activeIndex.value + delta + count) % count;
+
+    activeIndex.value = next;
+    void scrollActiveIntoView();
+}
+
+/**
+ * 清單有 max-height，游標移出可視範圍時鍵盤使用者會以為沒反應。
+ * 用 children[index] 而不是 querySelector：可選項一律排在最前面，
+ * 而 useId() 產生的 id（`v-0-option-1`）當 CSS 選擇器要跳脫，多一層踩坑點。
+ * `scrollIntoView` 用可選呼叫——jsdom 沒有這個方法，測試環境會直接爆。
+ */
+async function scrollActiveIntoView() {
+    await nextTick();
+
+    const el = listEl.value?.children[activeIndex.value] as HTMLElement | undefined;
+
+    el?.scrollIntoView?.({ block: 'nearest' });
+}
+
+function activate(option: Option) {
+    switch (option.kind) {
+        case 'keyword':
+            searchByKeyword();
+            break;
+        case 'restaurant':
+            selectRestaurant(option.restaurant);
+            break;
+        case 'cuisine':
+            selectTerm(option.label);
+            break;
+        case 'district':
+            selectTerm(option.district);
+            break;
+        case 'place':
+            select(option.place);
+            break;
+    }
+}
+
+function onArrow(event: KeyboardEvent, delta: number) {
+    // 下拉關著時 ↓ 先把它打開（輸入框有字才有東西可開）。
+    if (!showResults.value) {
+        if (query.value.trim() === '') return;
+
+        showResults.value = true;
+        activeIndex.value = -1;
+    }
+
+    event.preventDefault();
+    move(delta);
+}
+
+/**
+ * Enter 有兩種意思：游標停在某個候選上＝選它；沒停在任何候選上＝維持舊行為，
+ * 送出地點查詢。舊的 @keyup.enter 換成 keydown 才擋得住表單預設行為。
+ */
+function onEnter(event: KeyboardEvent) {
+    if (showResults.value && activeIndex.value >= 0) {
+        event.preventDefault();
+        activate(options.value[activeIndex.value]);
+
+        return;
+    }
+
+    void search();
+}
+
+/**
+ * Esc 關掉清單，但**不能**讓輸入框被清空：Chrome 對 `<input type="search">` 的
+ * 原生行為就是按 Esc 清字，2026-09-06 在真瀏覽器實測到（jsdom 沒有這個行為，
+ * 單元測試看不出來）。清單開著時擋掉預設行為，等於「第一次 Esc 收清單、
+ * 第二次 Esc 才清字」——跟一般 combobox 的習慣一致。
+ */
+function onEscape(event: KeyboardEvent) {
+    if (!showResults.value) return;
+
+    event.preventDefault();
+    showResults.value = false;
+}
+
+/** Tab 離開＝關掉清單但保留使用者打的字，不要幫他選。 */
+function onTab() {
+    showResults.value = false;
+}
 </script>
 
 <template>
@@ -187,9 +349,19 @@ function select(place: GeocodedPlace) {
         <input
             v-model="query"
             type="search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            :aria-expanded="showResults"
+            :aria-controls="listboxId"
+            :aria-activedescendant="activeDescendant"
             placeholder="搜尋地點或餐廳，例如「台中一中街」「拉麵」"
             @input="onInput"
-            @keyup.enter="search"
+            @keydown.down="onArrow($event, 1)"
+            @keydown.up="onArrow($event, -1)"
+            @keydown.enter="onEnter"
+            @keydown.esc="onEscape"
+            @keydown.tab="onTab"
             @focus="showResults = query.trim().length > 0"
             @blur="handleBlur"
         />
@@ -203,44 +375,44 @@ function select(place: GeocodedPlace) {
             {{ loading ? '搜尋中…' : '搜尋' }}
         </button>
 
-        <ul v-if="showResults" class="results">
-            <li class="keyword-option" @mousedown.prevent="searchByKeyword">
-                搜尋餐廳「{{ query.trim() }}」（店名、菜色、料理種類）
-            </li>
+        <ul v-if="showResults" :id="listboxId" ref="listEl" class="results" role="listbox" aria-label="搜尋建議">
             <li
-                v-for="restaurant in suggestions.restaurants"
-                :key="`r-${restaurant.id}`"
-                class="suggestion"
-                @mousedown.prevent="selectRestaurant(restaurant)"
+                v-for="(option, index) in options"
+                :id="optionId(index)"
+                :key="option.key"
+                role="option"
+                :aria-selected="index === activeIndex"
+                :class="[
+                    option.kind === 'keyword' ? 'keyword-option' : '',
+                    option.kind === 'restaurant' || option.kind === 'cuisine' || option.kind === 'district'
+                        ? 'suggestion'
+                        : '',
+                    { active: index === activeIndex },
+                ]"
+                @mousedown.prevent="activate(option)"
+                @mousemove="activeIndex = index"
             >
-                {{ restaurant.name }}
-                <span class="hint">{{ suggestionHint(restaurant) }}</span>
-            </li>
-
-            <li
-                v-for="cuisine in suggestions.cuisines"
-                :key="`c-${cuisine.code}`"
-                class="suggestion"
-                @mousedown.prevent="selectTerm(cuisine.label)"
-            >
-                {{ cuisine.label }}<span class="hint">料理種類</span>
-            </li>
-
-            <li
-                v-for="district in suggestions.districts"
-                :key="`d-${district.city}-${district.district}`"
-                class="suggestion"
-                @mousedown.prevent="selectTerm(district.district)"
-            >
-                {{ district.city }} {{ district.district }}<span class="hint">地區</span>
-            </li>
-
-            <li v-for="place in results" :key="place.display_name" @mousedown.prevent="select(place)">
-                {{ place.display_name }}
+                <template v-if="option.kind === 'keyword'">
+                    搜尋餐廳「{{ query.trim() }}」（店名、菜色、料理種類）
+                </template>
+                <template v-else-if="option.kind === 'restaurant'">
+                    {{ option.restaurant.name }}
+                    <span class="hint">{{ suggestionHint(option.restaurant) }}</span>
+                </template>
+                <template v-else-if="option.kind === 'cuisine'">
+                    {{ option.label }}<span class="hint">料理種類</span>
+                </template>
+                <template v-else-if="option.kind === 'district'">
+                    {{ option.city }} {{ option.district }}<span class="hint">地區</span>
+                </template>
+                <template v-else>
+                    {{ option.place.display_name }}
+                </template>
             </li>
             <!--
               只有真的查過地點才說「找不到」。打字時下拉就開了，但地點查詢要按下
               搜尋才會發生——沒有這個條件的話，那段空窗期會顯示一個還沒發生的結論。
+              這一項不是選項（不進 options、沒有 role="option"），鍵盤游標不會停在它上面。
             -->
             <li
                 v-if="!loading && searchedQuery === query.trim() && results.length === 0 && !hasSuggestions"
@@ -304,7 +476,8 @@ button:disabled {
     cursor: pointer;
 }
 
-.results li:hover {
+.results li:hover,
+.results li.active {
     background: #f0fff4;
 }
 

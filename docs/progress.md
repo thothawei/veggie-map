@@ -4147,3 +4147,41 @@ Jaccard 相似度」，理由（`levenshtein()` 是 byte-based，對 UTF-8 中�
 
 **下一步**：第 2 批（A3／B6／A4）完成。剩下 A5／A6／A7／A8／A9 與 B0–B5。
 另外新發現一項待辦（單字剝離擴散），見 todo.md。
+
+
+## 2026-09-06 — A6：建議清單的鍵盤操作與 combobox a11y
+
+**問題**：`SearchBox` 的候選只掛 `@mousedown.prevent`，鍵盤與讀螢幕使用者走不到——
+沒有 ↑↓／Enter／Esc，也沒有 `role="combobox"`／`aria-activedescendant`。
+
+**做法**
+
+- 候選攤平成單一 `options` computed（keyword／restaurant／cuisine／district／place）。
+  清單本身是異質的四個 `v-for`，不攤平的話「第幾項」要在四段之間自己算位移，
+  多一種候選就會錯一次。`empty-item`（找不到符合的地點）**不進** options：
+  它是說明不是選項，鍵盤游標不會停在它上面。
+- 輸入框 `role="combobox"` ＋ `aria-expanded`／`aria-controls`／`aria-activedescendant`
+  ＋ `aria-autocomplete="list"`；清單 `role="listbox"`，每項 `role="option"` ＋
+  `aria-selected`。id 用 Vue 3.5 的 `useId()`——同一頁可能有兩個搜尋框。
+- ↑↓ 循環移動（沒選任何一項時 ↑ 從最後一項開始）、Enter 選取（沒停在候選上時
+  維持舊行為送出地點查詢）、Esc 關閉、Tab 關閉並保留輸入。滑鼠移過去也會移動游標。
+- **`@mousedown.prevent` 全部留著**（2026-08-26 那個 blur 競態），鍵盤路徑是加上去的。
+- 候選內容一變就把游標收回 -1：第 3 項本來是「日式料理」，重查之後同一個位置
+  變成別家店，Enter 會選到使用者沒看過的東西。
+
+**真瀏覽器才看得到的一件事**：Chrome 對 `<input type="search">` 的原生 Esc 行為是
+**清空輸入框**。第一版按 Esc 清單關了、字也沒了；jsdom 沒有這個行為，所以那條
+「Esc 保留輸入」的單元測試在有 bug 的版本照樣是綠的。修法是清單開著時
+`event.preventDefault()`——變成「第一次 Esc 收清單、第二次 Esc 才清字」，
+跟一般 combobox 的習慣一致，並補一條直接斷言 `defaultPrevented` 的測試。
+
+**驗證**
+
+- 前端 SearchBox 25 條測試（新增 11 條）全綠，全套 351 條全綠；eslint／vue-tsc 乾淨。
+- 反向驗證：拿掉 `:aria-activedescendant` 綁定 → 1 條紅；拿掉 Esc 的 `preventDefault`
+  → 1 條紅。
+- 真瀏覽器（localhost:8080）：打「素食」→ ↓↓↓ 走到第三個建議（`aria-activedescendant`
+  = `v-0-option-2`、`aria-selected="true"`）→ Enter → 進到 `/restaurants/su-shi-6`；
+  打「日式」→ ↓ → Esc → 清單關閉、`aria-expanded=false`、輸入框仍是「日式」。
+
+**下一步**：A5（搜尋範圍 `?scope=map|city|all`）。
