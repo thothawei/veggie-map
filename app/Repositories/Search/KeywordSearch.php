@@ -222,10 +222,8 @@ final class KeywordSearch
 
         // 詞表裡本來就有的詞不剝：「素食」剝掉「素」會剩一個「食」，那會對到所有
         // 名字裡有「食」的店；「拉麵」剝成「麵」則會把一家拉麵店的搜尋擴散成所有麵店。
-        foreach (self::synonymGroups() as $group) {
-            if (in_array($term, array_map(mb_strtolower(...), $group), true)) {
-                return $forms;
-            }
+        if (self::isKnownWord($term)) {
+            return $forms;
         }
 
         /** @var array{prefixes?: list<string>, suffixes?: list<string>} $affixes */
@@ -244,11 +242,24 @@ final class KeywordSearch
                         : (str_ends_with($candidate, $affix) ? mb_substr($candidate, 0, -mb_strlen($affix)) : null);
 
                     // 剝到只剩空字串就不是一個查詢詞了（「素食」剝掉「素食」）。
-                    if ($trimmed !== null && $trimmed !== '') {
-                        $next[] = $trimmed;
-
-                        break;
+                    if ($trimmed === null || $trimmed === '') {
+                        continue;
                     }
+
+                    // 剝完只剩「單一 CJK 字元」時，那個字必須本身就是詞表收錄的詞
+                    // （例如「麵」，見同義詞群組 ['麵','noodle',…]）才留著——不然
+                    // 「素時」（打錯的「素食」）剝掉前綴「素」會剩一個「時」，把搜尋
+                    // 擴散成「店名有『時』的店都算」，回傳一堆不相干的店。
+                    // **這比 0 筆更糟**：0 筆使用者知道要換詞，這種情況他以為找到了。
+                    // 只針對「剩一個字」設限——「滷味」「早餐」這種兩字以上的剝法
+                    // 不受影響，繼續維持原本「不在詞表也留著」的行為（下面有測試釘住）。
+                    if (mb_strlen($trimmed) === 1 && ! self::isKnownWord($trimmed)) {
+                        continue;
+                    }
+
+                    $next[] = $trimmed;
+
+                    break;
                 }
             }
 
@@ -273,6 +284,18 @@ final class KeywordSearch
         $groups = config('veggiemap.search.synonyms', []);
 
         return $groups;
+    }
+
+    /** 這個詞（已經 `mb_strtolower`）是不是同義詞表本來就收錄的詞——「麵」是，「時」不是。 */
+    private static function isKnownWord(string $lowered): bool
+    {
+        foreach (self::synonymGroups() as $group) {
+            if (in_array($lowered, array_map(mb_strtolower(...), $group), true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

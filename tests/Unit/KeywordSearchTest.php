@@ -80,6 +80,37 @@ class KeywordSearchTest extends TestCase
         $this->assertNotContains('麵', KeywordSearch::expand(['拉麵'])[0]);
     }
 
+    /**
+     * 單字剝離擴散（2026-09-06 做 A4 時發現，比 0 筆更糟）：「素時」（打錯的
+     * 「素食」）不在詞表裡，會被剝掉前綴「素」剩下「時」——那不是任何食物詞，
+     * 純粹是巧合的單一字元，卻會讓查詢擴散成「店名有『時』的店都算」，回傳
+     * 一堆不相干的店（六扇門時尚湯鍋、IAM 澳洲小時光…）。使用者以為找到了，
+     * 全部都不是他要的，比誠實的 0 筆更誤導人。
+     */
+    public function test_stripping_to_a_single_meaningless_character_is_rejected(): void
+    {
+        $groups = KeywordSearch::expand(['素時']);
+
+        $this->assertSame([['素時']], $groups, '「時」不是詞表收錄的詞，不該變成變體');
+    }
+
+    /**
+     * 反向驗證這條限制沒有傷到既有的複合詞展開：「麵」雖然剝完只剩一個字，
+     * 但它本身就是同義詞表收錄的詞（['麵','noodle','麵食','麺']），要留著——
+     * 這正是 test_compound_taiwanese_terms_reach_the_base_word() 已經釘住的
+     * 行為，這裡只是講清楚「為什麼『麵』留著但『時』不留」的判準是同一條規則。
+     */
+    public function test_single_character_strip_is_kept_when_the_character_is_a_known_word(): void
+    {
+        $this->assertContains('麵', KeywordSearch::expand(['麵店'])[0]);
+    }
+
+    /** 兩字以上的剝離不受這條限制影響——「滷味」不在任何詞表也照樣留著。 */
+    public function test_multi_character_strip_is_not_affected_by_the_single_character_rule(): void
+    {
+        $this->assertContains('滷味', KeywordSearch::expand(['素食滷味'])[0]);
+    }
+
     public function test_stripping_does_not_bleed_between_unrelated_groups(): void
     {
         // 「麵包」不是「麵」＋詞綴，不能被展開成麵店那一組——麵包店的搜尋結果
