@@ -6,9 +6,11 @@ import client from '@/api/client';
 import RestaurantMap from '@/components/RestaurantMap.vue';
 import SearchBox from '@/components/SearchBox.vue';
 import FilterDrawer from '@/components/FilterDrawer.vue';
+import ScopeSelect from '@/components/ScopeSelect.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { rememberCity, useCities } from '@/composables/useCities';
 import { apiFilterParams, useFilterQuery } from '@/composables/useFilterQuery';
+import { SEARCH_SCOPES, useSearchScope, type SearchScope } from '@/composables/useSearchScope';
 import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
 import { formatBbox } from '@/lib/geo';
 import type { ApiSuccess, GeocodedPlace, Restaurant, SuggestedRestaurant } from '@/types';
@@ -58,6 +60,44 @@ let requestSeq = 0;
  */
 let lastFittedKeyword: string | null = null;
 
+/**
+ * 搜尋範圍（A5）：`map`（首頁預設，目前地圖視角）／`city`（目前選的城市）／
+ * `all`（不限城市）。網址是真相來源，見 useSearchScope 的說明。
+ *
+ * **這裡不再有「打了關鍵字就自動不限範圍」的特例**——那是這一批要拿掉的東西：
+ * 範圍原本首頁「不限目前範圍」、列表頁「跨全部城市」兩頁不一樣、使用者改不了，
+ * 現在兩頁共用同一顆看得到、按得到的控制項，由使用者自己決定。
+ */
+const scope = useSearchScope('map');
+
+/**
+ * `scope=all` 完全不能送座標：後端在沒有 bbox 時，lat/lng 會套上預設 5km 半徑
+ * （`RestaurantRepository::search()`），把「不限城市」悄悄變回「原地」。
+ * 有 bbox（`city`／`map`）時座標不受這個限制——矩形本身就是邊界，一起送
+ * 只是多算一個 distance 欄位——可以放心用來排序、也讓卡片顯示距離。
+ */
+function scopeBbox(): string | undefined {
+    if (scope.value === 'all') return undefined;
+    if (scope.value === 'city') return activeCity.value?.bbox;
+
+    return currentBounds ? formatBbox(currentBounds) : undefined;
+}
+
+function scopeCenter(bboxValue: string | undefined): { lat: number; lng: number } | null {
+    if (!bboxValue) return null;
+
+    if (scope.value === 'city' && activeCity.value) {
+        return { lat: activeCity.value.center[0], lng: activeCity.value.center[1] };
+    }
+
+    if (!currentBounds) return null;
+
+    return {
+        lat: (currentBounds.minLat + currentBounds.maxLat) / 2,
+        lng: (currentBounds.minLng + currentBounds.maxLng) / 2,
+    };
+}
+
 async function loadByBounds() {
     if (!currentBounds) return;
 
@@ -67,32 +107,35 @@ async function loadByBounds() {
     invalidFilters.value = false;
 
     try {
+        // 「推薦餐廳」是附近推薦，故意跟搜尋範圍脫鉤，一律看目前地圖視角——
+        // 選了「全部城市」不代表使用者想看東京的推薦。
         const midLat = (currentBounds.minLat + currentBounds.maxLat) / 2;
         const midLng = (currentBounds.minLng + currentBounds.maxLng) / 2;
-        // 用地圖目前看到的矩形，不是中心點＋半徑。radius 上限 50km，台中市區半對角線
-        // 就超過，一拉遠兩支 API 一起 422，畫面變成「載入失敗」還叫人再拉遠。
-        const bbox = formatBbox(currentBounds);
+        const viewportBbox = formatBbox(currentBounds);
+
+        const bboxValue = scopeBbox();
+        const center = scopeCenter(bboxValue);
         const filterParams = apiFilterParams(filters.value);
 
         const [restaurantsResult, recommendedResult] = await Promise.allSettled([
             client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
                 params: keyword.value
-                    // 打了關鍵字就**不受目前視野限制**，跟列表頁同一個決定：
-                    // 搜「Loving Hut」卻只看到畫面裡那幾家，使用者會以為其他地方
-                    // 沒有。找到之後 fitToKeywordResults() 會把地圖帶過去。
-                    // 也不送座標——帶座標會套上預設 5km 半徑，等於換一種方式把
-                    // 搜尋鎖回原地。
                     ? {
                         keyword: keyword.value,
+                        bbox: bboxValue,
+                        latitude: center?.lat,
+                        longitude: center?.lng,
                         sort: 'relevance',
                         per_page: 100,
                         ...filterParams,
                     }
                     : {
-                        bbox,
-                        latitude: midLat,
-                        longitude: midLng,
-                        sort: 'distance',
+                        bbox: bboxValue,
+                        latitude: center?.lat,
+                        longitude: center?.lng,
+                        // 沒有座標（scope=all）時不送 sort，後端自己退回 newest；
+                        // 硬送 sort=distance 但沒座標會被後端當成請求缺 latitude/longitude，回 422。
+                        sort: center ? 'distance' : undefined,
                         per_page: 100,
                         ...filterParams,
                     },
@@ -102,7 +145,7 @@ async function loadByBounds() {
             // 依評分排序，所以是獨立一支 API，不是從上面那批結果在前端隨便切幾筆。
             client.get<ApiSuccess<Restaurant[]>>('/restaurants/recommended', {
                 params: {
-                    bbox,
+                    bbox: viewportBbox,
                     latitude: midLat,
                     longitude: midLng,
                     limit: 6,
@@ -217,6 +260,8 @@ watch(filters, loadByBounds, { deep: true });
 
 watch(keyword, loadByBounds);
 
+watch(scope, loadByBounds);
+
 watch(activeCity, (city, previous) => {
     if (!city) return;
 
@@ -230,6 +275,20 @@ watch(activeCity, (city, previous) => {
 });
 
 const hasResults = computed(() => restaurants.value.length > 0);
+
+const SCOPE_LABELS: Record<SearchScope, string> = {
+    map: '目前地圖範圍',
+    city: '這座城市',
+    all: '全部城市',
+};
+
+/** 給徽章文字用的、比選單裡再具體一點的講法（city 講出城市名，而不是「這座城市」）。 */
+const scopeResultLabel = computed(() => {
+    if (scope.value === 'city') return activeCity.value?.label ?? SCOPE_LABELS.city;
+    if (scope.value === 'map') return '這個範圍';
+
+    return SCOPE_LABELS.all;
+});
 
 /**
  * 地圖上真的有灰色 marker 嗎？`RestaurantMap` 在 `venue_kind` 缺席時會畫第三種
@@ -263,6 +322,12 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                     @keyword-search="handleKeywordSearch"
                     @restaurant-selected="goToDetail"
                 />
+                <!--
+                  搜尋範圍（A5）：原本「打了關鍵字就不限範圍」是藏在程式邏輯裡的特例，
+                  使用者改不了。現在是這顆看得到的選單，網址是真相來源
+                  （見 useSearchScope），重新整理、分享連結都對得起來。
+                -->
+                <ScopeSelect v-model="scope" :options="SEARCH_SCOPES" />
                 <button type="button" class="locate-button" @click="handleLocate">📍 使用目前位置</button>
             </div>
             <p v-if="locateError" class="locate-error" role="alert">{{ locateError }}</p>
@@ -320,12 +385,8 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                 載入失敗，移動地圖可重新嘗試。
             </p>
             <p v-else-if="hasResults" class="map-badge" role="status">
-                <template v-if="keyword">
-                    符合「{{ keyword }}」的有 {{ restaurants.length }}{{ hasMore ? '+' : '' }} 家（不限目前範圍）
-                </template>
-                <template v-else>
-                    這個範圍有 {{ restaurants.length }}{{ hasMore ? '+' : '' }} 家
-                </template>
+                <template v-if="keyword">符合「{{ keyword }}」的有 </template>
+                {{ restaurants.length }}{{ hasMore ? '+' : '' }} 家（{{ scopeResultLabel }}）
             </p>
         </section>
 
@@ -336,7 +397,9 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
             </p>
             <p class="empty-hint">
                 <template v-if="keyword">
-                    這個關鍵字在所有城市都沒有結果——換個說法，或清掉關鍵字回到地圖瀏覽。
+                    這個關鍵字在{{ scopeResultLabel }}都沒有結果——換個說法，
+                    <template v-if="scope !== 'all'">試試「範圍」改選全部城市，或</template>
+                    清掉關鍵字回到地圖瀏覽。
                 </template>
                 <template v-else>試著把地圖拉遠一點，或切換到其他城市看看。</template>
                 <template v-if="hasActiveFilters"> 也可以先清掉篩選條件。</template>

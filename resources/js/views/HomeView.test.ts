@@ -444,15 +444,56 @@ describe('HomeView 關鍵字搜尋', () => {
         expect(wrapper.text()).not.toContain('把地圖拉遠');
     });
 
-    it('打了關鍵字就不送 bbox 與座標——搜尋不該被目前視野鎖住', async () => {
+    it('預設範圍是目前地圖視角，關鍵字搜尋也不例外（A5）', async () => {
         await mountHome('/?city=taipei&keyword=拉麵');
 
         const call = restaurantCalls[restaurantCalls.length - 1];
         expect(call.keyword).toBe('拉麵');
+        // scope 預設 map：搜尋仍然受目前視野限制，跟沒下關鍵字時同一套規則——
+        // 這是 A5 刻意拿掉的「打關鍵字就自動不限範圍」特例。
+        expect(call.bbox).toBeDefined();
+    });
+
+    it('scope=all 時關鍵字搜尋不送 bbox 與座標——使用者自己選了不限範圍', async () => {
+        await mountHome('/?city=taipei&keyword=拉麵&scope=all');
+
+        const call = restaurantCalls[restaurantCalls.length - 1];
+        expect(call.keyword).toBe('拉麵');
         expect(call.bbox).toBeUndefined();
-        // 帶座標會套上預設 5km 半徑，等於換一種方式把搜尋鎖回原地。
+        // 帶座標會套上預設 5km 半徑，等於換一種方式把「不限範圍」變回原地。
         expect(call.latitude).toBeUndefined();
         expect(call.longitude).toBeUndefined();
+    });
+
+    it('scope=city 時關鍵字搜尋用目前城市的 bbox，不是地圖視角', async () => {
+        await mountHome('/?city=taipei&keyword=拉麵&scope=city');
+
+        const call = restaurantCalls[restaurantCalls.length - 1];
+        expect(call.keyword).toBe('拉麵');
+        expect(call.bbox).toBe('24.9613,121.4570,25.2130,121.6663');
+    });
+
+    /**
+     * 反向驗證：scope 要跟 city／keyword／filters 一樣，網址是真相來源，
+     * 「上一頁」才回得到前一次選的範圍。拿掉 useSearchScope 的網址回填
+     * （例如 get 永遠回預設值，不讀 route.query.scope）這條會紅。
+     */
+    it('選了範圍後重新整理／上一頁都要保留同一個範圍', async () => {
+        const { router } = await mountHome('/?city=taipei&keyword=拉麵&scope=all');
+
+        expect(router.currentRoute.value.query.scope).toBe('all');
+
+        // 模擬「重新整理」：用同一個網址重新掛載一次元件。
+        const { wrapper: reloaded } = await mountHome('/?city=taipei&keyword=拉麵&scope=all');
+        const scopeSelect = reloaded.find('select');
+        expect((scopeSelect.element as HTMLSelectElement).value).toBe('all');
+
+        // 模擬「上一頁」：先換成別的範圍，再退回去。
+        await router.push('/?city=taipei&keyword=拉麵&scope=city');
+        await router.back();
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.scope).toBe('all');
     });
 
     it('沒有關鍵字時仍然只查目前視野', async () => {

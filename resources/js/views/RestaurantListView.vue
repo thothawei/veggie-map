@@ -5,7 +5,9 @@ import { useRoute, useRouter } from 'vue-router';
 import client from '@/api/client';
 import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
+import ScopeSelect from '@/components/ScopeSelect.vue';
 import { ALL_CITIES, useCities } from '@/composables/useCities';
+import { useSearchScope } from '@/composables/useSearchScope';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
 import { formatAddress, formatCuisines, formatMatchReasons, formatOpenStatus } from '@/lib/format';
 import { googleMapsUrl } from '@/lib/geo';
@@ -163,15 +165,24 @@ const invalidFilters = ref(false);
  * 也不能換算成 latitude+radius——台中半對角線 59.6km、高雄 66.4km，都超過 radius
  * 上限 50km（見 tests/Feature/Api/RestaurantBboxSearchTest.php）。
  */
-/**
- * **打了關鍵字就跨全部城市搜尋**（2026-08-25 決定）。原本選了城市就只在那個城市的
- * bbox 內找，使用者搜「Loving Hut」卻只看到台北那幾家，會誤以為其他城市沒有。
- * 城市切換是「瀏覽某個地區」的工具，關鍵字搜尋則是「我知道要找什麼」，不該被地區綁住。
- */
-const bbox = computed(() => (committedKeyword.value ? undefined : activeCity.value?.bbox));
 
-/** 有關鍵字時城市限制會被忽略，畫面要講清楚，不能讓人以為還在該城市內找。 */
-const searchIsGlobal = computed(() => Boolean(committedKeyword.value) && activeCity.value !== null);
+/**
+ * 搜尋範圍（A5）：`city`（列表頁預設，目前選的城市）／`all`（不限城市），跟首頁
+ * 共用同一個 `?scope=`（見 useSearchScope）。這裡沒有 `map` 可選——列表頁沒有
+ * 地圖視角——網址上出現 `scope=map`（多半是從首頁分享連結貼過來）時退回
+ * 跟 `city` 一樣的處理，而不是報錯或忽略整個網址。
+ *
+ * **這裡不再有「打了關鍵字就跨全部城市」的特例**（2026-08-25 的決定，這一批拿掉）：
+ * 原本無論選了哪個城市，一打關鍵字就強制忽略、永遠跨全部城市，使用者改不了
+ * 也不知道發生了什麼。現在由這顆看得到的選單決定，預設維持城市——跟原本
+ * 「沒有關鍵字」時的行為一致，要跨全部城市自己選。
+ */
+const scope = useSearchScope('city');
+
+const bbox = computed(() => (scope.value === 'all' ? undefined : activeCity.value?.bbox));
+
+/** 選了特定城市、但範圍調成「全部城市」時要講清楚，不能讓人以為還在該城市內找。 */
+const searchIsGlobal = computed(() => scope.value === 'all' && activeCity.value !== null);
 
 // 同時有「搜尋」「改篩選」「換城市」三個觸發來源，慢的舊請求可能在新請求之後才回來，
 // 把畫面蓋回舊資料；載入更多還會把舊的一頁重複接上去。用序號讓過期回應直接丟掉。
@@ -301,6 +312,7 @@ const searchScope = computed(() => {
         exactMode.value,
         sort.value,
         filterQueryKey(filters.value),
+        scope.value,
     ]);
 });
 
@@ -328,11 +340,18 @@ watch(committedKeyword, (value) => {
             <input
                 v-model="keywordDraft"
                 type="search"
-                placeholder="搜尋店名、菜色、料理種類（跨全部城市）"
+                placeholder="搜尋店名、菜色、料理種類"
                 @keyup.enter="submitSearch"
             />
             <button type="button" @click="submitSearch">搜尋</button>
             <button v-if="committedKeyword" type="button" class="clear-keyword" @click="clearKeyword">清除</button>
+            <!--
+              搜尋範圍（A5）：原本「打了關鍵字就跨全部城市」是藏在程式邏輯裡的特例，
+              使用者改不了。現在是這顆看得到的選單，網址是真相來源
+              （見 useSearchScope），重新整理、分享連結都對得起來。列表頁沒有地圖，
+              所以沒有 `map` 選項。
+            -->
+            <ScopeSelect v-model="scope" :options="['city', 'all']" />
         </div>
         <FilterDrawer v-model:filters="filters" />
 
@@ -373,7 +392,7 @@ watch(committedKeyword, (value) => {
         </p>
 
         <p v-if="searchIsGlobal" class="global-hint" role="status">
-            搜尋「{{ committedKeyword }}」時會跨全部城市，不受目前選的「{{ activeCity?.label }}」限制。
+            範圍是全部城市，不受目前選的「{{ activeCity?.label }}」限制。
         </p>
 
         <p v-if="!loading && !loadFailed && restaurants.length" class="scope" role="status">
