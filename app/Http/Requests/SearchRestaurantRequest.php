@@ -21,6 +21,10 @@ class SearchRestaurantRequest extends FormRequest
     {
         $rules = [
             'keyword' => ['nullable', 'string', 'max:255'],
+            // 只用原詞查，不展開同義詞。展開幫倒忙時的逃生門——搜「麵包」的人
+            // 不想看到一整頁麵店。只有帶 keyword 才有意義，但不擋：單獨帶
+            // `exact=1` 沒有 keyword 時它就是個沒有作用的參數，不是錯誤。
+            'exact' => ['nullable', 'boolean'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
             'radius' => ['nullable', 'numeric', 'min:0.1', 'max:50'],
@@ -74,12 +78,17 @@ class SearchRestaurantRequest extends FormRequest
         $input = $this->all();
         $normalized = Feature::normalizeBooleanInputs($input);
 
-        // open_now 不是 features.code，但走同一條 querystring 約定，同樣要收 "true"/"false"。
-        if (array_key_exists('open_now', $input)) {
-            if ($input['open_now'] === 'true') {
-                $normalized['open_now'] = '1';
-            } elseif ($input['open_now'] === 'false') {
-                $normalized['open_now'] = '0';
+        // open_now／exact 不是 features.code，但走同一條 querystring 約定，
+        // 同樣要收 "true"/"false"。
+        foreach (['open_now', 'exact'] as $flag) {
+            if (! array_key_exists($flag, $input)) {
+                continue;
+            }
+
+            if ($input[$flag] === 'true') {
+                $normalized[$flag] = '1';
+            } elseif ($input[$flag] === 'false') {
+                $normalized[$flag] = '0';
             }
         }
 

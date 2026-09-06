@@ -203,8 +203,14 @@ class RestaurantRepository
             // 斷詞之後再展開同義詞（「珍珠奶茶」→ 手搖飲／飲料…）。WHERE、相關性
             // 排序與命中原因三處都吃同一份 $groups——只要有一處還在用未展開的
             // $terms，就會出現「搜得到但排在最後」或「命中了卻說不出原因」。
-            $terms = ! empty($filters['keyword']) ? KeywordSearch::terms((string) $filters['keyword']) : [];
-            $groups = KeywordSearch::expand($terms);
+            // exact=1 是展開幫倒忙時的逃生門（搜「麵包」不想看到一堆麵店）。
+            // 展開與否由 KeywordSearch::groupsFor() 一處決定，Controller 產生
+            // meta.expanded_terms 時問的是同一個函式——否則畫面會說「也一併搜尋了 X」
+            // 而查詢其實沒搜 X。
+            $groups = KeywordSearch::groupsFor(
+                isset($filters['keyword']) ? (string) $filters['keyword'] : null,
+                ! empty($filters['exact']),
+            );
             $hasRelevance = $groups !== [];
 
             $lat = (float) ($filters['latitude'] ?? 0);

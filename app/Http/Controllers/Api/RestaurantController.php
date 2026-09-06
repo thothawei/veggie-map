@@ -9,6 +9,7 @@ use App\Http\Requests\SuggestRestaurantRequest;
 use App\Http\Resources\RestaurantResource;
 use App\Repositories\RestaurantRepository;
 use App\Repositories\RestaurantSuggestionRepository;
+use App\Repositories\Search\KeywordSearch;
 use App\Services\Recommendation\RecommendationServiceInterface;
 use Illuminate\Http\JsonResponse;
 
@@ -39,16 +40,34 @@ class RestaurantController extends Controller
 
     public function index(SearchRestaurantRequest $request): JsonResponse
     {
-        $paginator = $this->restaurants->search($request->validated());
+        $validated = $request->validated();
+        $paginator = $this->restaurants->search($validated);
+
+        $meta = [
+            'per_page' => $paginator->perPage(),
+            'next_cursor' => optional($paginator->nextCursor())->encode(),
+            'prev_cursor' => optional($paginator->previousCursor())->encode(),
+        ];
+
+        // 「也一併搜尋了：珍奶、奶茶、手搖飲」。展開是隱形的時候，使用者搜
+        // 「珍珠奶茶」看到一家叫「綠意茶飲」的店排第一只會覺得搜尋不準；說出來，
+        // 它就從「怪怪的」變成「原來它懂」。問的是與 search() 同一個函式，
+        // 所以這裡列出的變體就是查詢真正用到的那些（見 KeywordSearch::groupsFor）。
+        $expandedTerms = KeywordSearch::expandedTerms(KeywordSearch::groupsFor(
+            isset($validated['keyword']) ? (string) $validated['keyword'] : null,
+            ! empty($validated['exact']),
+        ));
+
+        // 沒有展開就整個 key 不出現，而不是回空陣列——空陣列會讓前端得多寫一層
+        // 「有這個 key 但它是空的」判斷，而那跟「沒展開」是同一件事。
+        if ($expandedTerms !== []) {
+            $meta['expanded_terms'] = $expandedTerms;
+        }
 
         return response()->json([
             'success' => true,
             'data' => RestaurantResource::collection($paginator->items())->resolve(),
-            'meta' => [
-                'per_page' => $paginator->perPage(),
-                'next_cursor' => optional($paginator->nextCursor())->encode(),
-                'prev_cursor' => optional($paginator->previousCursor())->encode(),
-            ],
+            'meta' => $meta,
         ]);
     }
 

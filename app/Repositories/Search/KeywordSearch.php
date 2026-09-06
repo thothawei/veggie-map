@@ -86,6 +86,68 @@ final class KeywordSearch
     }
 
     /**
+     * 「這個查詢實際上會用哪些詞去搜」的**單一入口**。
+     *
+     * WHERE、相關性排序、命中原因、以及回應 meta 的 `expanded_terms` 全部從這裡拿，
+     * 因為它們必須是同一份答案：畫面上說「也一併搜尋了：手搖飲」，查詢就真的要有
+     * 搜手搖飲。Controller 與 Repository 各算一次的話，`exact` 這種開關遲早會
+     * 只在其中一邊生效——那時候畫面說的跟查詢做的就對不起來了。
+     *
+     * 這個函式是純函式（只讀 config、不碰 DB），所以重複呼叫的成本可以忽略，
+     * 不需要為了它去改動 search() 已經被 cache 起來的回傳形狀。
+     *
+     * @return list<list<string>> 見 expand()
+     */
+    public static function groupsFor(?string $keyword, bool $exact = false): array
+    {
+        if ($keyword === null || trim($keyword) === '') {
+            return [];
+        }
+
+        $terms = self::terms($keyword);
+
+        // exact＝不展開，但**仍然要斷詞**：「台中 拉麵」在 exact 模式下依然是兩個
+        // AND 條件，只是每個條件不再帶同義變體。整串當一個詞會讓 exact 從
+        // 「不要展開」變成「換一種斷詞方式」，那是兩件不同的事。
+        if ($exact) {
+            return array_map(fn (string $term): array => [$term], $terms);
+        }
+
+        return self::expand($terms);
+    }
+
+    /**
+     * 給回應 meta 用的「展開說明」：每個查詢詞列出**真的被拿去查**的同義變體
+     * （已經套用 max_variants 截斷，不是整組詞表）。
+     *
+     * 原詞不列進 variants——它是 `term` 本身，重複列一次只是雜訊。
+     * 沒有任何變體的詞整個不列：使用者不需要知道「這個詞沒有同義詞」。
+     *
+     * 為什麼要說出來：展開是這個專案搜尋能力最有價值的一塊，但沉默的時候，
+     * 使用者搜「珍珠奶茶」看到一家叫「綠意茶飲」的店排第一，只會覺得搜尋不準。
+     *
+     * @param  list<list<string>>  $groups  見 expand()
+     * @return list<array{term: string, variants: list<string>}>
+     */
+    public static function expandedTerms(array $groups): array
+    {
+        $expanded = [];
+
+        foreach ($groups as $variants) {
+            if (count($variants) < 2) {
+                continue;
+            }
+
+            $expanded[] = [
+                'term' => $variants[0],
+                'variants' => array_slice($variants, 1),
+            ];
+        }
+
+        return $expanded;
+    }
+
+    /**
      * 把每個查詢詞展開成一組同義變體。
      *
      * 回傳的是「群組的列表」：群組**之間**仍然是 AND（「台中 拉麵」兩個條件都要中），

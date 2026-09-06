@@ -43,6 +43,75 @@ class RestaurantKeywordSearchTest extends TestCase
         $this->assertSame([$bubbleTea->id], $this->search('keyword=手搖'));
     }
 
+    public function test_expanded_terms_say_which_variants_were_actually_searched(): void
+    {
+        // 展開是隱形的時候，使用者搜「珍珠奶茶」看到「綠意茶飲」排第一只會覺得
+        // 搜尋不準。meta 要說出「也一併搜尋了」哪些詞。
+        $meta = $this->getJson('/api/v1/restaurants?keyword=珍珠奶茶')->json('meta');
+
+        $this->assertSame('珍珠奶茶', $meta['expanded_terms'][0]['term']);
+        $this->assertContains('手搖飲', $meta['expanded_terms'][0]['variants']);
+        // 原詞不重複列進 variants——它已經是 term 了。
+        $this->assertNotContains('珍珠奶茶', $meta['expanded_terms'][0]['variants']);
+        // 列出來的每一個變體，查詢就真的要用到它：上限是 max_variants，
+        // 而原詞佔掉其中一個位置。
+        $this->assertLessThanOrEqual(
+            (int) config('veggiemap.search.max_variants') - 1,
+            count($meta['expanded_terms'][0]['variants']),
+        );
+    }
+
+    public function test_no_expanded_terms_key_when_nothing_expanded(): void
+    {
+        // 沒有同義詞可展開時整個 key 不出現。回空陣列會讓前端多寫一層
+        // 「有 key 但它是空的」判斷，而那跟「沒展開」是同一件事。
+        $meta = $this->getJson('/api/v1/restaurants?keyword=xyzzy無此詞')->json('meta');
+
+        $this->assertArrayNotHasKey('expanded_terms', $meta);
+    }
+
+    public function test_exact_turns_synonym_expansion_off(): void
+    {
+        // 展開幫倒忙時的逃生門：搜「珍珠奶茶」的人如果只想要名字裡真的有那四個字
+        // 的店，exact=1 要讓標成「手搖飲」的那家消失。
+        $bubbleTea = Restaurant::factory()->create(['name' => '綠意茶飲']);
+        $bubbleTea->features()->attach(
+            Feature::factory()->create(['code' => 'bubble_tea', 'label' => '手搖飲']),
+        );
+        $byName = Restaurant::factory()->create(['name' => '珍珠奶茶專門店']);
+
+        $expanded = $this->search('keyword=珍珠奶茶');
+        $exact = $this->search('keyword=珍珠奶茶&exact=1');
+
+        // 嚴格變少，不是「小於等於」——只有真的把展開關掉，那家標成手搖飲的店
+        // 才會消失。若 exact 沒生效，兩邊會一樣多，這條就紅。
+        $this->assertContains($bubbleTea->id, $expanded);
+        $this->assertSame([$byName->id], $exact);
+        $this->assertLessThan(count($expanded), count($exact));
+    }
+
+    public function test_exact_also_turns_off_the_expanded_terms_notice(): void
+    {
+        // 畫面說的必須跟查詢做的一致：exact=1 沒有展開，就不能還掛著
+        // 「也一併搜尋了…」那一行。
+        $meta = $this->getJson('/api/v1/restaurants?keyword=珍珠奶茶&exact=1')->json('meta');
+
+        $this->assertArrayNotHasKey('expanded_terms', $meta);
+    }
+
+    public function test_exact_still_splits_multiple_terms_with_and(): void
+    {
+        // exact 是「不要展開」，不是「換一種斷詞方式」。多詞仍然是 AND。
+        $match = Restaurant::factory()->create([
+            'name' => '台中拉麵屋', 'city' => '台中市', 'district' => '西區',
+        ]);
+        Restaurant::factory()->create([
+            'name' => '台北拉麵屋', 'city' => '台北市', 'district' => '大安區',
+        ]);
+
+        $this->assertSame([$match->id], $this->search('keyword=台中 拉麵&exact=1'));
+    }
+
     public function test_synonym_expansion_does_not_turn_multi_word_and_into_or(): void
     {
         // city 要明寫：factory 會隨機挑城市，不指定的話「台北那家」有機會落在

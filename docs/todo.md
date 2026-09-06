@@ -20,7 +20,8 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
 ### 搜尋強化
 
 - [x] A1 命中原因說得出全部（`matched_reasons`，不只 `matched_menu_items`）✅ 2026-09-03
-- [ ] A2 同義詞展開要看得見（`meta.expanded_terms`）＋ `exact=1` 逃生門
+      後端；**卡片顯示 2026-09-06 才補**（驗收條件要求的那一半上一輪漏做）
+- [x] A2 同義詞展開要看得見（`meta.expanded_terms`）＋ `exact=1` 逃生門 ✅ 2026-09-06
 - [ ] A3 零結果回「放寬哪一個條件會有幾家」（`meta.relaxations`）
 - [ ] A4 真的錯字容錯：「你是不是要找…」（CJK 用 bigram，**不是** `levenshtein()`）
 - [ ] A5 搜尋範圍變成明確的控制項（`?scope=map|city|all`，API 不用改）

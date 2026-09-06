@@ -579,21 +579,120 @@ describe('RestaurantListView 命中原因', () => {
      */
     it('命中的是菜色時說出來', async () => {
         listPayload = {
-            data: [{ ...fakeRestaurant(1), name: '綠光食堂', matched_menu_items: ['味噌拉麵', '擔擔麵'] }],
+            data: [{
+                ...fakeRestaurant(1),
+                name: '綠光食堂',
+                matched_reasons: [
+                    { type: 'menu_item', value: '味噌拉麵', term: '拉麵' },
+                    { type: 'menu_item', value: '擔擔麵', term: '麵' },
+                ],
+            }],
             meta: { next_cursor: null },
         };
 
         const { wrapper } = await mountList('/restaurants?keyword=拉麵');
 
-        expect(wrapper.find('.match-reason').text()).toContain('味噌拉麵、擔擔麵');
+        expect(wrapper.find('.match-reason').text()).toContain('命中菜色：味噌拉麵、擔擔麵');
+    });
+
+    /**
+     * 命中原因只說得出菜色的話，命中料理種類的店會顯示成「不知道為什麼中的」——
+     * 使用者只會覺得排序壞了。
+     */
+    it('命中的是料理種類時也說得出來，不是只有菜色', async () => {
+        listPayload = {
+            data: [{
+                ...fakeRestaurant(1),
+                name: '綠光食堂',
+                matched_reasons: [{ type: 'cuisine', value: '日式拉麵', term: '拉麵' }],
+            }],
+            meta: { next_cursor: null },
+        };
+
+        const { wrapper } = await mountList('/restaurants?keyword=拉麵');
+
+        expect(wrapper.find('.match-reason').text()).toContain('料理種類：日式拉麵');
     });
 
     it('店名本身命中時不多印一行，那只是雜訊', async () => {
-        listPayload = { data: [{ ...fakeRestaurant(1), name: '拉麵屋' }], meta: { next_cursor: null } };
+        listPayload = {
+            data: [{
+                ...fakeRestaurant(1),
+                name: '拉麵屋',
+                matched_reasons: [{ type: 'name', value: '拉麵屋', term: '拉麵' }],
+            }],
+            meta: { next_cursor: null },
+        };
 
         const { wrapper } = await mountList('/restaurants?keyword=拉麵');
 
         expect(wrapper.find('.match-reason').exists()).toBe(false);
+    });
+});
+
+describe('RestaurantListView 同義詞展開', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+        listPayload = {
+            data: [fakeRestaurant(1)],
+            meta: {
+                next_cursor: null,
+                expanded_terms: [{ term: '珍珠奶茶', variants: ['珍奶', '奶茶', '手搖飲'] }],
+            },
+        };
+    });
+
+    it('說出「也一併搜尋了」哪些同義詞', async () => {
+        const { wrapper } = await mountList('/restaurants?keyword=珍珠奶茶');
+
+        const notice = wrapper.find('.expanded-terms');
+        expect(notice.text()).toContain('也一併搜尋了');
+        expect(notice.text()).toContain('手搖飲');
+    });
+
+    it('點變體就改搜那個詞', async () => {
+        const { wrapper, router } = await mountList('/restaurants?keyword=珍珠奶茶');
+
+        const variants = wrapper.findAll('.expanded-terms .variant');
+        await variants[2].trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.keyword).toBe('手搖飲');
+    });
+
+    it('「只搜原詞」寫進網址並送出 exact 給後端', async () => {
+        const { wrapper, router } = await mountList('/restaurants?keyword=珍珠奶茶');
+
+        await wrapper.find('.expanded-terms .exact-toggle').trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.exact).toBe('1');
+        expect(lastRestaurantCall().exact).toBe(1);
+    });
+
+    it('exact 在網址上時就送給後端——重新整理與分享連結才對得起來', async () => {
+        await mountList('/restaurants?keyword=珍珠奶茶&exact=1');
+
+        expect(lastRestaurantCall().exact).toBe(1);
+    });
+
+    it('沒有展開時不顯示那一行', async () => {
+        listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountList('/restaurants?keyword=珍珠奶茶');
+
+        expect(wrapper.find('.expanded-terms').exists()).toBe(false);
+    });
+
+    it('清除關鍵字時一併清掉 exact——沒有關鍵字它沒有意義', async () => {
+        const { wrapper, router } = await mountList('/restaurants?keyword=珍珠奶茶&exact=1');
+
+        await wrapper.find('.clear-keyword').trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.exact).toBeUndefined();
     });
 });
 

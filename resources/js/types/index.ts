@@ -109,6 +109,11 @@ export interface Restaurant {
      */
     matched_menu_items?: string[];
     /**
+     * 同上，但涵蓋店名／菜色／料理種類／地區／描述／飲食類型六種來源，不是只有
+     * 菜色。`term` 是命中的是使用者打的哪個詞（同義詞展開後的變體，不一定是原詞）。
+     */
+    matched_reasons?: MatchedReason[];
+    /**
      * 三態：open／closed／unknown。unknown 是 OSM 最常見的情況（多數店家沒填
      * opening_hours），不要在畫面上把它顯示成「已打烊」。
      */
@@ -154,6 +159,23 @@ export interface User {
     // 一般消費者 `user` 共用同一個欄位，見 App\Models\User::AI_OFFICE_ROLES。
     role: 'user' | 'admin' | 'manager' | 'developer' | 'viewer';
     created_at: string;
+}
+
+export interface MatchedReason {
+    type: 'name' | 'menu_item' | 'cuisine' | 'locality' | 'description' | 'diet';
+    /** 實際命中的字串（店名、菜色名、料理標籤、地址片段…）。 */
+    value: string;
+    /** 命中的是使用者打的哪個詞——同義詞展開後的變體，不一定等於他輸入的原詞。 */
+    term: string;
+}
+
+/**
+ * 「也一併搜尋了哪些同義詞」。只列真的被拿去查的變體（已套用 max_variants 截斷），
+ * 原詞是 `term`、不重複出現在 `variants` 裡。沒有展開時後端整個 key 不會出現。
+ */
+export interface ExpandedTerm {
+    term: string;
+    variants: string[];
 }
 
 export interface ApiSuccess<T> {

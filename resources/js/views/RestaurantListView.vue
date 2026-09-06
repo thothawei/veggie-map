@@ -7,9 +7,9 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { ALL_CITIES, useCities } from '@/composables/useCities';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
-import { formatAddress, formatConfidence, formatCuisines, formatOpenStatus } from '@/lib/format';
+import { formatAddress, formatConfidence, formatCuisines, formatMatchReasons, formatOpenStatus } from '@/lib/format';
 import { googleMapsUrl } from '@/lib/geo';
-import type { ApiSuccess, Restaurant } from '@/types';
+import type { ApiSuccess, ExpandedTerm, Restaurant } from '@/types';
 
 const router = useRouter();
 const route = useRoute();
@@ -28,6 +28,36 @@ const keywordDraft = ref('');
 
 /** 網址才是「現在正在搜什麼」的真相來源——重新整理、分享連結、上一頁因此都對。 */
 const committedKeyword = computed(() => (typeof route.query.keyword === 'string' ? route.query.keyword : ''));
+
+/**
+ * 只搜原詞、不展開同義詞。跟 keyword 一樣寫進網址，否則重新整理或分享連結時，
+ * 畫面說「只搜『麵包』」但結果其實是展開過的——那比不做這個開關更糟。
+ */
+const exactMode = computed(() => route.query.exact === '1');
+
+/** 後端說「這次一併搜了哪些同義詞」。沒有展開時後端不回這個 key。 */
+const expandedTerms = ref<ExpandedTerm[]>([]);
+
+/** 搜這個變體：把它換成新的關鍵字，並離開 exact 模式（使用者主動挑了一個詞）。 */
+function searchVariant(variant: string) {
+    const query = { ...route.query };
+    query.keyword = variant;
+    delete query.exact;
+
+    router.push({ query });
+}
+
+function setExact(on: boolean) {
+    const query = { ...route.query };
+
+    if (on) {
+        query.exact = '1';
+    } else {
+        delete query.exact;
+    }
+
+    router.push({ query });
+}
 
 /**
  * 排序選項。
@@ -125,6 +155,7 @@ async function search(reset = true) {
         const response = await client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
             params: {
                 keyword: committedKeyword.value || undefined,
+                exact: exactMode.value ? 1 : undefined,
                 bbox: bbox.value,
                 sort: sort.value,
                 per_page: 20,
@@ -137,6 +168,7 @@ async function search(reset = true) {
 
         restaurants.value = reset ? response.data.data : [...restaurants.value, ...response.data.data];
         nextCursor.value = (response.data.meta?.next_cursor as string | null) ?? null;
+        expandedTerms.value = (response.data.meta?.expanded_terms as ExpandedTerm[] | undefined) ?? [];
     } catch (error: unknown) {
         if (seq !== requestSeq) return;
 
@@ -148,6 +180,7 @@ async function search(reset = true) {
         if (reset) {
             restaurants.value = [];
             nextCursor.value = null;
+            expandedTerms.value = [];
         }
     } finally {
         if (seq === requestSeq) {
@@ -172,6 +205,9 @@ function submitSearch() {
 function clearKeyword() {
     const query = { ...route.query };
     delete query.keyword;
+    // exact 是「這個關鍵字不要展開」的修飾詞，關鍵字沒了它就沒有意義，
+    // 留著只會在下一次搜尋時悄悄生效。
+    delete query.exact;
 
     router.push({ query });
 }
@@ -223,7 +259,13 @@ const hasActiveFilters = computed(
 const searchScope = computed(() => {
     if (citiesLoading.value) return null;
 
-    return JSON.stringify([bbox.value ?? ALL_CITIES, committedKeyword.value, sort.value, filterQueryKey(filters.value)]);
+    return JSON.stringify([
+        bbox.value ?? ALL_CITIES,
+        committedKeyword.value,
+        exactMode.value,
+        sort.value,
+        filterQueryKey(filters.value),
+    ]);
 });
 
 watch(searchScope, (scope) => {
@@ -267,6 +309,33 @@ watch(committedKeyword, (value) => {
             </select>
         </div>
 
+        <!--
+            展開是這個專案搜尋能力最有價值的一塊，但沉默的時候，使用者搜「珍珠奶茶」
+            看到一家叫「綠意茶飲」的店排第一只會覺得搜尋不準。說出來，它就從
+            「怪怪的」變成「原來它懂」；旁邊的「只搜…」則是展開幫倒忙時的逃生門。
+        -->
+        <p v-if="expandedTerms.length" class="expanded-terms" role="status">
+            <span v-for="(entry, index) in expandedTerms" :key="entry.term">
+                <template v-if="index > 0">；</template>
+                「{{ entry.term }}」也一併搜尋了：
+                <button
+                    v-for="variant in entry.variants"
+                    :key="variant"
+                    type="button"
+                    class="variant"
+                    @click="searchVariant(variant)"
+                >{{ variant }}</button>
+            </span>
+            <button type="button" class="exact-toggle" @click="setExact(true)">
+                只搜「{{ committedKeyword }}」
+            </button>
+        </p>
+
+        <p v-else-if="exactMode && committedKeyword" class="expanded-terms" role="status">
+            只搜「{{ committedKeyword }}」，沒有一併搜尋同義詞。
+            <button type="button" class="exact-toggle" @click="setExact(false)">也搜同義詞</button>
+        </p>
+
         <p v-if="searchIsGlobal" class="global-hint" role="status">
             搜尋「{{ committedKeyword }}」時會跨全部城市，不受目前選的「{{ activeCity?.label }}」限制。
         </p>
@@ -286,8 +355,12 @@ watch(committedKeyword, (value) => {
                     >{{ restaurant.venue_badge }}</span>
                     <span v-if="formatCuisines(restaurant.cuisines)" class="cuisines">{{ formatCuisines(restaurant.cuisines) }}</span>
                     <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
-                    <span v-if="restaurant.matched_menu_items?.length" class="match-reason">
-                        命中菜色：{{ restaurant.matched_menu_items.join('、') }}
+                    <!--
+                        「這家店為什麼出現在結果裡」。搜「拉麵」排第一的店如果店名
+                        沒有那兩個字，不說明看起來像排序壞了——其實是命中了料理種類。
+                    -->
+                    <span v-if="formatMatchReasons(restaurant.matched_reasons)" class="match-reason">
+                        {{ formatMatchReasons(restaurant.matched_reasons) }}
                     </span>
                     <span
                         v-if="formatConfidence(restaurant.confidence_score)"
@@ -497,6 +570,40 @@ li button:hover {
 .match-reason {
     color: #2f855a;
     font-size: 0.85rem;
+}
+
+.expanded-terms {
+    margin: 0.75rem 0 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    background: #f7fafc;
+    color: #4a5568;
+    font-size: 0.85rem;
+}
+
+.expanded-terms .variant {
+    margin: 0 0.15rem;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid #cbd5e0;
+    border-radius: 999px;
+    background: #fff;
+    color: #2f855a;
+    cursor: pointer;
+    font-size: inherit;
+}
+
+.expanded-terms .variant:hover {
+    border-color: #2f855a;
+}
+
+.expanded-terms .exact-toggle {
+    margin-left: 0.5rem;
+    border: none;
+    background: none;
+    color: #2f855a;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: inherit;
 }
 
 .inline-clear {

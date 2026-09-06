@@ -42,7 +42,15 @@ paths:
             比對店名、地址、城市、行政區、描述、菜色名稱與料理種類標籤。
             空白／逗號分隔的多個詞是 AND；% 與 _ 會被跳脫。
             帶 keyword 時預設排序是 relevance。
+            每個詞會展開成同義變體（見 meta.expanded_terms），要關掉用 exact=1。
           schema: { type: string, maxLength: 255 }
+        - name: exact
+          in: query
+          description: >
+            只用原詞查，不展開同義詞。展開幫倒忙時的逃生門——搜「麵包」的人
+            不想看到一整頁麵店。帶 exact=1 時回應不會有 meta.expanded_terms。
+            仍然會斷詞：「台中 拉麵」依舊是兩個 AND 條件，只是不帶變體。
+          schema: { type: boolean }
         - name: latitude
           in: query
           schema: { type: number, format: float, minimum: -90, maximum: 90 }
@@ -1427,6 +1435,20 @@ components:
         per_page: { type: integer }
         next_cursor: { type: string, nullable: true }
         prev_cursor: { type: string, nullable: true }
+        expanded_terms:
+          type: array
+          description: >
+            「也一併搜尋了哪些同義詞」。只列**真的被拿去查**的變體（已套用
+            search.max_variants 截斷，不是整組詞表），原詞是 term、不重複出現在
+            variants 裡。沒有任何詞展開時（或帶 exact=1 時）整個 key 不出現。
+          items:
+            type: object
+            properties:
+              term: { type: string, example: 珍珠奶茶 }
+              variants:
+                type: array
+                items: { type: string }
+                example: [珍奶, 奶茶, 手搖, 手搖飲, 飲料, bubble tea]
 
     CodeLabel:
       type: object

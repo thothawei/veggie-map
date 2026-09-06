@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAddress, formatConfidence, formatCuisines, formatDistance, formatOpenStatus } from './format';
+import { formatAddress, formatConfidence, formatCuisines, formatDistance, formatMatchReasons, formatOpenStatus } from './format';
 
 describe('formatDistance', () => {
     it('一公里以內用公尺，取整到十位', () => {
@@ -111,5 +111,32 @@ describe('formatConfidence', () => {
         expect(formatConfidence(0)).toBeNull();
         expect(formatConfidence(null)).toBeNull();
         expect(formatConfidence(undefined)).toBeNull();
+    });
+});
+
+describe('formatMatchReasons', () => {
+    it('把命中原因寫成一行，同型別合併', () => {
+        expect(formatMatchReasons([
+            { type: 'cuisine', value: '日式拉麵', term: '拉麵' },
+            { type: 'menu_item', value: '味噌拉麵', term: '拉麵' },
+            { type: 'menu_item', value: '醬油拉麵', term: '拉麵' },
+        ])).toBe('料理種類：日式拉麵・命中菜色：味噌拉麵、醬油拉麵');
+    });
+
+    /**
+     * 店名就印在同一張卡片的第一行，再說一次「店名：拉麵屋」只是雜訊——
+     * 這是 matched_menu_items 時代就有的判斷，沿用。
+     */
+    it('只有店名命中時回 null，卡片不多印一行', () => {
+        expect(formatMatchReasons([{ type: 'name', value: '拉麵屋', term: '拉麵' }])).toBeNull();
+        expect(formatMatchReasons([])).toBeNull();
+        expect(formatMatchReasons(undefined)).toBeNull();
+    });
+
+    it('店名以外的原因照常顯示，店名那一筆略過', () => {
+        expect(formatMatchReasons([
+            { type: 'name', value: '拉麵屋', term: '拉麵' },
+            { type: 'locality', value: '台中市', term: '台中' },
+        ])).toBe('地區：台中市');
     });
 });

@@ -3,7 +3,7 @@
  * 與卡片（template）用同一份規則，不會兩邊各寫一套。
  */
 
-import type { Cuisine } from '@/types';
+import type { Cuisine, MatchedReason } from '@/types';
 
 /**
  * 後端 `distance_meters` 只在帶座標查詢時才有（見 RestaurantResource），
@@ -89,6 +89,51 @@ export function formatOpenStatus(restaurant: {
     }
 
     return null;
+}
+
+/**
+ * 命中原因的畫面文字：「料理種類：日式拉麵・命中菜色：味噌拉麵」。
+ *
+ * `name` 刻意不顯示：店名就印在同一張卡片的第一行，再說一次「店名：拉麵屋」
+ * 只是雜訊（這是 matched_menu_items 時代就有的判斷，沿用）。所以全部命中原因
+ * 都是 name 時回 null，卡片上不會多一行。
+ *
+ * 同型別的多筆會合併成一行（「命中菜色：味噌拉麵、醬油拉麵」），不是各印一行。
+ */
+export function formatMatchReasons(reasons?: MatchedReason[] | null): string | null {
+    const LABELS: Record<MatchedReason['type'], string | null> = {
+        name: null,
+        menu_item: '命中菜色',
+        cuisine: '料理種類',
+        locality: '地區',
+        description: '描述',
+        diet: '飲食類型',
+    };
+
+    const grouped = new Map<string, string[]>();
+
+    for (const reason of reasons ?? []) {
+        const label = LABELS[reason.type];
+
+        if (label === null || label === undefined) {
+            continue;
+        }
+
+        const values = grouped.get(label) ?? [];
+
+        // 同一個值出現兩次（例如兩道菜同名）只說一次。
+        if (!values.includes(reason.value)) {
+            values.push(reason.value);
+        }
+
+        grouped.set(label, values);
+    }
+
+    if (grouped.size === 0) {
+        return null;
+    }
+
+    return [...grouped].map(([label, values]) => `${label}：${values.join('、')}`).join('・');
 }
 
 /**
