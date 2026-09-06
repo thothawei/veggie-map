@@ -301,47 +301,87 @@ const hasActiveFilters = computed(
     () => Object.values(filters.value).some((value) => value !== undefined && value !== null),
 );
 const showEmptyState = computed(() => !loading.value && !loadFailed.value && !hasResults.value && currentBounds !== null);
+
+/**
+ * 底部 sheet（B1）：收合時只有一行摘要，展開才看得到清單。**預設收合**——
+ * 地圖優先版面的重點就是首屏是地圖，不是清單。
+ *
+ * 兩種情況自動展開，使用者不用自己點：
+ * 1. 打了關鍵字且有結果——這是使用者主動要找特定東西，看得到命中清單
+ *    比看地圖上一堆點更直接（跟 fitToKeywordResults() 收視角是同一個理由）。
+ * 2. 零結果——空狀態的說明（放寬條件／你是不是要找）本來就該讓人一目了然，
+ *    逼他先點開「展開」才看得到理由，等於多一次無意義的點擊。
+ *
+ * 使用者手動收合／展開之後不會被這兩條規則打回去——那是他的選擇，不是
+ * 系統要糾正的狀態。
+ */
+const sheetExpanded = ref(false);
+
+watch([keyword, hasResults], ([currentKeyword, results]) => {
+    if (currentKeyword && results) {
+        sheetExpanded.value = true;
+    }
+});
+
+watch(showEmptyState, (empty) => {
+    if (empty) {
+        sheetExpanded.value = true;
+    }
+});
+
+const sheetSummary = computed(() => {
+    if (loading.value) return '載入中…';
+    if (invalidFilters.value || loadFailed.value) return '無法載入結果';
+    if (!hasResults.value) return '目前沒有符合的餐廳';
+
+    const count = `${restaurants.value.length}${hasMore.value ? '+' : ''} 家`;
+
+    return keyword.value ? `符合「${keyword.value}」的有 ${count}` : `${scopeResultLabel.value}有 ${count}`;
+});
 </script>
 
 <template>
     <div class="home">
-        <section class="hero">
-            <h1>VeggieMap</h1>
-            <p class="tagline">找到適合你的素食餐廳</p>
-
-            <CitySwitcher
-                v-if="cities.length"
-                :cities="cities"
-                :model-value="activeCity?.slug ?? null"
-                @update:model-value="selectCity"
-            />
-
-            <div class="hero-controls">
-                <SearchBox
-                    @place-selected="handlePlaceSelected"
-                    @keyword-search="handleKeywordSearch"
-                    @restaurant-selected="goToDetail"
+        <!--
+          地圖優先版面（B1）：地圖佔滿可視區，控制項浮在地圖上，不再疊在
+          地圖上方把它推下去。「VeggieMap／找到適合你的素食餐廳」的品牌標題
+          移除——使用者已經在站上了，品牌留在 header 就夠，一個地圖產品的
+          首屏應該是地圖。
+        -->
+        <section class="map-shell">
+            <div class="top-bar">
+                <CitySwitcher
+                    v-if="cities.length"
+                    :cities="cities"
+                    :model-value="activeCity?.slug ?? null"
+                    @update:model-value="selectCity"
                 />
-                <!--
-                  搜尋範圍（A5）：原本「打了關鍵字就不限範圍」是藏在程式邏輯裡的特例，
-                  使用者改不了。現在是這顆看得到的選單，網址是真相來源
-                  （見 useSearchScope），重新整理、分享連結都對得起來。
-                -->
-                <ScopeSelect v-model="scope" :options="SEARCH_SCOPES" />
-                <button type="button" class="locate-button" @click="handleLocate">📍 使用目前位置</button>
-            </div>
-            <p v-if="locateError" class="locate-error" role="alert">{{ locateError }}</p>
-            <p v-if="keyword" class="keyword-badge" role="status">
-                只顯示符合「{{ keyword }}」的餐廳
-                <button type="button" @click="clearKeyword">清除</button>
-            </p>
-            <FilterDrawer v-model:filters="filters" />
-        </section>
 
-        <section class="map-section">
+                <div class="top-bar-controls">
+                    <SearchBox
+                        @place-selected="handlePlaceSelected"
+                        @keyword-search="handleKeywordSearch"
+                        @restaurant-selected="goToDetail"
+                    />
+                    <!--
+                      搜尋範圍（A5）：原本「打了關鍵字就不限範圍」是藏在程式邏輯裡的特例，
+                      使用者改不了。現在是這顆看得到的選單，網址是真相來源
+                      （見 useSearchScope），重新整理、分享連結都對得起來。
+                    -->
+                    <ScopeSelect v-model="scope" :options="SEARCH_SCOPES" />
+                </div>
+                <p v-if="locateError" class="locate-error" role="alert">{{ locateError }}</p>
+                <p v-if="keyword" class="keyword-badge" role="status">
+                    只顯示符合「{{ keyword }}」的餐廳
+                    <button type="button" @click="clearKeyword">清除</button>
+                </p>
+                <FilterDrawer v-model:filters="filters" />
+            </div>
+
             <RestaurantMap
                 v-if="activeCity"
                 ref="mapRef"
+                class="map-fill"
                 :restaurants="restaurants"
                 :center="activeCity.center"
                 :zoom="activeCity.zoom"
@@ -376,6 +416,9 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                 </li>
             </ul>
 
+            <!-- 角落控制項：定位鈕移到這裡，跟圖例分居地圖左右下角。 -->
+            <button type="button" class="locate-button" @click="handleLocate">📍 使用目前位置</button>
+
             <p v-if="loading" class="map-badge" role="status">載入中…</p>
             <p v-else-if="invalidFilters" class="map-badge error" role="alert">
                 這組搜尋條件無效（可能是網址被改過）。
@@ -388,22 +431,77 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                 <template v-if="keyword">符合「{{ keyword }}」的有 </template>
                 {{ restaurants.length }}{{ hasMore ? '+' : '' }} 家（{{ scopeResultLabel }}）
             </p>
-        </section>
 
-        <section v-if="showEmptyState" class="empty-state">
-            <p class="empty-title">
-                <template v-if="keyword">找不到符合「{{ keyword }}」的餐廳</template>
-                <template v-else>這個範圍還沒有素食餐廳</template>
-            </p>
-            <p class="empty-hint">
-                <template v-if="keyword">
-                    這個關鍵字在{{ scopeResultLabel }}都沒有結果——換個說法，
-                    <template v-if="scope !== 'all'">試試「範圍」改選全部城市，或</template>
-                    清掉關鍵字回到地圖瀏覽。
-                </template>
-                <template v-else>試著把地圖拉遠一點，或切換到其他城市看看。</template>
-                <template v-if="hasActiveFilters"> 也可以先清掉篩選條件。</template>
-            </p>
+            <!--
+              底部 sheet（B1）：收合時只有一行摘要，展開才看得到清單。地圖與
+              清單的連動（滑到卡片放大 marker、點 marker 捲到卡片）是 B2 的
+              範圍，這裡先把清單本身做出來——B2 才有東西可以連動。
+            -->
+            <section class="result-sheet" :class="{ expanded: sheetExpanded }">
+                <button
+                    type="button"
+                    class="sheet-toggle"
+                    :aria-expanded="sheetExpanded"
+                    aria-controls="result-sheet-body"
+                    @click="sheetExpanded = !sheetExpanded"
+                >
+                    <span class="sheet-summary">{{ sheetSummary }}</span>
+                    <span class="chevron" aria-hidden="true">{{ sheetExpanded ? '收合 ▴' : '展開 ▾' }}</span>
+                </button>
+
+                <div id="result-sheet-body" class="sheet-body" :hidden="!sheetExpanded">
+                    <section v-if="showEmptyState" class="empty-state">
+                        <p class="empty-title">
+                            <template v-if="keyword">找不到符合「{{ keyword }}」的餐廳</template>
+                            <template v-else>這個範圍還沒有素食餐廳</template>
+                        </p>
+                        <p class="empty-hint">
+                            <template v-if="keyword">
+                                這個關鍵字在{{ scopeResultLabel }}都沒有結果——換個說法，
+                                <template v-if="scope !== 'all'">試試「範圍」改選全部城市，或</template>
+                                清掉關鍵字回到地圖瀏覽。
+                            </template>
+                            <template v-else>試著把地圖拉遠一點，或切換到其他城市看看。</template>
+                            <template v-if="hasActiveFilters"> 也可以先清掉篩選條件。</template>
+                        </p>
+                    </section>
+
+                    <div v-else-if="hasResults" class="cards">
+                        <button
+                            v-for="restaurant in restaurants"
+                            :key="restaurant.id"
+                            type="button"
+                            class="result-card"
+                            @click="goToDetail(restaurant)"
+                        >
+                            <strong>{{ restaurant.name }}</strong>
+                            <span
+                                v-if="restaurant.venue_badge"
+                                class="venue-badge"
+                                :data-kind="restaurant.venue_kind ?? undefined"
+                            >{{ restaurant.venue_badge }}</span>
+                            <span v-if="formatCuisines(restaurant.cuisines)" class="cuisines">{{ formatCuisines(restaurant.cuisines) }}</span>
+                            <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
+                            <span class="meta">
+                                <span v-if="formatDistance(restaurant.distance_meters)" class="distance">
+                                    {{ formatDistance(restaurant.distance_meters) }}
+                                </span>
+                                <span
+                                    v-if="restaurant.confidence_level"
+                                    class="confidence"
+                                    :data-level="restaurant.confidence_level.code"
+                                >{{ restaurant.confidence_level.label }}</span>
+                                <span
+                                    v-if="formatOpenStatus(restaurant)"
+                                    class="open-status"
+                                    :data-state="formatOpenStatus(restaurant)?.state"
+                                >{{ formatOpenStatus(restaurant)?.text }}</span>
+                            </span>
+                            <span class="address">{{ formatAddress(restaurant) ?? '地址未提供' }}</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
         </section>
 
         <section class="recommended" v-if="recommended.length">
@@ -452,41 +550,81 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 </template>
 
 <style scoped>
-.hero {
-    padding: 1.5rem 1rem;
-    text-align: center;
-    background: var(--vm-green-50);
+/*
+ * 地圖優先版面（B1）。`.map-shell` 是唯一的定位錨點——`.top-bar`／
+ * `.map-legend`／locate 按鈕／`.map-badge`／`.result-sheet` 全部絕對定位在
+ * 它上面，`.map-fill` 用 inset:0 把 RestaurantMap 撐滿整個殼。
+ *
+ * 高度用「視窗高減去大概的 header 高」，不是精算值——header 是 App.vue 管的
+ * flex-wrap 版面，這一輪不動它，這裡只能給一個看起來對的估計值。
+ */
+.map-shell {
+    position: relative;
+    height: calc(100vh - 64px);
+    min-height: 520px;
+    overflow: hidden;
 }
 
-.hero h1 {
-    margin: 0;
-    color: var(--vm-green-600);
+.map-fill {
+    position: absolute;
+    inset: 0;
 }
 
-.tagline {
-    margin: 0.25rem 0 1rem;
-    color: var(--vm-ink-600);
+.map-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--vm-ink-50);
+    color: var(--vm-ink-500);
 }
 
-.hero-controls {
+/*
+ * 浮動列：固定在頂端、半透明底＋陰影，蓋在地圖上而不是把地圖推下去。
+ * 展開篩選面板時會自己長高——它是 in-flow 的內容，只有這個容器本身用
+ * absolute 貼在頂端，長高只會往下蓋住更多地圖，不會把版面撐開。
+ */
+.top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: var(--vm-shadow-md);
+}
+
+.top-bar-controls {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
     max-width: 640px;
-    margin: 0 auto;
+    margin: 0.5rem auto 0;
     align-items: flex-start;
 }
 
-.hero-controls .search-box {
+.top-bar-controls .search-box {
     flex: 1;
     min-width: 200px;
 }
 
+/*
+ * 定位鈕改成角落控制項，跟圖例分居地圖左右下角，不再擠在浮動列裡。
+ * bottom 抬高到底部 sheet 收合列（約 3rem）之上，不然會被蓋住——
+ * 桌機版 sheet 搬到左側之後這裡改回貼底。
+ */
 .locate-button {
+    position: absolute;
+    right: 0.75rem;
+    bottom: 5rem;
+    z-index: 500;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--vm-ink-300);
     border-radius: var(--vm-radius-md);
-    background: var(--vm-white);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: var(--vm-shadow-md);
     cursor: pointer;
     white-space: nowrap;
 }
@@ -497,24 +635,11 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     font-size: 0.9rem;
 }
 
-.map-section {
-    position: relative;
-    height: 60vh;
-}
-
-.map-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    min-height: 400px;
-    background: var(--vm-ink-50);
-    color: var(--vm-ink-500);
-}
-
 .map-badge {
     position: absolute;
-    top: 0.5rem;
+    /* 浮動列的高度會變（篩選面板展開／關鍵字徽章出現），這裡只能給一個
+       在大多數狀態下都不會被蓋住的估計值。 */
+    top: 8.5rem;
     left: 50%;
     transform: translateX(-50%);
     margin: 0;
@@ -523,7 +648,7 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     border-radius: var(--vm-radius-full);
     border: 1px solid var(--vm-ink-200);
     box-shadow: var(--vm-shadow-sm);
-    z-index: 1000;
+    z-index: 900;
     font-size: 0.85rem;
     white-space: nowrap;
 }
@@ -533,8 +658,56 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     color: var(--vm-red-600);
 }
 
+/*
+ * 底部 sheet。收合時只有 `.sheet-toggle` 那一行；展開時 `.sheet-body` 用
+ * `hidden` 屬性控制（不是 `display` 內嵌樣式），桌機版直接無視收合狀態
+ * 常駐顯示——見下面 `min-width: 900px` 那段。
+ */
+.result-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 800;
+    max-height: 70%;
+    display: flex;
+    flex-direction: column;
+    background: var(--vm-white);
+    border-top-left-radius: var(--vm-radius-lg);
+    border-top-right-radius: var(--vm-radius-lg);
+    box-shadow: var(--vm-shadow-md);
+}
+
+.sheet-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.sheet-summary {
+    font-weight: 600;
+}
+
+.chevron {
+    color: var(--vm-ink-500);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.sheet-body {
+    overflow-y: auto;
+    padding: 0 1rem 1rem;
+}
+
 .empty-state {
-    padding: 1.5rem;
+    padding: 1rem 0;
     text-align: center;
 }
 
@@ -559,7 +732,8 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     gap: 1rem;
 }
 
-.card {
+.card,
+.result-card {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
@@ -571,11 +745,18 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     text-align: left;
 }
 
-.card:hover {
+.result-card {
+    width: 100%;
+    margin-bottom: 0.75rem;
+}
+
+.card:hover,
+.result-card:hover {
     border-color: var(--vm-green-600);
 }
 
-.card .meta {
+.card .meta,
+.result-card .meta {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
@@ -583,12 +764,14 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     font-size: 0.85rem;
 }
 
-.card .distance {
+.card .distance,
+.result-card .distance {
     color: var(--vm-green-600);
     font-weight: 600;
 }
 
-.card .address {
+.card .address,
+.result-card .address {
     color: var(--vm-ink-700);
     font-size: 0.9rem;
 }
@@ -622,12 +805,6 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 .venue-summary {
     color: var(--vm-ink-600);
     font-size: 0.8rem;
-}
-
-@media (max-width: 640px) {
-    .map-section {
-        height: 55vh;
-    }
 }
 
 .open-status[data-state='open'] {
@@ -669,10 +846,11 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     position: absolute;
     left: 0.75rem;
     /*
-     * 抬高到 Leaflet 的著作權標示上方。實測 375×812 時兩者重疊——OSM 的授權
-     * 要求那行必須看得見，蓋住它不只是版面問題。
+     * 抬高到底部 sheet 收合列（約 3rem）之上——不然會被蓋住。原本抬高到
+     * Leaflet 著作權標示上方的理由還在（OSM 授權要求那行要看得見），
+     * sheet 的高度剛好比它高，一次抬夠兩者都不會被蓋住。
      */
-    bottom: 1.75rem;
+    bottom: 5rem;
     z-index: 500;
     display: flex;
     gap: 0.75rem;
@@ -710,5 +888,48 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     cursor: pointer;
     text-decoration: underline;
     font-size: inherit;
+}
+
+/*
+ * 桌機：底部 sheet 變成常駐的左側清單，跟 RestaurantMap 兩欄並排——不是
+ * 拿 JS 判斷視窗寬度，`hidden` 屬性在這個斷點被 `!important` 蓋掉即可。
+ *
+ * **這個 media query 必須放在檔案最後**：CSS 同specificity 時後面的規則贏，
+ * 這裡要覆蓋的 `.map-legend`／`.locate-button`／`.result-sheet` 等規則散落在
+ * 檔案前面各處，放前面會被後面那些同 specificity 的基礎規則蓋回去
+ * ——2026-09-06 實測踩過，桌機版 `.map-legend` 的 `left:380px` 完全沒生效，
+ * 因為當時這個區塊寫在 `.map-legend` 基礎規則之前。
+ */
+@media (min-width: 900px) {
+    .result-sheet {
+        top: 8.5rem;
+        left: 0;
+        right: auto;
+        bottom: 0;
+        width: 360px;
+        max-height: none;
+        border-top-right-radius: 0;
+        border-bottom-left-radius: 0;
+    }
+
+    .sheet-toggle {
+        display: none;
+    }
+
+    .sheet-body {
+        display: block !important;
+        height: 100%;
+    }
+
+    /* sheet 搬到左側之後不再蓋住地圖底部，圖例／定位鈕回到貼底的位置。 */
+    .map-legend,
+    .locate-button {
+        bottom: 1.75rem;
+    }
+
+    /* 圖例原本貼在最左邊，現在那個位置被左側清單佔走，往右挪到清單外面。 */
+    .map-legend {
+        left: 380px;
+    }
 }
 </style>

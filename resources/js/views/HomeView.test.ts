@@ -218,6 +218,98 @@ describe('HomeView 結果計數', () => {
     });
 });
 
+describe('HomeView 地圖優先版面（B1）', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    /** 品牌留在 header 就夠，一個地圖產品的首屏應該是地圖，不是一段標題。 */
+    it('沒有 hero 標題——地圖是首屏，不是被推到標題下面', async () => {
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('h1').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('找到適合你的素食餐廳');
+    });
+
+    /**
+     * `#result-sheet-body` 用 `hidden` 屬性收合，不是 `v-if`——內容還在 DOM 裡
+     * （桌機版常駐顯示要靠它），所以這裡驗證的是 `hidden` 屬性，不是元素存不存在。
+     */
+    it('底部 sheet 預設收合，展開才看得到清單', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.sheet-toggle').attributes('aria-expanded')).toBe('false');
+        expect(wrapper.find('#result-sheet-body').attributes('hidden')).toBeDefined();
+    });
+
+    it('點 sheet 的收合列會展開，看得到結果卡片；再點一次收合', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        await wrapper.find('.sheet-toggle').trigger('click');
+
+        expect(wrapper.find('.sheet-toggle').attributes('aria-expanded')).toBe('true');
+        expect(wrapper.find('#result-sheet-body').attributes('hidden')).toBeUndefined();
+        expect(wrapper.find('.result-card').exists()).toBe(true);
+
+        await wrapper.find('.sheet-toggle').trigger('click');
+
+        expect(wrapper.find('#result-sheet-body').attributes('hidden')).toBeDefined();
+    });
+
+    /**
+     * 打關鍵字是使用者主動要找特定東西，看得到命中清單比看地圖上一堆點更直接
+     * ——不用使用者自己點「展開」。
+     */
+    it('打關鍵字有結果時自動展開 sheet', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei&keyword=拉麵');
+
+        expect(wrapper.find('.sheet-toggle').attributes('aria-expanded')).toBe('true');
+        expect(wrapper.find('.result-card').exists()).toBe(true);
+    });
+
+    /** 零結果的說明要一目了然，逼使用者先點「展開」才看得到理由等於多一次無意義的點擊。 */
+    it('零結果時自動展開 sheet，讓空狀態的說明看得見', async () => {
+        restaurantsPayload = { data: [], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.sheet-toggle').attributes('aria-expanded')).toBe('true');
+        expect(wrapper.find('#result-sheet-body').attributes('hidden')).toBeUndefined();
+        expect(wrapper.find('.empty-state').exists()).toBe(true);
+    });
+
+    it('手動收合之後，維持在有結果的一般瀏覽狀態不會被打回展開', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+        await wrapper.find('.sheet-toggle').trigger('click');
+        expect(wrapper.find('.sheet-toggle').attributes('aria-expanded')).toBe('true');
+
+        await wrapper.find('.sheet-toggle').trigger('click');
+
+        expect(wrapper.find('.sheet-toggle').attributes('aria-expanded')).toBe('false');
+    });
+
+    it('sheet 收合列摘要顯示結果數，反映目前的搜尋範圍', async () => {
+        restaurantsPayload = { data: Array.from({ length: 5 }, (_, i) => fakeRestaurant(i)), meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.sheet-summary').text()).toContain('5 家');
+    });
+});
+
 describe('HomeView 地圖圖例', () => {
     beforeEach(() => {
         vi.clearAllMocks();
