@@ -48,3 +48,7 @@ foreach (array_values(config('services.sync_regions')) as $index => $region) {
 | 一千多次計費請求。慢慢輪完一圈是刻意的。
 */
 Schedule::command('restaurants:check-closed')->dailyAt('03:00');
+
+// 零結果查詢紀錄（A8）保留 90 天。這是產品訊號不是使用者追蹤，但沒有理由
+// 無限期留著——關鍵字本身可能含地名之類的內容。
+Schedule::command('search-misses:prune')->daily();

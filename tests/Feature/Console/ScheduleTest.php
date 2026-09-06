@@ -62,6 +62,14 @@ class ScheduleTest extends TestCase
         $this->assertTrue($commands->contains(fn ($command) => str_contains($command, 'restaurants:calculate-scores')));
     }
 
+    /** A8：零結果查詢紀錄保留 90 天，要有排程清舊資料，不是永遠留著。 */
+    public function test_search_misses_are_pruned_daily(): void
+    {
+        $commands = collect($this->scheduledCommands([]));
+
+        $this->assertTrue($commands->contains(fn ($command) => str_contains($command, 'search-misses:prune')));
+    }
+
     public function test_sync_is_not_scheduled_when_no_region_is_configured(): void
     {
         $commands = collect($this->scheduledCommands([]));

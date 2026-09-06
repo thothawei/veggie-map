@@ -6,6 +6,7 @@ use App\Models\Feature;
 use App\Models\MenuItem;
 use App\Models\Restaurant;
 use App\Models\RestaurantSlugAlias;
+use App\Models\SearchMiss;
 use App\Repositories\Search\DidYouMean;
 use App\Repositories\Search\KeywordSearch;
 use App\Support\CityCatalog;
@@ -391,6 +392,73 @@ class RestaurantRepository
         $cuisines = array_column(CuisineCatalog::types(), 'label');
 
         return DidYouMean::suggest($keyword, [...$synonyms, ...$cuisines, ...$districts, ...$names]);
+    }
+
+    /**
+     * 記一筆零結果查詢（A8）。只在 Controller 確認 `$paginator->items() === []`
+     * 之後才呼叫——這裡不重查一次，信任呼叫端已經算過。
+     *
+     * 不記 IP、不記 user id、不記座標：這是「下一輪該加哪些同義詞」的產品訊號，
+     * 不是使用者追蹤，這幾樣資料對那個問題沒有幫助。
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function recordMiss(array $filters): void
+    {
+        $keyword = isset($filters['keyword']) ? trim((string) $filters['keyword']) : '';
+
+        SearchMiss::create([
+            'keyword' => $keyword !== '' ? $keyword : null,
+            'normalized' => $keyword !== '' ? self::normalizeForMissReport($keyword) : null,
+            'result_count' => 0,
+            'had_filters' => $this->hasNonKeywordFilters($filters),
+            'created_at' => now(),
+        ]);
+    }
+
+    /**
+     * trim ＋ 空白收成一個 ＋ 大小寫統一。「拉麵」「拉麵 」「拉麵  」在 top N
+     * 排行榜裡該算同一筆，不然計數會被空白差異稀釋掉；`mb_strtolower` 對
+     * ASCII／全形字母有效，對中日文沒有影響。
+     */
+    public static function normalizeForMissReport(string $keyword): string
+    {
+        return mb_strtolower(trim(preg_replace('/\s+/u', ' ', $keyword) ?? $keyword));
+    }
+
+    /**
+     * 除了 keyword 之外還有沒有開別的篩選。分得出「單純這個詞查不到」跟
+     * 「詞查得到，但篩選太嚴」是兩個完全不同的處置方向——前者該加同義詞，
+     * 後者該檢討的是篩選門檻，不是詞表。
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function hasNonKeywordFilters(array $filters): bool
+    {
+        $scopeParam = DietCatalog::venueScopeParam();
+
+        $keys = [
+            'diet', $scopeParam, 'price_level', 'confidence_min', 'open_now',
+            'bbox', 'city', 'district', ...Feature::CODES,
+        ];
+
+        foreach ($keys as $key) {
+            $value = $filters[$key] ?? null;
+
+            if ($value === null || $value === '' || $value === false) {
+                continue;
+            }
+
+            // venue_scope 的預設值不算「使用者開了篩選」——那是每個請求都會帶的
+            // 隱性預設，不是使用者主動收窄的結果。
+            if ($key === $scopeParam && $value === DietCatalog::venueScopeDefault()) {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     /**

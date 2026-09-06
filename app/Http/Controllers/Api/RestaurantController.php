@@ -67,6 +67,10 @@ class RestaurantController extends Controller
         // 「放寬哪一個條件會有幾家」。**只在真的 0 筆時才算**——每一項是一次
         // COUNT(*)，有結果的查詢跑它是純粹的浪費，而且零結果本來就是少數情況。
         if ($paginator->items() === []) {
+            // 零結果查詢紀錄（A8）：下一輪同義詞表要加什麼詞的依據，不是使用者追蹤
+            // （不記 IP／user id／座標，見 RestaurantRepository::recordMiss）。
+            $this->restaurants->recordMiss($validated);
+
             $relaxations = $this->restaurants->relaxations($validated);
 
             if ($relaxations !== []) {

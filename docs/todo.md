@@ -54,7 +54,10 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
       只有 SearchBox（首頁）有這個元件，列表頁是純 `<input>`，不受影響。
       搜過的關鍵字／選過的料理種類行政區／選過的地點都算一次搜尋並記住，
       選詳情頁的店名建議不算（那是選中已知的店，不是打了什麼詞）
-- [ ] A8 零結果查詢紀錄 ＋ `search:misses` 指令（不記 IP／user）
+- [x] A8 零結果查詢紀錄 ＋ `search:misses` 指令（不記 IP／user）✅ 2026-09-06
+      `search_misses` 表（keyword／normalized／result_count／had_filters／
+      created_at，沒有 updated_at）；`search:misses --since=7d` 排行榜、
+      `search-misses:prune`（預設 90 天）排程每天清舊資料
 - [ ] A9 搜尋效能 benchmark 測試（不上 FULLTEXT，先立量測線）
 
 ### 搜尋畫面 UI/UX

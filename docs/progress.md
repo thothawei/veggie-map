@@ -4261,3 +4261,40 @@ B0–B5。
   變成 `null`、下拉關閉。
 
 **下一步**：剩 A8（零結果查詢紀錄）／A9（效能 benchmark）與 B0–B5。
+
+
+## 2026-09-06 — A8：零結果查詢紀錄
+
+**做什麼**：`search_misses` 表 + Controller 在 `$paginator->items() === []` 那個既有的
+分支（跟 A3 的 relaxations、A4 的 did_you_mean 同一個位置）多寫一筆：
+
+- 欄位只有 `keyword`／`normalized`／`result_count`／`had_filters`／`created_at`——
+  **不記 IP、不記 user id、不記座標**。這是「下一輪同義詞表該加什麼」的產品訊號，
+  不是使用者追蹤，那幾樣資料對這個問題沒有幫助，記了只是白白擴大隱私風險。
+- `normalized`：trim ＋ 空白收成一個 ＋ 大小寫統一（`mb_strtolower`，對中日文無影響）。
+  「拉麵」「拉麵 」「RAMEN」「ramen」在排行榜裡要能算同一筆，不然計數被
+  空白／大小寫差異稀釋掉。沒有 keyword 的 miss（純瀏覽＋篩選篩成 0）一樣記，
+  但 `normalized` 是 null——那種情況沒有詞可以拿去查字表，`search:misses`
+  的排行榜不列它，只在最後說一句「另有 N 次沒有下關鍵字」。
+- `had_filters`：除了 keyword 之外還有沒有開別的篩選（diet／venue_scope／
+  price_level／confidence_min／open_now／features／bbox／city／district）。
+  venue_scope 剛好等於預設值不算——那是每個請求都會帶的隱性預設，不是使用者
+  主動收窄。分得出「單純這個詞查不到」跟「詞查得到但篩選太嚴」是兩個完全
+  不同的處置方向，前者該加同義詞，後者該檢討篩選門檻。
+- `php artisan search:misses --since=7d --limit=20`：依 normalized 分組的排行榜。
+  `--since` 只收 `數字+h/d/w`，格式錯直接報錯而不是猜。
+- `php artisan search-misses:prune --days=90`：保留 90 天，排進 `routes/console.php`
+  的每日排程——關鍵字本身可能含地名之類的內容，沒有理由無限期留著。
+
+**驗證**
+
+- 新增 27 條測試（`SearchMissTest` 10、`SearchMissesCommandTest` 6、
+  `PruneSearchMissesTest` 3、`ScheduleTest` 加 1）；後端全套 698 條全綠，
+  Pint／PHPStan（level 全專案 225 檔）乾淨。
+- 反向驗證：把 `had_filters` 硬寫成 `false` → 3 條紅（沒有關鍵字的 miss、
+  帶 open_now 的 miss、venue_scope=all 的 miss 都該是 true）。
+- 真環境（docker）：`curl '.../restaurants?keyword=不存在的店'` → 0 筆 →
+  `search:misses --since=1d` 印出「不存在的店 | 1 | 0/1 | 剛剛」；
+  `search-misses:prune` 對還在保留期內的資料印出「刪除了 0 筆」。
+
+**下一步**：剩 A9（效能 benchmark）與 B0–B5。
