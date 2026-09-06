@@ -189,6 +189,18 @@ export interface ExpandedTerm {
     variants: string[];
 }
 
+/**
+ * 零結果時的「放寬這個條件會有幾家」。`value === null` 代表把那個參數從網址移掉；
+ * 有值代表改成那個值——`venue_scope` 就是後者（移除它前端會退回自己的預設
+ * 「純素食店」，等於按了沒反應）。
+ */
+export interface Relaxation {
+    param: string;
+    value: string | null;
+    label: string;
+    count: number;
+}
+
 export interface ApiSuccess<T> {
     success: true;
     data: T;

@@ -1435,6 +1435,27 @@ components:
         per_page: { type: integer }
         next_cursor: { type: string, nullable: true }
         prev_cursor: { type: string, nullable: true }
+        relaxations:
+          type: array
+          description: >
+            **只在結果為 0 筆時出現**：放寬哪一個條件會有幾家。零結果時使用者的
+            問題不是「沒有店」而是「我做錯了什麼」，所以直接把答案算出來。
+            每一項是一次 COUNT(*)，最多三項，只列 count > 0 的（放寬後仍然 0 筆
+            的條件不是有用的建議）。實測 2026-09-06：四個條件全開時 32–41ms。
+            `value` 為 null 代表把該參數移除；有值代表改成那個值——`venue_scope`
+            是後者（移除它前端會退回自己的預設「純素食店」，等於按了沒反應）。
+          items:
+            type: object
+            properties:
+              param:
+                type: string
+                enum: [open_now, venue_scope, confidence_min, bbox]
+              value:
+                type: string
+                nullable: true
+                example: all
+              label: { type: string, example: 不限營業中 }
+              count: { type: integer, example: 12 }
         expanded_terms:
           type: array
           description: >

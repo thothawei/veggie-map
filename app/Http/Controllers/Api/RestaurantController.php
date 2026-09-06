@@ -64,6 +64,16 @@ class RestaurantController extends Controller
             $meta['expanded_terms'] = $expandedTerms;
         }
 
+        // 「放寬哪一個條件會有幾家」。**只在真的 0 筆時才算**——每一項是一次
+        // COUNT(*)，有結果的查詢跑它是純粹的浪費，而且零結果本來就是少數情況。
+        if ($paginator->items() === []) {
+            $relaxations = $this->restaurants->relaxations($validated);
+
+            if ($relaxations !== []) {
+                $meta['relaxations'] = $relaxations;
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data' => RestaurantResource::collection($paginator->items())->resolve(),

@@ -564,6 +564,100 @@ describe('RestaurantListView 空結果的建議', () => {
         // 「降低門檻」不夠——要說得出為什麼一家都沒有。
         expect(wrapper.text()).toContain('還沒有人工查證');
     });
+
+    /**
+     * 零結果時使用者的問題不是「沒有店」而是「我做錯了什麼」。後端已經算出
+     * 「放寬哪一個條件會有幾家」，畫面就該把答案放成**可以按的**按鈕，
+     * 而不是一段叫他自己一個一個去試的文字。
+     */
+    it('把後端算好的放寬選項渲染成按鈕，帶上會有幾家', async () => {
+        listPayload = {
+            data: [],
+            meta: {
+                next_cursor: null,
+                relaxations: [
+                    { param: 'open_now', value: null, label: '不限營業中', count: 12 },
+                    { param: 'venue_scope', value: 'all', label: '包含素食友善店', count: 34 },
+                ],
+            },
+        };
+
+        const { wrapper } = await mountList('/restaurants?city=taipei&open_now=1');
+
+        const buttons = wrapper.findAll('.relaxation');
+        expect(buttons).toHaveLength(2);
+        expect(buttons[0].text()).toBe('不限營業中（12 家）');
+        expect(buttons[1].text()).toBe('包含素食友善店（34 家）');
+    });
+
+    it('按下去就把那個條件從網址移掉', async () => {
+        listPayload = {
+            data: [],
+            meta: {
+                next_cursor: null,
+                relaxations: [{ param: 'open_now', value: null, label: '不限營業中', count: 12 }],
+            },
+        };
+
+        const { wrapper, router } = await mountList('/restaurants?city=taipei&open_now=1');
+
+        await wrapper.find('.relaxation').trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.open_now).toBeUndefined();
+        expect(router.currentRoute.value.query.city).toBe('taipei');
+    });
+
+    /**
+     * venue_scope 要**改成 all**而不是移除：移除的話 useFilterQuery 會退回
+     * 預設值（純素食店），使用者按了等於沒反應。
+     */
+    it('venue_scope 是改成 all，不是移除', async () => {
+        listPayload = {
+            data: [],
+            meta: {
+                next_cursor: null,
+                relaxations: [{ param: 'venue_scope', value: 'all', label: '包含素食友善店', count: 34 }],
+            },
+        };
+
+        const { wrapper, router } = await mountList('/restaurants?city=taipei');
+
+        await wrapper.find('.relaxation').trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.venue_scope).toBe('all');
+    });
+
+    /**
+     * 列表頁的 bbox 是從 `?city=` 算出來的，網址上根本沒有 bbox 這個參數——
+     * 照字面刪 bbox 會變成一個按了沒反應的按鈕。
+     */
+    it('放寬 bbox 實際上是移除 city', async () => {
+        listPayload = {
+            data: [],
+            meta: {
+                next_cursor: null,
+                relaxations: [{ param: 'bbox', value: null, label: '搜尋全部城市', count: 8 }],
+            },
+        };
+
+        const { wrapper, router } = await mountList('/restaurants?city=taipei');
+
+        await wrapper.find('.relaxation').trigger('click');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.city).toBeUndefined();
+    });
+
+    it('沒有可放寬的條件時才退回靜態建議', async () => {
+        listPayload = { data: [], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountList('/restaurants?city=taipei&open_now=1');
+
+        expect(wrapper.find('.relaxation').exists()).toBe(false);
+        expect(wrapper.text()).toContain('關掉「營業中」');
+    });
 });
 
 describe('RestaurantListView 命中原因', () => {

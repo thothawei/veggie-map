@@ -288,6 +288,103 @@ class RestaurantRepository
     }
 
     /**
+     * 零結果時：「放寬哪一個條件會有幾家」。
+     *
+     * 零結果是搜尋體驗最貴的一刻，使用者當下的問題不是「沒有店」而是
+     * **「我做錯了什麼」**。四個篩選任何一個都可能是兇手，叫他自己一個一個試等於
+     * 叫他放棄——所以直接把答案算出來：不限營業中會有 12 家、包含素食友善店會有 34 家。
+     *
+     * 每一項是一次乾淨的 `COUNT(*)`（沒有排序、沒有 eager load、沒有 cursor），
+     * 而且**只在結果真的為 0 時才呼叫**（見 RestaurantController::index）。
+     *
+     * 回傳的形狀是 `{ param, value, label, count }` 而不是規劃原本寫的 `drop`：
+     * `venue_scope` 放寬不是「移除參數」而是「改成 all」——前端把它移掉的話會退回
+     * 自己的預設值（純素食店），等於按了沒反應。`value === null` 才是移除。
+     *
+     * @param  array<string, mixed>  $filters
+     * @return list<array{param: string, value: string|null, label: string, count: int}>
+     */
+    public function relaxations(array $filters): array
+    {
+        $scopeParam = DietCatalog::venueScopeParam();
+
+        // 順序即畫面上的優先順序，依「最常把結果篩成 0」排：深夜開著「營業中」
+        // 幾乎會清空整份清單；venue_scope 預設就是純素食店，使用者未必知道自己開著它。
+        $candidates = [
+            ['param' => 'open_now', 'value' => null, 'label' => '不限營業中'],
+            ['param' => $scopeParam, 'value' => 'all', 'label' => '包含素食友善店'],
+            ['param' => 'confidence_min', 'value' => null, 'label' => '不限可信度'],
+            ['param' => 'bbox', 'value' => null, 'label' => '搜尋全部城市'],
+        ];
+
+        $relaxations = [];
+
+        foreach ($candidates as $candidate) {
+            $param = $candidate['param'];
+
+            // 使用者根本沒設這個條件就沒得放寬。venue_scope 的 'all' 本身也不算
+            // ——已經是最寬的了，建議「放寬成 all」等於什麼都沒說。
+            if (! isset($filters[$param]) || $filters[$param] === '' || $filters[$param] === $candidate['value']) {
+                continue;
+            }
+
+            $relaxed = $filters;
+
+            if ($candidate['value'] === null) {
+                unset($relaxed[$param]);
+            } else {
+                $relaxed[$param] = $candidate['value'];
+            }
+
+            $count = $this->countFor($relaxed);
+
+            if ($count > 0) {
+                $relaxations[] = [...$candidate, 'count' => $count];
+            }
+
+            // 最多三項：四個按鈕就不像「下一步」而像另一組篩選器了。
+            if (count($relaxations) >= 3) {
+                break;
+            }
+        }
+
+        return $relaxations;
+    }
+
+    /**
+     * 一組篩選條件會有幾家店。只做 COUNT，不排序、不 eager load、不分頁——
+     * relaxations() 要的只是一個數字，把 search() 整套跑一遍是浪費。
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function countFor(array $filters): int
+    {
+        $groups = KeywordSearch::groupsFor(
+            isset($filters['keyword']) ? (string) $filters['keyword'] : null,
+            ! empty($filters['exact']),
+        );
+
+        $query = $this->baseQuery($filters, $groups);
+
+        $corners = isset($filters['bbox']) ? $this->parseBbox((string) $filters['bbox']) : null;
+        $hasCoords = isset($filters['latitude'], $filters['longitude']);
+
+        if ($hasCoords || $corners !== null) {
+            $query->whereRaw('MBRContains(ST_SRID(ST_GeomFromText(?), 4326), location)', [
+                $corners !== null
+                    ? $this->polygonFromCorners(...$corners)
+                    : $this->boundingBoxPolygon(
+                        (float) $filters['latitude'],
+                        (float) $filters['longitude'],
+                        (float) ($filters['radius'] ?? 5),
+                    ),
+            ]);
+        }
+
+        return $query->count();
+    }
+
+    /**
      * @param  list<list<string>>  $groups  斷詞並展開同義詞後的查詢詞（見 KeywordSearch::expand）
      */
     private function baseQuery(array $filters, array $groups = []): Builder

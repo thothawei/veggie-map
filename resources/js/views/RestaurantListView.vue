@@ -9,7 +9,7 @@ import { ALL_CITIES, useCities } from '@/composables/useCities';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
 import { formatAddress, formatCuisines, formatMatchReasons, formatOpenStatus } from '@/lib/format';
 import { googleMapsUrl } from '@/lib/geo';
-import type { ApiSuccess, ExpandedTerm, Restaurant } from '@/types';
+import type { ApiSuccess, ExpandedTerm, Relaxation, Restaurant } from '@/types';
 
 const router = useRouter();
 const route = useRoute();
@@ -37,6 +37,32 @@ const exactMode = computed(() => route.query.exact === '1');
 
 /** 後端說「這次一併搜了哪些同義詞」。沒有展開時後端不回這個 key。 */
 const expandedTerms = ref<ExpandedTerm[]>([]);
+
+/**
+ * 零結果時後端算好的「放寬哪一個條件會有幾家」。空狀態把它們渲染成可按的按鈕——
+ * 使用者當下的問題不是「沒有店」而是「我做錯了什麼」，四個篩選任一個都可能是兇手。
+ */
+const relaxations = ref<Relaxation[]>([]);
+
+/**
+ * 按下放寬按鈕＝把那個條件從網址拿掉（或改成後端指定的值）。
+ *
+ * `bbox` 要特別翻譯：列表頁的 bbox 是從 `?city=` 算出來的，網址上沒有 bbox 這個
+ * 參數，刪它不會有任何效果——要刪的是 city。
+ */
+function applyRelaxation(relaxation: Relaxation) {
+    const query = { ...route.query };
+
+    if (relaxation.param === 'bbox') {
+        delete query.city;
+    } else if (relaxation.value === null) {
+        delete query[relaxation.param];
+    } else {
+        query[relaxation.param] = relaxation.value;
+    }
+
+    router.push({ query });
+}
 
 /** 搜這個變體：把它換成新的關鍵字，並離開 exact 模式（使用者主動挑了一個詞）。 */
 function searchVariant(variant: string) {
@@ -169,6 +195,7 @@ async function search(reset = true) {
         restaurants.value = reset ? response.data.data : [...restaurants.value, ...response.data.data];
         nextCursor.value = (response.data.meta?.next_cursor as string | null) ?? null;
         expandedTerms.value = (response.data.meta?.expanded_terms as ExpandedTerm[] | undefined) ?? [];
+        relaxations.value = (response.data.meta?.relaxations as Relaxation[] | undefined) ?? [];
     } catch (error: unknown) {
         if (seq !== requestSeq) return;
 
@@ -181,6 +208,7 @@ async function search(reset = true) {
             restaurants.value = [];
             nextCursor.value = null;
             expandedTerms.value = [];
+            relaxations.value = [];
         }
     } finally {
         if (seq === requestSeq) {
@@ -416,10 +444,33 @@ watch(committedKeyword, (value) => {
             <button type="button" class="inline-clear" @click="clearAll">清除條件</button>
         </p>
         <p v-else-if="loadFailed" class="notice error" role="alert">載入失敗，請再試一次。</p>
-        <p v-else-if="!loading && restaurants.length === 0" class="notice">
-            {{ emptyMessage }}
-            <span v-if="emptySuggestions.length">{{ emptySuggestions.join('，或') }}。</span>
-        </p>
+        <!--
+            空狀態要給得出**可以按的**下一步，不是一段叫使用者自己去試的文字。
+            零結果時使用者的問題是「我做錯了什麼」，而後端已經算出「放寬哪一個
+            條件會有幾家」——把答案直接放成按鈕。
+        -->
+        <div v-else-if="!loading && restaurants.length === 0" class="notice empty-state">
+            <p>{{ emptyMessage }}</p>
+
+            <div v-if="relaxations.length" class="relaxations">
+                <p class="relaxations-lead">試試放寬這些條件：</p>
+                <button
+                    v-for="relaxation in relaxations"
+                    :key="relaxation.param"
+                    type="button"
+                    class="relaxation"
+                    @click="applyRelaxation(relaxation)"
+                >{{ relaxation.label }}（{{ relaxation.count }} 家）</button>
+            </div>
+
+            <!--
+                沒有任何可放寬的條件時才退回靜態建議——那時候「換個關鍵字」
+                才是誠實的建議，而不是一句安慰。
+            -->
+            <p v-else-if="emptySuggestions.length" class="empty-suggestions">
+                {{ emptySuggestions.join('，或') }}。
+            </p>
+        </div>
 
         <button v-if="nextCursor" type="button" class="more" :disabled="loading" @click="search(false)">
             {{ loading ? '載入中…' : '載入更多' }}
@@ -581,6 +632,42 @@ li button:hover {
     color: #718096;
     text-align: center;
     padding: 1.5rem 0;
+}
+
+.empty-state p {
+    margin: 0 0 0.75rem;
+}
+
+.relaxations {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.relaxations-lead {
+    width: 100%;
+    margin: 0 0 0.25rem !important;
+    font-size: 0.9rem;
+}
+
+.relaxation {
+    padding: 0.4rem 0.9rem;
+    border: 1px solid #2f855a;
+    border-radius: 999px;
+    background: #fff;
+    color: #2f855a;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.relaxation:hover {
+    background: #f0fff4;
+}
+
+.empty-suggestions {
+    font-size: 0.9rem;
 }
 
 .notice.error {

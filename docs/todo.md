@@ -22,7 +22,9 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
 - [x] A1 命中原因說得出全部（`matched_reasons`，不只 `matched_menu_items`）✅ 2026-09-03
       後端；**卡片顯示 2026-09-06 才補**（驗收條件要求的那一半上一輪漏做）
 - [x] A2 同義詞展開要看得見（`meta.expanded_terms`）＋ `exact=1` 逃生門 ✅ 2026-09-06
-- [ ] A3 零結果回「放寬哪一個條件會有幾家」（`meta.relaxations`）
+- [x] A3 零結果回「放寬哪一個條件會有幾家」（`meta.relaxations`）✅ 2026-09-06
+      實測四項全算 32–41ms（門檻 150ms）所以不砍；形狀改成 `{param, value, label, count}`
+      ——`venue_scope` 要改成 all 而不是移除
 - [ ] A4 真的錯字容錯：「你是不是要找…」（CJK 用 bigram，**不是** `levenshtein()`）
 - [ ] A5 搜尋範圍變成明確的控制項（`?scope=map|city|all`，API 不用改）
 - [ ] A6 建議清單的鍵盤操作與 combobox a11y（保留既有的 `@mousedown.prevent`）
@@ -38,7 +40,7 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
 - [ ] B3 常駐 quick filter ＋「更多篩選」（哪三個常駐等 A8 資料再定，第一版暫定）
 - [ ] B4 每個篩選帶「會剩幾家」（`/restaurants/facets`，先量成本）
 - [ ] B5 載入 skeleton ＋ `aria-busy`
-- [ ] B6 空狀態改成可按的下一步（接 A3／A4）
+- [x] B6 空狀態改成可按的下一步（接 A3）✅ 2026-09-06——A4 的「你是不是要找」待 A4 完成後接上
 - [x] B7 圖例補第三種 `unknown` ✅ 2026-09-06——查了：現況 **0 家**會出現灰點
       （1167 家全是 exclusive 576／friendly 591）。所以改成「真的有灰點時才列那一項」，
       而不是無條件補圖例（解釋看不到的東西）或消滅 fallback（資料真缺時會說謊）
