@@ -15,8 +15,10 @@ function fakeRestaurant(id: number) {
 
 let listPayload: { data: unknown[]; meta?: Record<string, unknown> } = { data: [] };
 const restaurantCalls: Record<string, unknown>[] = [];
+const facetsCalls: Record<string, unknown>[] = [];
+let facetsPayload: unknown = { venue_scope: [], open_now: { value: true, count: 0 }, confidence_min: null };
 
-const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) => {
+const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }): Promise<{ data: { data: unknown; meta?: Record<string, unknown> } }> => {
     if (url === '/cities') return Promise.resolve({ data: { data: cities } });
     if (url === '/restaurants') {
         restaurantCalls.push(config?.params ?? {});
@@ -41,6 +43,12 @@ const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) =
                 ],
             },
         });
+    }
+
+    if (url === '/restaurants/facets') {
+        facetsCalls.push(config?.params ?? {});
+
+        return Promise.resolve({ data: { data: facetsPayload } });
     }
 
     return Promise.resolve({ data: { data: [] } });
@@ -207,6 +215,64 @@ describe('RestaurantListView 城市切換', () => {
 
         expect(wrapper.find('.notice').text()).toContain('東京沒有符合條件的餐廳');
         expect(wrapper.find('.notice').text()).toContain('切換到其他城市');
+    });
+});
+
+describe('RestaurantListView 常駐 quick filter 帶「會剩幾家」（B4）', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        facetsCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+        facetsPayload = { venue_scope: [], open_now: { value: true, count: 0 }, confidence_min: null };
+    });
+
+    it('facets 跟主查詢送同一組條件', async () => {
+        await mountList('/restaurants?city=taichung&takeout=1');
+
+        expect(facetsCalls[facetsCalls.length - 1]?.takeout).toBe(1);
+        expect(facetsCalls[facetsCalls.length - 1]?.bbox).toBe('23.9500,120.4300,24.4500,121.4700');
+    });
+
+    it('facets 結果會傳給 FilterDrawer，quick chip 顯示數字', async () => {
+        facetsPayload = { venue_scope: [], open_now: { value: true, count: 4 }, confidence_min: null };
+
+        const { wrapper } = await mountList('/restaurants?city=taichung');
+
+        const openNowChip = wrapper.findAll('.quick-chips .chip').find((c) => c.text().includes('營業中'))!;
+        expect(openNowChip.text()).toContain('4');
+    });
+
+    /** 「載入更多」是同一組條件的下一頁，數字不會變，不用為了分頁多打一次。 */
+    it('載入更多不會重打 facets', async () => {
+        listPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: 'cur-1' } };
+        const { wrapper } = await mountList('/restaurants?city=taichung');
+        const before = facetsCalls.length;
+
+        listPayload = { data: [fakeRestaurant(2)], meta: { next_cursor: null } };
+        await wrapper.find('.more').trigger('click');
+        await flushPromises();
+
+        expect(facetsCalls.length).toBe(before);
+    });
+
+    /** facets 只是輔助資訊，查詢失敗不能把整頁弄壞——清單照常顯示。 */
+    it('facets 查詢失敗時安靜地不顯示數字，不影響清單', async () => {
+        const originalImpl = get.getMockImplementation()!;
+        get.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+            if (url === '/restaurants/facets') return Promise.reject(new Error('facets down'));
+
+            return originalImpl(url, config);
+        });
+
+        const { wrapper } = await mountList('/restaurants?city=taichung');
+
+        expect(wrapper.findAll('li')).toHaveLength(1);
+        expect(wrapper.findAll('.quick-chips .facet-count')).toHaveLength(0);
+
+        get.mockImplementation(originalImpl);
     });
 });
 

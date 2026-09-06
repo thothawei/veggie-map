@@ -222,6 +222,16 @@ export interface ApiError {
     error: { code: string; message: string; fields?: Record<string, string[]> };
 }
 
+/**
+ * `GET /restaurants/facets`（B4）：常駐 quick filter（B3）各候選值「按下去
+ * 會剩幾家」。只有這三個維度——不是全部篩選欄位，見後端 `facets()` 的說明。
+ */
+export interface RestaurantFacets {
+    venue_scope: Array<{ value: string; label: string; count: number }>;
+    open_now: { value: true; count: number };
+    confidence_min: { value: number; label: string; count: number } | null;
+}
+
 export interface RestaurantSearchParams {
     keyword?: string;
     latitude?: number;

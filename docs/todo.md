@@ -97,7 +97,10 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
       常駐，其餘（飲食類型細項、價位、8 個特色、較低的可信度門檻）收進
       「更多篩選」；FilterDrawer 是共用元件，Home／List 兩頁都吃到這個改動。
       底部「顯示 N 家結果」用現有已查到的筆數（不是 B4 的預測值，B4 還沒做）
-- [ ] B4 每個篩選帶「會剩幾家」（`/restaurants/facets`，先量成本）
+- [x] B4 每個篩選帶「會剩幾家」（`/restaurants/facets`，先量成本）✅ 2026-09-06
+      只算 B3 定案的三個常駐 quick filter（5 次 COUNT）：全表無 bbox 時實測
+      169ms、有 bbox 時 60–120ms，都在 200ms 門檻內，不用砍成更少。0 家的
+      chip 變灰但不隱藏；facets 失敗不影響主查詢，安靜地不顯示數字
 - [x] B5 載入 skeleton ＋ `aria-busy` ✅ 2026-09-06
       列表頁三張卡片形狀 skeleton（只在第一批，「載入更多」維持原本的按鈕
       文字，不疊 skeleton）；首頁地圖淡遮罩＋spinner＋sheet 展開時的 skeleton

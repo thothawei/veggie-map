@@ -165,6 +165,125 @@ paths:
                       meta: { $ref: "#/components/schemas/CursorMeta" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /restaurants/facets:
+    get:
+      operationId: getRestaurantFacets
+      tags: [Restaurants]
+      summary: 常駐 quick filter 帶「按下去會剩幾家」（B4）
+      description: >
+        跟 GET /restaurants 吃同一份篩選條件（同一個 SearchRestaurantRequest），
+        只回三個常駐 quick filter（見 B3：店家範圍／營業中／可信度最高一級）
+        各自的候選值在**目前這組其他條件不變**下會剩幾家，不分頁、不排序、
+        不回餐廳資料本身，純粹是 N 次 COUNT(*)。**刻意只算這三個，不是全部
+        篩選欄位**——那是規劃裡明講的成本控制，不要為了「更完整」多加其他欄位。
+      security: []
+      parameters:
+        - name: keyword
+          in: query
+          schema: { type: string, maxLength: 255 }
+        - name: exact
+          in: query
+          schema: { type: boolean }
+        - name: latitude
+          in: query
+          schema: { type: number, format: float, minimum: -90, maximum: 90 }
+        - name: longitude
+          in: query
+          schema: { type: number, format: float, minimum: -180, maximum: 180 }
+        - name: radius
+          in: query
+          schema: { type: number, format: float, minimum: 0.1, maximum: 50 }
+        - name: bbox
+          in: query
+          schema: { type: string }
+        - name: city
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: district
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: diet
+          in: query
+          schema: { type: string }
+        - name: venue_scope
+          in: query
+          description: 目前選的值——回應裡仍然會把它跟另外兩個候選值都算一次。
+          schema: { type: string }
+        - name: price_level
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 4 }
+        - name: rating_min
+          in: query
+          schema: { type: number, minimum: 0, maximum: 5 }
+        - name: confidence_min
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 100 }
+        - name: open_now
+          in: query
+          schema: { type: boolean }
+        - name: pet_friendly
+          in: query
+          schema: { type: boolean }
+        - name: parking
+          in: query
+          schema: { type: boolean }
+        - name: delivery
+          in: query
+          schema: { type: boolean }
+        - name: takeout
+          in: query
+          schema: { type: boolean }
+        - name: reservation
+          in: query
+          schema: { type: boolean }
+        - name: wifi
+          in: query
+          schema: { type: boolean }
+        - name: wheelchair
+          in: query
+          schema: { type: boolean }
+        - name: outdoor_seating
+          in: query
+          schema: { type: boolean }
+        - name: family_friendly
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      venue_scope:
+                        type: array
+                        description: 目前 GET /diets 的 meta.venue_scope 有幾種候選值就有幾筆。
+                        items:
+                          type: object
+                          properties:
+                            value: { type: string }
+                            label: { type: string }
+                            count: { type: integer }
+                      open_now:
+                        type: object
+                        properties:
+                          value: { type: boolean, enum: [true] }
+                          count: { type: integer }
+                      confidence_min:
+                        type: object
+                        nullable: true
+                        description: config('vegetarian.confidence_filters') 沒設值時是 null。
+                        properties:
+                          value: { type: integer }
+                          label: { type: string }
+                          count: { type: integer }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
   /admin/closures:
     get:
       operationId: listClosureSignals

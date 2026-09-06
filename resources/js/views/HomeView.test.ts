@@ -26,9 +26,11 @@ function fakeRestaurant(id: number) {
 let restaurantsPayload: { data: unknown[]; meta?: Record<string, unknown> } = { data: [] };
 const restaurantCalls: Record<string, unknown>[] = [];
 const recommendedCalls: Record<string, unknown>[] = [];
+const facetsCalls: Record<string, unknown>[] = [];
+let facetsPayload: unknown = { venue_scope: [], open_now: { value: true, count: 0 }, confidence_min: null };
 let recommendedPayload: { data: unknown[] } = { data: [] };
 
-const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) => {
+const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }): Promise<{ data: { data: unknown; meta?: Record<string, unknown> } }> => {
     if (url === '/cities') return Promise.resolve({ data: { data: cities } });
     if (url === '/restaurants') {
         restaurantCalls.push(config?.params ?? {});
@@ -39,6 +41,11 @@ const get = vi.fn((url: string, config?: { params?: Record<string, unknown> }) =
         return Promise.resolve({ data: recommendedPayload });
     }
     if (url === '/diets') return Promise.resolve({ data: { data: [] } });
+    if (url === '/restaurants/facets') {
+        facetsCalls.push(config?.params ?? {});
+
+        return Promise.resolve({ data: { data: facetsPayload } });
+    }
 
     return Promise.resolve({ data: { data: [] } });
 });
@@ -538,6 +545,64 @@ describe('HomeView 篩選也套到推薦', () => {
     });
 });
 
+describe('HomeView 常駐 quick filter 帶「會剩幾家」（B4）', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        facetsCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        restaurantsPayload = { data: [] };
+        facetsPayload = { venue_scope: [], open_now: { value: true, count: 0 }, confidence_min: null };
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('facets 跟主查詢送同一組條件', async () => {
+        await mountHome('/?city=taichung&takeout=1');
+
+        expect(facetsCalls[facetsCalls.length - 1]?.takeout).toBe(1);
+        expect(facetsCalls[facetsCalls.length - 1]?.venue_scope).toBe('exclusive');
+    });
+
+    /**
+     * 用「營業中」這個 quick chip 驗證，不是 venue_scope——這個測試檔的
+     * `/diets` mock 沒有帶 venue_scope meta（那是另一組測試在管），
+     * 「營業中」不依賴那份 meta，才不會測到不相干的東西。
+     */
+    it('facets 結果會傳給 FilterDrawer，quick chip 顯示數字', async () => {
+        facetsPayload = {
+            venue_scope: [],
+            open_now: { value: true, count: 1 },
+            confidence_min: null,
+        };
+
+        const { wrapper } = await mountHome('/?city=taichung');
+
+        const openNowChip = wrapper.findAll('.quick-chips .chip').find((c) => c.text().includes('營業中'))!;
+        expect(openNowChip.text()).toContain('1');
+    });
+
+    /** facets 只是輔助資訊，查詢失敗不能把整頁弄壞——地圖與清單照常顯示。 */
+    it('facets 查詢失敗時安靜地不顯示數字，不影響其他功能', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+
+        const originalImpl = get.getMockImplementation()!;
+        get.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+            if (url === '/restaurants/facets') return Promise.reject(new Error('facets down'));
+
+            return originalImpl(url, config);
+        });
+
+        const { wrapper } = await mountHome('/?city=taichung');
+
+        expect(wrapper.find('.map-badge').exists()).toBe(true);
+        expect(wrapper.findAll('.quick-chips .facet-count')).toHaveLength(0);
+
+        get.mockImplementation(originalImpl);
+    });
+});
+
 describe('HomeView 地圖範圍', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -778,6 +843,9 @@ describe('HomeView 無效條件', () => {
             if (url === '/restaurants') {
                 return Promise.reject({ isAxiosError: true, response: { status: 422, data: {} } });
             }
+            if (url === '/restaurants/facets') {
+                return Promise.resolve({ data: { data: { venue_scope: [], open_now: { value: true, count: 0 }, confidence_min: null } } });
+            }
 
             return Promise.resolve({ data: { data: [] } });
         });
@@ -792,6 +860,9 @@ describe('HomeView 無效條件', () => {
         get.mockImplementation((url: string) => {
             if (url === '/cities') return Promise.resolve({ data: { data: cities } });
             if (url === '/restaurants') return Promise.reject(new Error('network'));
+            if (url === '/restaurants/facets') {
+                return Promise.resolve({ data: { data: { venue_scope: [], open_now: { value: true, count: 0 }, confidence_min: null } } });
+            }
 
             return Promise.resolve({ data: { data: [] } });
         });

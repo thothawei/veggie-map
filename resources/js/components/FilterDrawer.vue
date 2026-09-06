@@ -10,23 +10,42 @@ import type {
     DietType,
     Feature,
     MenuItemDiet,
+    RestaurantFacets,
     RestaurantSearchParams,
     VenueScopeMeta,
 } from '@/types';
 
 const filters = defineModel<Partial<RestaurantSearchParams>>('filters', { required: true });
 
-defineProps<{
+const props = defineProps<{
     /**
-     * 目前條件下有幾家店（B3：「顯示 N 家結果」）。這一輪沒有 B4 的
-     * `/restaurants/facets`，所以這是「現在已經查到的筆數」，不是「按下某個
-     * 篩選之後會剩幾家」的預測值——後者要等 B4 才做得到，先用現有的數字
-     * 讓按鈕有意義，總比完全不顯示好。
+     * 目前條件下有幾家店（B3：「顯示 N 家結果」）。沒有 `facets` 時這是「現在
+     * 已經查到的筆數」；有 `facets` 時（B4）優先顯示三個候選值加總——兩者
+     * 通常一樣，只有在使用者已經選了某個 quick chip 時才會不同（那時候
+     * `resultCount` 是「選了這個之後」，`facets` 說的是「換成別的候選會怎樣」，
+     * 各自負責不同的問題，不需要對齊）。
      */
     resultCount?: number;
     /** 目前這批是不是還有更多（cursor 分頁的下一頁），顯示成「100+ 家」。 */
     hasMoreResults?: boolean;
+    /**
+     * `GET /restaurants/facets` 的結果（B4）：常駐 quick filter 每個候選值
+     * 按下去會剩幾家。沒有帶這個 prop（或還在載入中）時 quick chip 不顯示
+     * 數字——不要顯示 0 或空字串假裝是答案。
+     */
+    facets?: RestaurantFacets | null;
 }>();
+
+function scopeFacetCount(value: string): number | undefined {
+    return props.facets?.venue_scope?.find((option) => option.value === value)?.count;
+}
+
+// `?.` 一路到底而不是只擋 `facets` 本身——後端／測試 mock 任何一層漏了欄位
+// 都只會讓數字不顯示，不會讓整個 FilterDrawer 崩潰（2026-09-06 實測踩到：
+// 舊測試的 catch-all mock 回 `{ data: [] }`，`facets.value` 變成陣列，
+// `.open_now.count` 直接炸掉整個元件）。
+const openNowFacetCount = computed(() => props.facets?.open_now?.count);
+const confidenceFacetCount = computed(() => props.facets?.confidence_min?.count);
 
 const diets = ref<DietType[]>([]);
 const features = ref<Feature[]>([]);
@@ -265,11 +284,14 @@ function clearAll() {
                     :key="option.value"
                     type="button"
                     class="chip"
-                    :class="{ active: currentScope === option.value }"
+                    :class="{ active: currentScope === option.value, 'zero-count': scopeFacetCount(option.value) === 0 }"
                     :aria-pressed="currentScope === option.value"
                     @click="selectScope(option.value)"
                 >
                     {{ option.label }}
+                    <span v-if="scopeFacetCount(option.value) !== undefined" class="facet-count">
+                        （{{ scopeFacetCount(option.value) }}）
+                    </span>
                 </button>
             </div>
 
@@ -278,11 +300,12 @@ function clearAll() {
                 <button
                     type="button"
                     class="chip"
-                    :class="{ active: Boolean(filters.open_now) }"
+                    :class="{ active: Boolean(filters.open_now), 'zero-count': openNowFacetCount === 0 }"
                     :aria-pressed="Boolean(filters.open_now)"
                     @click="toggleOpenNow"
                 >
                     營業中
+                    <span v-if="openNowFacetCount !== undefined" class="facet-count">（{{ openNowFacetCount }}）</span>
                 </button>
             </div>
 
@@ -290,11 +313,12 @@ function clearAll() {
                 <button
                     type="button"
                     class="chip"
-                    :class="{ active: filters.confidence_min === quickConfidence.value }"
+                    :class="{ active: filters.confidence_min === quickConfidence.value, 'zero-count': confidenceFacetCount === 0 }"
                     :aria-pressed="filters.confidence_min === quickConfidence.value"
                     @click="toggleConfidence(quickConfidence.value)"
                 >
                     {{ quickConfidence.label }}
+                    <span v-if="confidenceFacetCount !== undefined" class="facet-count">（{{ confidenceFacetCount }}）</span>
                 </button>
             </div>
         </div>
@@ -530,6 +554,18 @@ function clearAll() {
     background: var(--vm-green-600);
     border-color: var(--vm-green-600);
     color: var(--vm-white);
+}
+
+/* 「按下去會剩幾家」（B4）。文字放在 chip 裡面，不是另外一個徽章——
+   跟晶片本身的按下去動作是同一件事，不需要分開強調。 */
+.facet-count {
+    opacity: 0.75;
+    font-size: 0.8em;
+}
+
+/* 0 家的 chip 變灰但不隱藏——隱藏會讓使用者以為這個選項消失了。 */
+.chip.zero-count {
+    opacity: 0.55;
 }
 
 .chip.active:hover {

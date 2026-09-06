@@ -4542,3 +4542,54 @@ CSS 原始碼看不出來——這條規則本身完全沒有語法錯誤。
 
 **下一步**：A1–A9、B0–B3、B5–B8 全部完成。只剩 B4（每個篩選帶「會剩幾家」，
 `/restaurants/facets`，要先量成本），等 A8 的資料多跑一段時間再一起評估。
+
+
+## 2026-09-06 — B4：每個篩選帶「會剩幾家」
+
+**做什麼**：`GET /restaurants/facets`（跟 `/restaurants` 共用同一份
+`SearchRestaurantRequest` 驗證）回 B3 三個常駐 quick filter 各候選值「其他
+條件不變，換成這個候選值」會剩幾家：
+
+- `venue_scope` 三個候選值（exclusive／friendly／all）都算。
+- `open_now` 只算「打開」那個值——「關掉」就是不帶這個參數，等於當前查詢
+  本身的筆數，不用再算一次。
+- `confidence_min` 只算最高一級（跟 B3 的 quick chip 是同一個），較低的
+  門檻在「更多篩選」面板裡，那裡還沒有「會剩幾家」。
+- 做法跟 A3 的 `relaxations()` 同一套：每個候選值是「其他篩選不變，換掉
+  這一個維度」呼叫既有的 `countFor()`，不是另外寫一份查詢邏輯。
+
+**先量成本（規劃明講的前提）**：全表無 bbox 時（最壞情況）實測 **169ms**，
+有 bbox 收窄時 **60–120ms**——都在規劃訂的 200ms 門檻內，不需要「退而求其次
+只算三個」，因為 B3 從一開始就只做了這三個（5 次 COUNT），沒有先做 20 個
+再砍的必要。
+
+**前端**：`FilterDrawer` 新增 `facets` prop，quick chip 顯示「（N）」，
+0 家的 chip 加 `zero-count` class 變灰但不隱藏。`HomeView`／
+`RestaurantListView` 跟主查詢平行打一支 `/restaurants/facets`（同一組參數），
+失敗就安靜地不顯示數字，不影響地圖／清單本身。列表頁「載入更多」不重打
+facets——同一組條件的下一頁，數字不會變。
+
+**踩到的坑**：`props.facets?.open_now.count` 只擋了 `facets` 本身是
+null/undefined，`facets` 存在但 `open_now` 缺欄位（測試的 catch-all mock
+回一個陣列蓋掉它）時 `.count` 直接讓整個 `FilterDrawer` 崩潰。改成
+`?.` 一路到底（`facets?.open_now?.count`），並且補一條「facets 形狀不完整
+不會讓元件崩潰」的測試釘住這件事。
+
+**驗證**
+
+- 後端新增 7 條測試（`RestaurantFacetsTest`：三個維度各自的候選值計數、
+  尊重其他篩選、資料變動後數字跟著變、不分頁不回餐廳資料、驗證規則不因
+  換端點變鬆）；後端全套 707 條全綠，Pint／PHPStan 乾淨。
+- 前端新增 11 條（FilterDrawer 3 條、Home 3 條、List 4 條，含「facets
+  失敗不影響主功能」與「facets 形狀不完整不崩潰」）；全套 414 條全綠，
+  eslint／vue-tsc／`npm run build` 乾淨。
+- 反向驗證：後端把某個候選值的 count 硬寫成固定值 → 1 條紅；前端把
+  `openNowFacetCount` 硬寫成 `undefined` → 3 條紅（三個檔案各一條）。
+- 真瀏覽器：List 頁「純素食店 (184) 素食友善 (63) 全部 (247) 營業中 (16)
+  高度可信 (0)」，「高度可信」的 0 家 chip `opacity:0.55` 變灰但還在；
+  Home 頁同樣的數字隨地圖視角變動（116/39/155/10/0）。
+
+**這一批（plan-2026-09-search-ux.md）到此全部完成**：A1–A9（搜尋強化）
+與 B0–B8（搜尋畫面 UI/UX）都已實作、測試、真瀏覽器驗證過。過程中發現且
+記下的新問題：單字剝離擴散（todo.md，A4 相關）、首頁沒有手動排序控制項
+（B1 相關）。

@@ -11,7 +11,7 @@ import { useSearchScope } from '@/composables/useSearchScope';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
 import { formatAddress, formatCuisines, formatMatchReasons, formatOpenStatus } from '@/lib/format';
 import { googleMapsUrl } from '@/lib/geo';
-import type { ApiSuccess, DidYouMean, ExpandedTerm, Relaxation, Restaurant } from '@/types';
+import type { ApiSuccess, DidYouMean, ExpandedTerm, Relaxation, Restaurant, RestaurantFacets } from '@/types';
 
 const router = useRouter();
 const route = useRoute();
@@ -188,6 +188,34 @@ const searchIsGlobal = computed(() => scope.value === 'all' && activeCity.value 
 // 把畫面蓋回舊資料；載入更多還會把舊的一頁重複接上去。用序號讓過期回應直接丟掉。
 let requestSeq = 0;
 
+/** B4：常駐 quick filter 各候選值會剩幾家。null＝還沒載到或查詢失敗。 */
+const facets = ref<RestaurantFacets | null>(null);
+
+/**
+ * 跟 search() 共用同一個序號：這是附加資訊，不是主查詢，用同一把尺量
+ * 「過不過期」就好，不用另外維護一組序號。
+ */
+async function loadFacets(seq: number) {
+    try {
+        const response = await client.get<ApiSuccess<RestaurantFacets>>('/restaurants/facets', {
+            params: {
+                keyword: committedKeyword.value || undefined,
+                exact: exactMode.value ? 1 : undefined,
+                bbox: bbox.value,
+                ...apiFilterParams(filters.value),
+            },
+        });
+
+        if (seq !== requestSeq) return;
+
+        facets.value = response.data.data;
+    } catch {
+        if (seq !== requestSeq) return;
+
+        facets.value = null;
+    }
+}
+
 async function search(reset = true) {
     const seq = ++requestSeq;
     loading.value = true;
@@ -214,6 +242,11 @@ async function search(reset = true) {
         expandedTerms.value = (response.data.meta?.expanded_terms as ExpandedTerm[] | undefined) ?? [];
         relaxations.value = (response.data.meta?.relaxations as Relaxation[] | undefined) ?? [];
         didYouMean.value = (response.data.meta?.did_you_mean as DidYouMean[] | undefined) ?? [];
+
+        // 常駐 quick filter「按下去會剩幾家」（B4）。只在換條件時查一次，
+        // 「載入更多」是同一組條件的下一頁，數字不會變，不用重查。
+        // 不阻塞主查詢——facets 只是輔助，failed 就安靜地不顯示數字。
+        if (reset) void loadFacets(seq);
     } catch (error: unknown) {
         if (seq !== requestSeq) return;
 
@@ -353,7 +386,12 @@ watch(committedKeyword, (value) => {
             -->
             <ScopeSelect v-model="scope" :options="['city', 'all']" />
         </div>
-        <FilterDrawer v-model:filters="filters" :result-count="restaurants.length" :has-more-results="Boolean(nextCursor)" />
+        <FilterDrawer
+            v-model:filters="filters"
+            :result-count="restaurants.length"
+            :has-more-results="Boolean(nextCursor)"
+            :facets="facets"
+        />
 
         <div class="sort-bar">
             <label for="sort-select">排序</label>

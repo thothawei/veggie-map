@@ -97,6 +97,19 @@ class RestaurantController extends Controller
     }
 
     /**
+     * 常駐 quick filter（B3）帶「按下去會剩幾家」（B4）。吃跟 index() 一樣的
+     * 篩選條件（`SearchRestaurantRequest` 共用同一份驗證規則），只是不分頁、
+     * 不排序、不 eager load，純粹算 COUNT(*)。
+     */
+    public function facets(SearchRestaurantRequest $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $this->restaurants->facets($request->validated()),
+        ]);
+    }
+
+    /**
      * 首頁「推薦餐廳」用（見總體規劃第三十節）：候選集是同一套 search()
      * （半徑或 bbox），
      * RuleBasedRecommendationService 依 distance/rating/vegetarian_confidence/

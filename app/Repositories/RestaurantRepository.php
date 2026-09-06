@@ -354,6 +354,63 @@ class RestaurantRepository
     }
 
     /**
+     * 每個常駐 quick filter（B3）帶「按下去會剩幾家」（B4）。
+     *
+     * **只算這三個，不是全部 20 個篩選**——這是規劃裡明講的成本控制：
+     * 「先量成本，若超過 200ms 就退而求其次只算常駐的三個」。這裡直接從
+     * 「只做三個」開始，而不是全部做完再砍，因為 B3 已經把常駐的三個定案了，
+     * 沒有先做 20 個再砍的必要——那樣多做的 17 個查詢本來就不會被用到。
+     *
+     * 每個候選值是「其他條件不變，只有這一個維度換成候選值」算一次 COUNT(*)，
+     * 跟 relaxations() 同一個做法、用同一個 countFor()。venue_scope 三個
+     * 候選值都要算（使用者可能正選著其中一個，也想知道切到別的會剩幾家）；
+     * open_now／confidence_min 只算「打開」那一個值，因為「關掉」就是不帶
+     * 這個參數，等於原本查詢本身的筆數，不需要再算一次。
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{
+     *     venue_scope: list<array{value: string, label: string, count: int}>,
+     *     open_now: array{value: bool, count: int},
+     *     confidence_min: array{value: int, label: string, count: int}|null,
+     * }
+     */
+    public function facets(array $filters): array
+    {
+        $scopeParam = DietCatalog::venueScopeParam();
+
+        $venueScope = [];
+
+        foreach (DietCatalog::venueScopeOptions() as $option) {
+            $venueScope[] = [
+                'value' => $option['value'],
+                'label' => $option['label'],
+                'count' => $this->countFor([...$filters, $scopeParam => $option['value']]),
+            ];
+        }
+
+        $openNow = [
+            'value' => true,
+            'count' => $this->countFor([...$filters, 'open_now' => true]),
+        ];
+
+        /** @var list<array{value: int, label: string}> $confidenceFilters */
+        $confidenceFilters = config('vegetarian.confidence_filters', []);
+        // 只挑最高一級——跟 FilterDrawer 的 quick chip 是同一個，不是列出全部
+        // 門檻。較低的門檻在「更多篩選」面板裡，那裡還沒有「會剩幾家」。
+        $quickConfidence = $confidenceFilters === [] ? null : $confidenceFilters[count($confidenceFilters) - 1];
+
+        return [
+            'venue_scope' => $venueScope,
+            'open_now' => $openNow,
+            'confidence_min' => $quickConfidence === null ? null : [
+                'value' => $quickConfidence['value'],
+                'label' => $quickConfidence['label'],
+                'count' => $this->countFor([...$filters, 'confidence_min' => $quickConfidence['value']]),
+            ],
+        ];
+    }
+
+    /**
      * 零結果時的「你是不是要找…」。
      *
      * 候選集合刻意不是整張表，是四份小清單：**同義詞表的詞**、店名、料理種類的

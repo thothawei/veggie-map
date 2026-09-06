@@ -489,3 +489,99 @@ describe('FilterDrawer 底部「顯示 N 家結果」（B3）', () => {
         expect(footer.find('.show-results').exists()).toBe(true);
     });
 });
+
+describe('FilterDrawer quick chip 帶「會剩幾家」（B4）', () => {
+    beforeEach(() => {
+        setViewportMatches(true);
+        resetVenueScopeMeta();
+        // 前面幾個 describe 區塊各自覆寫過 client.get 的 mock 實作，
+        // 而且從沒重設回模組頂層的預設值——這裡要自己指定一份完整的
+        // venue_scope meta，不能依賴「跑到這裡時剛好是哪個區塊留下的值」。
+        vi.mocked(client.get).mockImplementation((url: string) => {
+            if (url === '/diets') {
+                return Promise.resolve({
+                    data: {
+                        data: [],
+                        meta: {
+                            venue_scope: {
+                                param: 'venue_scope',
+                                default: 'exclusive',
+                                group_label: '店家類型',
+                                values: [
+                                    { value: 'exclusive', label: '純素食店' },
+                                    { value: 'friendly', label: '素食友善' },
+                                    { value: 'all', label: '全部' },
+                                ],
+                            },
+                            confidence_filters: [
+                                { value: 30, label: '有查證' },
+                                { value: 60, label: '高度可信' },
+                            ],
+                        },
+                    },
+                });
+            }
+
+            return Promise.resolve({ data: { data: [] } });
+        });
+    });
+
+    it('沒有 facets prop 時 quick chip 不顯示數字', async () => {
+        const wrapper = await mountDrawer();
+
+        const venueChip = wrapper.findAll('.quick-chips .chip').find((c) => c.text().includes('純素食店'))!;
+        expect(venueChip.find('.facet-count').exists()).toBe(false);
+    });
+
+    it('有 facets 時 quick chip 顯示對應的候選值數字', async () => {
+        const FilterDrawer = (await import('./FilterDrawer.vue')).default;
+        const wrapper = mount(FilterDrawer, {
+            props: {
+                filters: {},
+                facets: {
+                    venue_scope: [
+                        { value: 'exclusive', label: '純素食店', count: 12 },
+                        { value: 'friendly', label: '素食友善', count: 0 },
+                        { value: 'all', label: '全部', count: 12 },
+                    ],
+                    open_now: { value: true, count: 3 },
+                    confidence_min: { value: 60, label: '高度可信', count: 5 },
+                },
+                'onUpdate:filters': () => {},
+            },
+        });
+        await flushPromises();
+
+        const chips = wrapper.findAll('.quick-chips .chip');
+        const exclusiveChip = chips.find((c) => c.text().includes('純素食店'))!;
+        const friendlyChip = chips.find((c) => c.text().includes('素食友善'))!;
+        const openNowChip = chips.find((c) => c.text().includes('營業中'))!;
+        const confidenceChip = chips.find((c) => c.text().includes('高度可信'))!;
+
+        expect(exclusiveChip.text()).toContain('12');
+        expect(openNowChip.text()).toContain('3');
+        expect(confidenceChip.text()).toContain('5');
+
+        // 0 家的 chip 變灰但不隱藏——隱藏會讓使用者以為選項消失了。
+        expect(friendlyChip.exists()).toBe(true);
+        expect(friendlyChip.classes()).toContain('zero-count');
+    });
+
+    /**
+     * 防呆：`facets` 缺欄位（例如某個維度算失敗、後端調整過回應形狀）不能讓
+     * 整個 FilterDrawer 崩潰——2026-09-06 實測踩過，舊測試的 catch-all mock
+     * 回一個陣列蓋掉 facets，`.open_now.count` 直接炸掉整個元件。
+     */
+    it('facets 形狀不完整時不會讓元件崩潰，只是不顯示那個數字', async () => {
+        const FilterDrawer = (await import('./FilterDrawer.vue')).default;
+
+        expect(() => mount(FilterDrawer, {
+            props: {
+                filters: {},
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                facets: [] as any,
+                'onUpdate:filters': () => {},
+            },
+        })).not.toThrow();
+    });
+});

@@ -13,7 +13,7 @@ import { apiFilterParams, useFilterQuery } from '@/composables/useFilterQuery';
 import { SEARCH_SCOPES, useSearchScope, type SearchScope } from '@/composables/useSearchScope';
 import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
 import { formatBbox } from '@/lib/geo';
-import type { ApiSuccess, GeocodedPlace, Restaurant, SuggestedRestaurant } from '@/types';
+import type { ApiSuccess, GeocodedPlace, Restaurant, RestaurantFacets, SuggestedRestaurant } from '@/types';
 
 const router = useRouter();
 const route = useRoute();
@@ -32,6 +32,9 @@ const { cities, loading: citiesLoading, loadFailed: citiesLoadFailed, activeCity
 });
 
 const restaurants = ref<Restaurant[]>([]);
+/** B4：常駐 quick filter 各候選值會剩幾家。null＝還沒載到或查詢失敗，這時候
+ * quick chip 不顯示數字，不假裝知道答案。 */
+const facets = ref<RestaurantFacets | null>(null);
 const recommended = ref<Restaurant[]>([]);
 const loading = ref(false);
 const loadFailed = ref(false);
@@ -117,29 +120,29 @@ async function loadByBounds() {
         const center = scopeCenter(bboxValue);
         const filterParams = apiFilterParams(filters.value);
 
-        const [restaurantsResult, recommendedResult] = await Promise.allSettled([
-            client.get<ApiSuccess<Restaurant[]>>('/restaurants', {
-                params: keyword.value
-                    ? {
-                        keyword: keyword.value,
-                        bbox: bboxValue,
-                        latitude: center?.lat,
-                        longitude: center?.lng,
-                        sort: 'relevance',
-                        per_page: 100,
-                        ...filterParams,
-                    }
-                    : {
-                        bbox: bboxValue,
-                        latitude: center?.lat,
-                        longitude: center?.lng,
-                        // 沒有座標（scope=all）時不送 sort，後端自己退回 newest；
-                        // 硬送 sort=distance 但沒座標會被後端當成請求缺 latitude/longitude，回 422。
-                        sort: center ? 'distance' : undefined,
-                        per_page: 100,
-                        ...filterParams,
-                    },
-            }),
+        const restaurantParams = keyword.value
+            ? {
+                keyword: keyword.value,
+                bbox: bboxValue,
+                latitude: center?.lat,
+                longitude: center?.lng,
+                sort: 'relevance',
+                per_page: 100,
+                ...filterParams,
+            }
+            : {
+                bbox: bboxValue,
+                latitude: center?.lat,
+                longitude: center?.lng,
+                // 沒有座標（scope=all）時不送 sort，後端自己退回 newest；
+                // 硬送 sort=distance 但沒座標會被後端當成請求缺 latitude/longitude，回 422。
+                sort: center ? 'distance' : undefined,
+                per_page: 100,
+                ...filterParams,
+            };
+
+        const [restaurantsResult, recommendedResult, facetsResult] = await Promise.allSettled([
+            client.get<ApiSuccess<Restaurant[]>>('/restaurants', { params: restaurantParams }),
             // 後端 RuleBasedRecommendationService 依 distance/rating/vegetarian_confidence/
             // feature_match/popularity/freshness 加權排序（見總體規劃第三十節），不是單純
             // 依評分排序，所以是獨立一支 API，不是從上面那批結果在前端隨便切幾筆。
@@ -152,6 +155,10 @@ async function loadByBounds() {
                     ...filterParams,
                 },
             }),
+            // 常駐 quick filter「按下去會剩幾家」（B4）。跟主查詢送同一組
+            // 參數——sort/per_page 後端不會用來算 facets，留著也無妨，不用
+            // 特地砍掉，少一個要注意「這裡跟主查詢是不是同步」的地方。
+            client.get<ApiSuccess<RestaurantFacets>>('/restaurants/facets', { params: restaurantParams }),
         ]);
 
         if (seq !== requestSeq) return;
@@ -173,6 +180,10 @@ async function loadByBounds() {
 
         recommended.value =
             recommendedResult.status === 'fulfilled' ? recommendedResult.value.data.data : [];
+
+        // facets 只是輔助（讓 quick chip 顯示數字），失敗就安靜地不顯示數字——
+        // 不能因為這個附加資訊查詢失敗就把整個畫面標成「載入失敗」。
+        facets.value = facetsResult.status === 'fulfilled' ? facetsResult.value.data.data : null;
     } catch {
         if (seq !== requestSeq) return;
 
@@ -412,7 +423,12 @@ watch(sheetExpanded, (expanded) => {
                     只顯示符合「{{ keyword }}」的餐廳
                     <button type="button" @click="clearKeyword">清除</button>
                 </p>
-                <FilterDrawer v-model:filters="filters" :result-count="restaurants.length" :has-more-results="hasMore" />
+                <FilterDrawer
+                    v-model:filters="filters"
+                    :result-count="restaurants.length"
+                    :has-more-results="hasMore"
+                    :facets="facets"
+                />
             </div>
 
             <RestaurantMap
