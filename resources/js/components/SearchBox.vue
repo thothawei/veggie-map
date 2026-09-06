@@ -14,6 +14,62 @@ const query = ref('');
 const results = ref<GeocodedPlace[]>([]);
 const suggestions = ref<RestaurantSuggestions>({ restaurants: [], cuisines: [], districts: [] });
 
+/* ---------- 最近搜尋（A7） ---------- */
+
+const RECENT_SEARCHES_KEY = 'veggiemap:recent-searches';
+const MAX_RECENT_SEARCHES = 5;
+
+/**
+ * 只存字串，不存熱門搜尋——熱門需要 A8 的資料先跑一陣子，而且有隱私與冷啟動問題
+ * （見 plan-2026-09-search-ux.md A7）。localStorage 可能被封鎖（私密瀏覽模式、
+ * 使用者關閉網站資料），記不住就退回空清單，不影響搜尋本身能不能用。
+ */
+function loadRecentSearches(): string[] {
+    try {
+        const raw = localStorage.getItem(RECENT_SEARCHES_KEY);
+        const parsed: unknown = raw ? JSON.parse(raw) : [];
+
+        return Array.isArray(parsed)
+            ? parsed.filter((value): value is string => typeof value === 'string').slice(0, MAX_RECENT_SEARCHES)
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+const recentSearches = ref<string[]>(loadRecentSearches());
+
+/** 同一個詞再搜一次＝移到最前面，不是變成兩筆。 */
+function rememberSearch(term: string) {
+    const trimmed = term.trim();
+
+    if (trimmed === '') return;
+
+    const next = [trimmed, ...recentSearches.value.filter((value) => value !== trimmed)].slice(
+        0,
+        MAX_RECENT_SEARCHES,
+    );
+
+    recentSearches.value = next;
+
+    try {
+        localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next));
+    } catch {
+        // 存不進去就算了——這是方便功能，不是搜尋能不能動的必要條件。
+    }
+}
+
+function clearRecentSearches() {
+    recentSearches.value = [];
+    showResults.value = false;
+
+    try {
+        localStorage.removeItem(RECENT_SEARCHES_KEY);
+    } catch {
+        // 同上。
+    }
+}
+
 /**
  * 已經替哪個字串查過地點。地點查詢只在按下搜尋／Enter 時才發生，而下拉在打字時
  * 就打開了——沒有這個旗標的話，打完字還沒按搜尋的那段時間，清單會顯示
@@ -54,7 +110,9 @@ function onInput() {
 
     if (q.length < SUGGEST_MIN_LENGTH) {
         suggestions.value = { restaurants: [], cuisines: [], districts: [] };
-        showResults.value = false;
+        // 打字打回空字串＝回到「還沒開始搜尋」的狀態，有最近搜尋就顯示它們，
+        // 不是直接關掉清單。
+        showResults.value = recentSearches.value.length > 0;
 
         return;
     }
@@ -148,6 +206,7 @@ function searchByKeyword() {
         return;
     }
 
+    rememberSearch(keyword);
     showResults.value = false;
     emit('keyword-search', keyword);
 }
@@ -170,12 +229,14 @@ function selectRestaurant(restaurant: SuggestedRestaurant) {
 
 /** 選料理種類／行政區＝用那個詞做一次關鍵字搜尋，後端本來就比對這兩種欄位。 */
 function selectTerm(term: string) {
+    rememberSearch(term);
     query.value = term;
     showResults.value = false;
     emit('keyword-search', term);
 }
 
 function select(place: GeocodedPlace) {
+    rememberSearch(place.display_name);
     query.value = place.display_name;
     showResults.value = false;
     emit('place-selected', place);
@@ -193,9 +254,16 @@ type Option =
     | { kind: 'restaurant'; key: string; restaurant: SuggestedRestaurant }
     | { kind: 'cuisine'; key: string; label: string }
     | { kind: 'district'; key: string; city: string; district: string }
-    | { kind: 'place'; key: string; place: GeocodedPlace };
+    | { kind: 'place'; key: string; place: GeocodedPlace }
+    | { kind: 'recent'; key: string; term: string };
 
 const options = computed<Option[]>(() => {
+    // 輸入框空著時清單是「最近搜尋」，不是「搜尋餐廳『』」這種沒有意義的項目——
+    // 兩者互斥，同一時間只會出現一種。
+    if (query.value.trim() === '') {
+        return recentSearches.value.map((term) => ({ kind: 'recent' as const, key: `recent-${term}`, term }));
+    }
+
     const list: Option[] = [{ kind: 'keyword', key: 'keyword' }];
 
     for (const restaurant of suggestions.value.restaurants) {
@@ -294,13 +362,16 @@ function activate(option: Option) {
         case 'place':
             select(option.place);
             break;
+        case 'recent':
+            selectTerm(option.term);
+            break;
     }
 }
 
 function onArrow(event: KeyboardEvent, delta: number) {
-    // 下拉關著時 ↓ 先把它打開（輸入框有字才有東西可開）。
+    // 下拉關著時先把它打開：輸入框有字，或者空著但有最近搜尋可以顯示。
     if (!showResults.value) {
-        if (query.value.trim() === '') return;
+        if (query.value.trim() === '' && recentSearches.value.length === 0) return;
 
         showResults.value = true;
         activeIndex.value = -1;
@@ -362,7 +433,7 @@ function onTab() {
             @keydown.enter="onEnter"
             @keydown.esc="onEscape"
             @keydown.tab="onTab"
-            @focus="showResults = query.trim().length > 0"
+            @focus="showResults = query.trim().length > 0 || recentSearches.length > 0"
             @blur="handleBlur"
         />
         <!--
@@ -376,6 +447,16 @@ function onTab() {
         </button>
 
         <ul v-if="showResults" :id="listboxId" ref="listEl" class="results" role="listbox" aria-label="搜尋建議">
+            <!--
+              「最近搜尋」的標題列不是選項（沒有 role="option"，鍵盤游標不會停在
+              它上面），跟下面 empty-item 是同一個做法。清除按鈕也要
+              @mousedown.prevent，理由跟其他候選項一樣：不擋的話點下去會先讓
+              input 失焦，清單在按鈕的 click 事件觸發前就被 handleBlur 關掉了。
+            -->
+            <li v-if="query.trim() === '' && options.length" class="recent-header" role="presentation">
+                最近搜尋
+                <button type="button" class="clear-recent" @mousedown.prevent="clearRecentSearches">清除</button>
+            </li>
             <li
                 v-for="(option, index) in options"
                 :id="optionId(index)"
@@ -384,7 +465,10 @@ function onTab() {
                 :aria-selected="index === activeIndex"
                 :class="[
                     option.kind === 'keyword' ? 'keyword-option' : '',
-                    option.kind === 'restaurant' || option.kind === 'cuisine' || option.kind === 'district'
+                    option.kind === 'restaurant'
+                        || option.kind === 'cuisine'
+                        || option.kind === 'district'
+                        || option.kind === 'recent'
                         ? 'suggestion'
                         : '',
                     { active: index === activeIndex },
@@ -405,8 +489,11 @@ function onTab() {
                 <template v-else-if="option.kind === 'district'">
                     {{ option.city }} {{ option.district }}<span class="hint">地區</span>
                 </template>
-                <template v-else>
+                <template v-else-if="option.kind === 'place'">
                     {{ option.place.display_name }}
+                </template>
+                <template v-else>
+                    {{ option.term }}
                 </template>
             </li>
             <!--
@@ -479,6 +566,26 @@ button:disabled {
 .results li:hover,
 .results li.active {
     background: #f0fff4;
+}
+
+.results .recent-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.35rem 0.75rem;
+    color: #718096;
+    font-size: 0.8rem;
+    cursor: default;
+}
+
+.results .clear-recent {
+    padding: 0;
+    border: none;
+    background: none;
+    color: #2f855a;
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-decoration: underline;
 }
 
 .results .keyword-option {

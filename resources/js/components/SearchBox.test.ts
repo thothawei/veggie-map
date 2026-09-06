@@ -8,6 +8,12 @@ vi.mock('@/api/client', () => ({
     default: { get: (...args: unknown[]) => get(...args) },
 }));
 
+// 最近搜尋（A7）存在 localStorage，是跨測試共用的真實瀏覽器 API，不清掉的話
+// 前一條測試搜過的字會被下一條看到——每條測試都要從空的最近搜尋清單開始。
+beforeEach(() => {
+    localStorage.clear();
+});
+
 describe('SearchBox', () => {
     it('geocode 失敗時顯示錯誤，不是靜默沒反應', async () => {
         get.mockRejectedValueOnce(new Error('network'));
@@ -440,5 +446,171 @@ describe('SearchBox 鍵盤操作與 a11y（A6）', () => {
         wrapper.findAll('[role="option"]')[1].element.dispatchEvent(event);
 
         expect(event.defaultPrevented).toBe(true);
+    });
+});
+
+describe('SearchBox 最近搜尋（A7）', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        get.mockReset();
+        get.mockResolvedValue({ data: { data: { restaurants: [], cuisines: [], districts: [] } } });
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    async function typeAndSettle(wrapper: ReturnType<typeof mount>, value: string) {
+        await wrapper.find('input').setValue(value);
+        await vi.advanceTimersByTimeAsync(300);
+        await flushPromises();
+    }
+
+    it('第一次使用、還沒有最近搜尋時，focus 空白輸入框不會打開清單', async () => {
+        const wrapper = mount(SearchBox);
+        await wrapper.find('input').trigger('focus');
+
+        expect(wrapper.find('[role="listbox"]').exists()).toBe(false);
+    });
+
+    it('搜過的關鍵字會存起來，下次 focus 空輸入框就看得到', async () => {
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '拉麵');
+        await wrapper.find('.keyword-option').trigger('mousedown');
+
+        expect(wrapper.emitted('keyword-search')?.[0]).toEqual(['拉麵']);
+
+        // 換一顆全新的 SearchBox（模擬下次打開頁面）：localStorage 是真的存進去了，
+        // 不是只活在同一個元件實例的記憶體裡。
+        const fresh = mount(SearchBox);
+        await fresh.find('input').trigger('focus');
+
+        const options = fresh.findAll('[role="option"]');
+        expect(options).toHaveLength(1);
+        expect(options[0].text()).toBe('拉麵');
+        expect(fresh.find('.recent-header').text()).toContain('最近搜尋');
+    });
+
+    it('選料理種類／行政區、選地點也算一次搜尋，會被記住', async () => {
+        get.mockResolvedValue({
+            data: { data: { restaurants: [], cuisines: [{ code: 'japanese', label: '日式料理' }], districts: [] } },
+        });
+
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '日式');
+        await wrapper.find('.suggestion').trigger('mousedown');
+
+        const fresh = mount(SearchBox);
+        await fresh.find('input').trigger('focus');
+
+        expect(fresh.findAll('[role="option"]').map((o) => o.text())).toContain('日式料理');
+    });
+
+    it('選詳情頁的店名建議不算搜尋——那是選中一家已知的店，不是打了什麼詞', async () => {
+        get.mockResolvedValue({
+            data: {
+                data: {
+                    restaurants: [{ id: 1, name: '十方齋', slug: 'a', address: null, city: null, district: null }],
+                    cuisines: [],
+                    districts: [],
+                },
+            },
+        });
+
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '十方齋');
+        await wrapper.find('.suggestion').trigger('mousedown');
+
+        const fresh = mount(SearchBox);
+        await fresh.find('input').trigger('focus');
+
+        expect(fresh.find('[role="listbox"]').exists()).toBe(false);
+    });
+
+    it('同一個詞再搜一次，清單裡只有一筆，而且排到最前面', async () => {
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '拉麵');
+        await wrapper.find('.keyword-option').trigger('mousedown');
+
+        await typeAndSettle(wrapper, '滷味');
+        await wrapper.find('.keyword-option').trigger('mousedown');
+
+        await typeAndSettle(wrapper, '拉麵');
+        await wrapper.find('.keyword-option').trigger('mousedown');
+
+        await wrapper.find('input').setValue('');
+        await wrapper.find('input').trigger('focus');
+
+        const texts = wrapper.findAll('[role="option"]').map((o) => o.text());
+        expect(texts).toEqual(['拉麵', '滷味']);
+    });
+
+    it('最多存 5 筆，最舊的被擠掉', async () => {
+        const wrapper = mount(SearchBox);
+
+        for (const term of ['一', '二', '三', '四', '五', '六']) {
+            await typeAndSettle(wrapper, term);
+            await wrapper.find('.keyword-option').trigger('mousedown');
+        }
+
+        await wrapper.find('input').setValue('');
+        await wrapper.find('input').trigger('focus');
+
+        const texts = wrapper.findAll('[role="option"]').map((o) => o.text());
+        expect(texts).toEqual(['六', '五', '四', '三', '二']);
+        expect(texts).not.toContain('一');
+    });
+
+    it('按「清除」會清空清單，而且真的從 localStorage 移除，不是只清畫面', async () => {
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '拉麵');
+        await wrapper.find('.keyword-option').trigger('mousedown');
+        await wrapper.find('input').setValue('');
+        await wrapper.find('input').trigger('focus');
+
+        await wrapper.find('.clear-recent').trigger('mousedown');
+
+        expect(wrapper.find('[role="listbox"]').exists()).toBe(false);
+        expect(localStorage.getItem('veggiemap:recent-searches')).toBeNull();
+
+        const fresh = mount(SearchBox);
+        await fresh.find('input').trigger('focus');
+        expect(fresh.find('[role="listbox"]').exists()).toBe(false);
+    });
+
+    it('「清除」按鈕是 mousedown.prevent，不然點下去會先讓輸入框失焦、清單被關掉', async () => {
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '拉麵');
+        await wrapper.find('.keyword-option').trigger('mousedown');
+        await wrapper.find('input').setValue('');
+        await wrapper.find('input').trigger('focus');
+
+        const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+        wrapper.find('.clear-recent').element.dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('只用鍵盤也能選到最近搜尋的項目', async () => {
+        const wrapper = mount(SearchBox);
+        await typeAndSettle(wrapper, '拉麵');
+        await wrapper.find('.keyword-option').trigger('mousedown');
+        await wrapper.find('input').setValue('');
+
+        const fresh = mount(SearchBox);
+        const input = fresh.find('input');
+        await input.trigger('keydown', { key: 'ArrowDown' });
+        await input.trigger('keydown', { key: 'Enter' });
+
+        expect(fresh.emitted('keyword-search')?.[0]).toEqual(['拉麵']);
+    });
+
+    it('存進 localStorage 的格式壞掉時安靜地當作沒有最近搜尋，不會讓元件整個炸掉', async () => {
+        localStorage.setItem('veggiemap:recent-searches', '{not json');
+
+        const wrapper = mount(SearchBox);
+        await wrapper.find('input').trigger('focus');
+
+        expect(wrapper.find('[role="listbox"]').exists()).toBe(false);
     });
 });

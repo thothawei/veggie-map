@@ -50,7 +50,10 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
       候選攤平成單一 `options` 陣列（不然 ↑↓ 要在四個 v-for 之間自己算位移）；
       **真瀏覽器實測抓到 jsdom 看不到的事**：Chrome 對 `<input type="search">`
       的原生 Esc 就是清空輸入框，清單開著時要 `preventDefault`
-- [ ] A7 最近搜尋（localStorage，不做熱門搜尋）
+- [x] A7 最近搜尋（localStorage，不做熱門搜尋）✅ 2026-09-06
+      只有 SearchBox（首頁）有這個元件，列表頁是純 `<input>`，不受影響。
+      搜過的關鍵字／選過的料理種類行政區／選過的地點都算一次搜尋並記住，
+      選詳情頁的店名建議不算（那是選中已知的店，不是打了什麼詞）
 - [ ] A8 零結果查詢紀錄 ＋ `search:misses` 指令（不記 IP／user）
 - [ ] A9 搜尋效能 benchmark 測試（不上 FULLTEXT，先立量測線）
 

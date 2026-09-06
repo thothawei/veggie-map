@@ -4228,3 +4228,36 @@ Jaccard 相似度」，理由（`levenshtein()` 是 byte-based，對 UTF-8 中�
 
 **下一步**：剩 A7（最近搜尋）／A8（零結果查詢紀錄）／A9（效能 benchmark）與
 B0–B5。
+
+
+## 2026-09-06 — A7：最近搜尋
+
+**做什麼**：`SearchBox`（只有首頁用，列表頁的搜尋列是純 `<input>`，A7 不影響它）
+輸入框空著且 focus 時，顯示 localStorage 存的最近 5 筆搜尋。
+
+- 只存字串（`veggiemap:recent-searches`），不做熱門搜尋——那要等 A8 的資料先跑
+  一陣子，而且有隱私與冷啟動問題（規劃裡的既定決定）。
+- 記錄時機：`keyword-search`（含直接打字搜尋、點料理種類／行政區建議）與
+  `place-selected` 都算一次搜尋；選 `restaurant-selected`（店名建議）**不算**——
+  那是選中一家已知的店，不是打了什麼詞，記它沒有意義。
+- 同一個詞再搜一次是移到最前面，不是變成兩筆；最多 5 筆，最舊的擠掉。
+- 融進 A6 的 combobox／keyboard 架構：`options` computed 在輸入框空著時回傳
+  最近搜尋當作 `recent` 這個 kind，跟其他候選共用同一套 ↑↓／Enter／
+  `aria-activedescendant` 邏輯，不是另外接一套。
+- 清除鈕跟其他候選項一樣要 `@mousedown.prevent`，不然點下去會先讓 input 失焦、
+  清單在 click 觸發前就被 150ms 的 blur timer 關掉。
+- localStorage 存取包 try/catch：私密瀏覽模式或封鎖網站資料時安靜地退回空清單，
+  不影響搜尋本身能不能用；格式壞掉（不是 JSON、不是字串陣列）也一樣安靜忽略。
+
+**驗證**
+
+- 前端新增 12 條測試（`SearchBox.test.ts`），全套 375 條全綠；新增檔案級
+  `beforeEach(() => localStorage.clear())`——這是跨測試共用的真實瀏覽器 API，
+  不清掉的話前一條測試搜過的字會被下一條看到。
+- 反向驗證：把「移到最前面、去重」改成單純 push-and-slice（舊字留在原位、
+  重複的詞會出現兩筆）→ 2 條紅。
+- 真瀏覽器（localhost:8080）：搜「拉麵」→ 清空輸入框、重新 focus →
+  下拉出現「最近搜尋 / 拉麵 / 清除」→ 按清除 → `localStorage.getItem(...)`
+  變成 `null`、下拉關閉。
+
+**下一步**：剩 A8（零結果查詢紀錄）／A9（效能 benchmark）與 B0–B5。
