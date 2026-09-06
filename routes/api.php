@@ -112,6 +112,9 @@ Route::middleware('throttle:api')->group(function () {
             // 因為 EventSource 帶不了 Authorization 標頭，改用這裡發的一次性票。
             Route::get('/projects/{project}/activities', [AiOfficeActivityController::class, 'index']);
 
+            // LogsView（規格 §44）：跨專案的執行紀錄，不綁定單一 project。
+            Route::get('/activities', [AiOfficeActivityController::class, 'across']);
+
             // 規格第 34 節：Agent 之間的往來訊息。唯讀——開放寫入等於讓人偽造
             // Agent 的發言，這條時間軸就失去它唯一的價值。
             Route::get('/projects/{project}/messages', [AiOfficeMessageController::class, 'index']);

@@ -4819,3 +4819,62 @@ Token 用量三格，`success_rate`／`avg_duration_ms` 是 `null` 時顯示「�
   與每個欄位的語意（尤其是 `current_task` 為 null 時代表什麼）。
 - 沒有新增路由，`OpenApiContractTest`／`openapi.yaml` 不需要改動。
 - 一樣沒做真瀏覽器點擊驗證（同上一則的理由：沒有已知的 admin 密碼）。
+
+## 2026-09-06 — AI Office `LogsView`（規格 §44，todo.md P1 第三項）
+
+**做的事**：todo.md 明講這項「做之前先決定它到底顯示什麼：`activities`／
+`tool_executions`／`task_runs` 是三種不同粒度，全塞進同一頁只會變成沒人看
+的瀑布流」——這是唯一一項待辦本身就要求先做決策再動手的。
+
+**決策記錄**（因為 todo 明講要決定，就把決定寫下來，不是含糊帶過）：選
+`activities`。理由：它是規格 §35／36 就設計出來的統一事件層，涵蓋「Agent
+動作＋任務狀態變動」，單一專案的事件流（`ActivityFeed.vue`）已經在用它，
+跨專案版本沿用同一張表最一致，不用再學一套新的事件語意。`tool_executions`
+（單次工具呼叫）／`task_runs`（單次任務執行嘗試）是更細的執行細節，留給
+以後真的有需要時各自做頁面，不現在就塞進這個全站列表稀釋掉它。
+
+**後端**：`ActivityController::across()`（新方法，不是新 Controller——沿用
+`ActivityController` 是因為它已經是 Activity 資料的唯一出口，不需要為了
+「跨專案」這個差異另開一個類別）。跟既有的 `index()`（單一專案、支援
+`after_id` 補漏語意）刻意不共用同一支方法：`across()` 是瀏覽用的分頁列表，
+`index()` 是 SSE 斷線重連的補漏端點，兩者的排序語意不一樣（`index()` 帶
+`after_id` 時要由舊到新，`across()` 永遠由新到舊），硬併在一起只會讓其中
+一邊的行為變得難以理解。
+
+`ActivityResource` 加 `project_name`（`whenLoaded('project', ...)`）——只有
+跨專案列表才 eager-load `project` 關聯，單一專案的事件流不受影響（欄位
+不會出現，不是空字串）。PHPStan 抓到 `Activity::project()` 跟前兩輪修的
+`Agent::tasks()`／`errors()` 一樣缺 `BelongsTo<Project, $this>` 泛型標註，
+順手補上。
+
+**前端**：新頁面 `LogsView.vue`（路由 `/ai-office/logs`），跟 `UsageView.vue`
+同一套「篩選表單 + 套用按鈕」樣式，額外加分頁控制（`current_page`／
+`last_page`／`total`，上一頁／下一頁按鈕在邊界時 disabled）。`AiOfficeShell.vue`
+的導覽列加「紀錄」連結。
+
+**做的時候踩到一個範圍外的坑**：`AiOfficeShell.vue` 是所有 AI Office 頁面
+共用的殼，幫它加一個新的 `RouterLink` 會讓所有用本機測試路由器（`createRouter`
++ 手寫 `routes` 陣列）掛載任何 AI Office 頁面的既有測試在解析導覽列時噴
+「No match found」——因為那些測試的路由清單沒有 `ai-office-logs`。這不是
+我這次改動引入的設計缺陷，是「共用殼元件 + 每個測試檔各自手寫一份路由清單」
+這個既有模式的必然代價：以後每加一個 AI Office 頁面都要記得回頭改
+`DashboardView.test.ts`／`AgentsView.test.ts`／`UsageView.test.ts`／
+`ProjectDetailView.test.ts` 四份路由清單。這次全部四份都補上了，沒有留給
+下一輪，但值得記一筆——如果以後這個模式繼續增生，可能該考慮抽一個共用
+的 test router factory。
+
+**驗證**
+
+- 後端 6 條新測試（`LogsTest`）：跨專案排序、`project_name` 有帶回來、
+  依 project/agent/type 篩選、分頁 meta 正確、`user` 角色 403。後端全套
+  **735** 條全綠（4 skipped），PHPStan 0 error，Pint PASS。
+- 前端 5 條新測試（`LogsView.test.ts`）+ 補 4 個既有測試檔的路由清單。
+  前端全套 **432** 條全綠，eslint／vue-tsc／`npm run build` 乾淨。
+- `docs/openapi.yaml` 新增端點（`npx @redocly/cli lint` 通過），`docs/api.md`
+  新增「跨專案執行紀錄」一節，`OpenApiContractTest` 綠燈。
+- 一樣沒做真瀏覽器點擊驗證（同上兩則的理由：沒有已知的 admin 密碼）。
+
+**做到這裡，todo.md「AI Office：規劃自己列了但漏做」清單只剩最後一項**
+（`Projects` 清單頁／`Tasks` 跨專案頁／`Settings` 頁）——那一項待辦自己
+標註「可能是合理裁決，但裁決沒有被寫下來」，屬於要問使用者要不要做的
+範疇，不是像前三項一樣單純的規格缺口。

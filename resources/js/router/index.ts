@@ -50,6 +50,12 @@ const router = createRouter({
             meta: { requiresAuth: true, requiresAiOffice: true },
         },
         {
+            path: '/ai-office/logs',
+            name: 'ai-office-logs',
+            component: () => import('@/ai-office/views/LogsView.vue'),
+            meta: { requiresAuth: true, requiresAiOffice: true },
+        },
+        {
             path: '/admin',
             name: 'admin',
             component: () => import('@/views/AdminView.vue'),

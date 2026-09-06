@@ -11,6 +11,7 @@ defineProps<{ title: string }>();
             <RouterLink :to="{ name: 'ai-office-agents' }">Agent</RouterLink>
             <RouterLink :to="{ name: 'ai-office-approvals' }">核准</RouterLink>
             <RouterLink :to="{ name: 'ai-office-usage' }">用量</RouterLink>
+            <RouterLink :to="{ name: 'ai-office-logs' }">紀錄</RouterLink>
         </nav>
         <h1>{{ title }}</h1>
         <slot />

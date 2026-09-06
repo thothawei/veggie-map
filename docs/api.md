@@ -447,6 +447,7 @@ Controller 只做「呼叫 Service／回傳 Resource」，不做欄位驗證與�
 | GET | `/ai-office/usage` | 用量與成本報表（`?project_id=`、`?agent_id=`、`?from=`、`?to=`） | 唯讀 |
 | GET | `/ai-office/stats/agents` | 每位 Agent 的效能統計（`?project_id=`） | 唯讀 |
 | GET | `/ai-office/resource-usage` | 系統資源快照（application-level，非真的 host CPU/Memory） | 唯讀 |
+| GET | `/ai-office/activities` | 跨專案的執行紀錄（`?project_id=`、`?agent_id=`、`?task_id=`、`?type=`、`?per_page=`） | 唯讀 |
 | POST | `/ai-office/projects/{id}/events/ticket` | 換一張開 SSE 用的一次性票 | 唯讀 |
 | GET | `/ai-office/projects/{id}/events` | SSE 事件串流（`?ticket=`、`?after_id=`） | 憑票，票綁使用者與專案 |
 
@@ -546,6 +547,27 @@ success_rate／avg_duration_ms／total_tokens／estimated_cost`。兩個地方�
 - `tasks` 用「目前 `running`／`waiting_review` 的任務數、`working` 的 Agent 數」
   當系統忙碌程度的代理指標——每個 running task 對應一個正在跑的 Agent loop。
 - `sandbox` 回的是**設定的上限**（`cpu_limit`／`memory_limit_mb`），不是即時用量。
+
+### 跨專案執行紀錄（規格 §44 `LogsView`）
+
+`ai_office_activities`／`ai_office_tool_executions`／`ai_office_task_runs`
+是三種不同粒度（事件摘要／單次工具呼叫／單次任務執行嘗試），全塞進同一頁
+只會變成沒人看的瀑布流。`GET /ai-office/activities` 選 `activities`：
+它本來就是規格 §35／36 設計出來、涵蓋「Agent 動作＋任務狀態變動」的統一
+事件層，單一專案內的事件流已經用它，跨專案版本沿用同一張表最一致。
+`tool_executions`／`task_runs` 是更細的執行細節，不塞進這個全站列表。
+
+跟單一專案的 `GET /ai-office/projects/{id}/activities` 差在多回一個
+`project_name`（跨專案列表需要知道每筆事件屬於哪個專案）、少了 `after_id`
+補漏語意（這是瀏覽用的分頁列表，不是斷線重連的補漏端點）。
+
+```json
+{
+  "success": true,
+  "data": [{ "id": 42, "project_id": 3, "project_name": "待辦 API", "task_id": 11, "agent_id": 7, "type": "TaskCompleted", "description": "...", "payload": null, "created_at": "2026-09-06T10:00:00+00:00" }],
+  "meta": { "current_page": 1, "last_page": 3, "per_page": 50, "total": 128 }
+}
+```
 
 ### Agent 詳情併入的效能與任務資訊（規格 §47 `AgentDetailView`）
 

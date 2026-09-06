@@ -120,6 +120,8 @@ export interface AiOfficeApproval {
 export interface AiOfficeActivity {
     id: number;
     project_id: number | null;
+    /** 只有跨專案的 LogsView（`GET /ai-office/activities`）才會帶這個欄位。 */
+    project_name?: string | null;
     task_id: number | null;
     agent_id: number | null;
     type: string;

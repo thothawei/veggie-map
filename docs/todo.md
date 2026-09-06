@@ -1122,11 +1122,17 @@ Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是
       `errors()` 缺 `HasMany<T, $this>` 泛型標註（現有 `tools()`/`permissions()`
       有，這兩個沒有），順手補上。
 
-- [ ] **`LogsView`（AI Office §44 pages、plan L189）**
-      不存在。目前只有專案內的 ActivityFeed（`/ai-office/projects/{id}`），
-      沒有跨專案的執行紀錄檢視。做之前先決定它到底顯示什麼：
-      `activities`／`tool_executions`／`task_runs` 是三種不同粒度，
-      全塞進同一頁只會變成沒人看的瀑布流。
+- [x] **`LogsView`（AI Office §44 pages、plan L189）** ✅ 2026-09-06
+      先決定顯示什麼粒度：選 `activities`（規格 §35／36 設計的統一事件層，
+      單一專案的事件流已經用它），不是 `tool_executions`／`task_runs`——
+      三種塞進同一頁只會變成沒人看的瀑布流，`tool_executions`／`task_runs`
+      留給以後有需要再做各自的頁面。新端點 `GET /ai-office/activities`
+      （不綁 project，跟專案內的 `GET /projects/{id}/activities` 差在多回
+      `project_name`、少了 `after_id` 補漏語意——這是瀏覽用的分頁列表，
+      不是 SSE 斷線重連的補漏端點）。前端 `LogsView.vue`＋路由
+      `/ai-office/logs`＋導覽列加「紀錄」。後端 6 測試、前端 5 測試，
+      OpenAPI／api.md 同步更新，`OpenApiContractTest` 綠燈。PHPStan 途中
+      補上 `Activity::project()` 缺的 `BelongsTo<Project, $this>` 泛型標註。
 
 - [ ] **`Projects` 清單頁／`Tasks` 跨專案頁／`Settings` 頁（AI Office §44 pages）**
       三頁都不存在：專案建立塞在 Dashboard、任務只能從專案詳情進去、沒有設定頁。

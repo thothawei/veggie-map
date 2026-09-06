@@ -70,6 +70,50 @@ class ActivityController extends Controller
         ]);
     }
 
+    /**
+     * 規格第 44 節 `LogsView`：跨專案的執行紀錄檢視。
+     *
+     * `ai_office_activities`／`ai_office_tool_executions`／`ai_office_task_runs`
+     * 是三種不同粒度（事件摘要／單次工具呼叫／單次任務執行嘗試），全塞進
+     * 同一頁只會變成沒人看的瀑布流。這裡選 `activities`：它本來就是規格
+     * §35／36 設計出來、涵蓋「Agent 動作＋任務狀態變動」的統一事件層，
+     * 專案內已經用它當事件流的資料來源，跨專案版本沿用同一張表最一致。
+     * `tool_executions`／`task_runs` 是更細的執行細節，留在各自的脈絡
+     * （TaskDetail／未來要做的話）裡看，不塞進這個全站列表。
+     */
+    public function across(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', Project::class);
+
+        $filters = $request->validate([
+            'project_id' => ['nullable', 'integer'],
+            'agent_id' => ['nullable', 'integer'],
+            'type' => ['nullable', 'string', 'max:100'],
+            'task_id' => ['nullable', 'integer'],
+            'per_page' => ['nullable', 'integer', 'between:1,100'],
+        ]);
+
+        $activities = Activity::query()
+            ->with('project:id,name')
+            ->when($filters['project_id'] ?? null, fn ($q, $id) => $q->where('project_id', $id))
+            ->when($filters['agent_id'] ?? null, fn ($q, $id) => $q->where('agent_id', $id))
+            ->when($filters['type'] ?? null, fn ($q, $type) => $q->where('type', $type))
+            ->when($filters['task_id'] ?? null, fn ($q, $id) => $q->where('task_id', $id))
+            ->orderByDesc('id')
+            ->paginate($filters['per_page'] ?? 50);
+
+        return response()->json([
+            'success' => true,
+            'data' => ActivityResource::collection($activities)->resolve(),
+            'meta' => [
+                'current_page' => $activities->currentPage(),
+                'last_page' => $activities->lastPage(),
+                'per_page' => $activities->perPage(),
+                'total' => $activities->total(),
+            ],
+        ]);
+    }
+
     /** 換一張開 SSE 用的一次性票（見 StreamTicketService 的說明）。 */
     public function ticket(Request $request, Project $project): JsonResponse
     {
