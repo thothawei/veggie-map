@@ -545,6 +545,69 @@ describe('HomeView 篩選也套到推薦', () => {
     });
 });
 
+describe('HomeView 排序控制項（B1 發現的缺口，這一輪補上）', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        restaurantsPayload = { data: [] };
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('沒有關鍵字、有座標時選單預設「距離」', async () => {
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        const options = wrapper.findAll('.sort-select option').map((o) => o.text().trim());
+        expect(options).toEqual(['距離', '素食可信度', '最新收錄']);
+        expect((wrapper.find('.sort-select select').element as HTMLSelectElement).value).toBe('distance');
+    });
+
+    it('有關鍵字時選單多出「相關性」並預設選它', async () => {
+        const { wrapper } = await mountHome('/?city=taipei&keyword=拉麵');
+
+        const options = wrapper.findAll('.sort-select option').map((o) => o.text().trim());
+        expect(options).toEqual(['相關性', '距離', '素食可信度', '最新收錄']);
+        expect((wrapper.find('.sort-select select').element as HTMLSelectElement).value).toBe('relevance');
+    });
+
+    it('scope=all 時沒有座標，選單不提供「距離」，預設變成「最新收錄」', async () => {
+        const { wrapper } = await mountHome('/?city=taipei&scope=all');
+
+        const options = wrapper.findAll('.sort-select option').map((o) => o.text().trim());
+        expect(options).not.toContain('距離');
+        expect((wrapper.find('.sort-select select').element as HTMLSelectElement).value).toBe('newest');
+
+        const call = restaurantCalls[restaurantCalls.length - 1];
+        expect(call.sort).toBe('newest');
+    });
+
+    it('手動選排序會寫進網址並重新查詢，是預設值時網址上不留參數', async () => {
+        const { wrapper, router } = await mountHome('/?city=taipei');
+
+        const select = wrapper.find('.sort-select select');
+        await select.setValue('confidence');
+        await flushPromises();
+
+        expect(router.currentRoute.value.query.sort).toBe('confidence');
+        expect(restaurantCalls[restaurantCalls.length - 1]?.sort).toBe('confidence');
+
+        // 選回預設值（距離）—— URL 上的 sort 參數要被清掉，不是寫成 'distance'。
+        await select.setValue('distance');
+        await flushPromises();
+        expect(router.currentRoute.value.query.sort).toBeUndefined();
+    });
+
+    /** 網址帶了一個當下不可用的排序（分享連結時還有關鍵字、對方清掉了）要退回預設。 */
+    it('網址帶不可用的排序時退回預設，不是送出去讓後端 422', async () => {
+        const { wrapper } = await mountHome('/?city=taipei&sort=relevance');
+
+        expect((wrapper.find('.sort-select select').element as HTMLSelectElement).value).toBe('distance');
+        expect(restaurantCalls[restaurantCalls.length - 1]?.sort).toBe('distance');
+    });
+});
+
 describe('HomeView 常駐 quick filter 帶「會剩幾家」（B4）', () => {
     beforeEach(() => {
         vi.clearAllMocks();

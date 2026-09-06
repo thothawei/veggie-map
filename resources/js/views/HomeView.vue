@@ -74,6 +74,70 @@ let lastFittedKeyword: string | null = null;
 const scope = useSearchScope('map');
 
 /**
+ * 排序（B1 發現的缺口）：原本完全由前端自動規則決定（有關鍵字→相關性、
+ * 有座標→距離、否則→最新收錄），使用者改不了。列表頁早就有排序選單，
+ * 首頁在 B1 之前只有地圖與 markers，加一個控制項的價值不高；B1 的底部
+ * sheet 現在會顯示結果清單了，於是補上——跟列表頁同一套「網址是真相來源、
+ * 等於預設值就不寫進網址」的約定。
+ *
+ * 沒有「評分」選項：這個產品不做評分評論制度（2026-08-26 產品決定），
+ * 跟列表頁的 SORT_OPTIONS 同一個理由，註解不重複寫。
+ */
+const SORT_OPTIONS = [
+    { value: 'relevance', label: '相關性', requires: 'keyword' },
+    { value: 'distance', label: '距離', requires: 'center' },
+    { value: 'confidence', label: '素食可信度', requires: null },
+    { value: 'newest', label: '最新收錄', requires: null },
+] as const;
+
+type SortValue = (typeof SORT_OPTIONS)[number]['value'];
+
+/**
+ * 「有沒有中心點可以算距離」＝ scope 不是 all。scope=all 故意不送座標
+ * （見 scopeCenter 的說明：帶座標會套上預設 5km 半徑，把「不限城市」
+ * 悄悄變回原地），沒有座標就沒有距離可排。
+ */
+const hasCenter = computed(() => scope.value !== 'all');
+
+const availableSorts = computed(() =>
+    SORT_OPTIONS.filter((option) => {
+        if (option.requires === 'keyword') return keyword.value !== '';
+        if (option.requires === 'center') return hasCenter.value;
+
+        return true;
+    }),
+);
+
+/** 跟後端 search() 的預設規則一致：有關鍵字→相關性，有座標→距離，否則→最新收錄。 */
+const defaultSort = computed<SortValue>(() => {
+    if (keyword.value) return 'relevance';
+    if (hasCenter.value) return 'distance';
+
+    return 'newest';
+});
+
+const sort = computed<SortValue>(() => {
+    const fromUrl = route.query.sort;
+    const isAvailable = availableSorts.value.some((option) => option.value === fromUrl);
+
+    // 網址帶了一個當下不可用的排序（分享連結時還有關鍵字、對方清掉了）就退回
+    // 預設，不要原封不動送出去讓後端回 422 變成「載入失敗」。
+    return isAvailable ? (fromUrl as SortValue) : defaultSort.value;
+});
+
+function selectSort(value: string) {
+    const query = { ...route.query };
+
+    if (value === defaultSort.value) {
+        delete query.sort;
+    } else {
+        query.sort = value;
+    }
+
+    router.push({ query });
+}
+
+/**
  * `scope=all` 完全不能送座標：後端在沒有 bbox 時，lat/lng 會套上預設 5km 半徑
  * （`RestaurantRepository::search()`），把「不限城市」悄悄變回「原地」。
  * 有 bbox（`city`／`map`）時座標不受這個限制——矩形本身就是邊界，一起送
@@ -120,26 +184,20 @@ async function loadByBounds() {
         const center = scopeCenter(bboxValue);
         const filterParams = apiFilterParams(filters.value);
 
-        const restaurantParams = keyword.value
-            ? {
-                keyword: keyword.value,
-                bbox: bboxValue,
-                latitude: center?.lat,
-                longitude: center?.lng,
-                sort: 'relevance',
-                per_page: 100,
-                ...filterParams,
-            }
-            : {
-                bbox: bboxValue,
-                latitude: center?.lat,
-                longitude: center?.lng,
-                // 沒有座標（scope=all）時不送 sort，後端自己退回 newest；
-                // 硬送 sort=distance 但沒座標會被後端當成請求缺 latitude/longitude，回 422。
-                sort: center ? 'distance' : undefined,
-                per_page: 100,
-                ...filterParams,
-            };
+        const restaurantParams = {
+            keyword: keyword.value || undefined,
+            bbox: bboxValue,
+            latitude: center?.lat,
+            longitude: center?.lng,
+            // 沒有座標（scope=all）時不送 sort，後端自己退回 newest；
+            // 硬送 sort=distance 但沒座標會被後端當成請求缺 latitude/longitude，回 422。
+            // `sort` 這顆選單（見上面 SORT_OPTIONS）已經把「distance 需要座標」
+            // 這件事擋在 availableSorts 那一層，這裡的 `sort.value` 不會是
+            // 使用者選了卻送不出去的組合。
+            sort: sort.value,
+            per_page: 100,
+            ...filterParams,
+        };
 
         const [restaurantsResult, recommendedResult, facetsResult] = await Promise.allSettled([
             client.get<ApiSuccess<Restaurant[]>>('/restaurants', { params: restaurantParams }),
@@ -272,6 +330,8 @@ watch(filters, loadByBounds, { deep: true });
 watch(keyword, loadByBounds);
 
 watch(scope, loadByBounds);
+
+watch(sort, loadByBounds);
 
 watch(activeCity, (city, previous) => {
     if (!city) return;
@@ -501,16 +561,36 @@ watch(sheetExpanded, (expanded) => {
               範圍，這裡先把清單本身做出來——B2 才有東西可以連動。
             -->
             <section class="result-sheet" :class="{ expanded: sheetExpanded }">
-                <button
-                    type="button"
-                    class="sheet-toggle"
-                    :aria-expanded="sheetExpanded"
-                    aria-controls="result-sheet-body"
-                    @click="sheetExpanded = !sheetExpanded"
-                >
-                    <span class="sheet-summary">{{ sheetSummary }}</span>
-                    <span class="chevron" aria-hidden="true">{{ sheetExpanded ? '收合 ▴' : '展開 ▾' }}</span>
-                </button>
+                <div class="sheet-header">
+                    <button
+                        type="button"
+                        class="sheet-toggle"
+                        :aria-expanded="sheetExpanded"
+                        aria-controls="result-sheet-body"
+                        @click="sheetExpanded = !sheetExpanded"
+                    >
+                        <span class="sheet-summary">{{ sheetSummary }}</span>
+                        <span class="chevron" aria-hidden="true">{{ sheetExpanded ? '收合 ▴' : '展開 ▾' }}</span>
+                    </button>
+
+                    <!--
+                      排序（B1 發現的缺口，這一輪補上）。放在 sheet-toggle 旁邊而不是
+                      包進同一顆按鈕——<select> 是互動元素，巢狀在 <button> 裡是無效
+                      HTML，點下拉會被外層按鈕的 click 一起吃掉，變成選了排序又把
+                      sheet 收合。
+                    -->
+                    <label class="sort-select">
+                        排序
+                        <select
+                            :value="sort"
+                            @change="selectSort(($event.target as HTMLSelectElement).value)"
+                        >
+                            <option v-for="option in availableSorts" :key="option.value" :value="option.value">
+                                {{ option.label }}
+                            </option>
+                        </select>
+                    </label>
+                </div>
 
                 <div id="result-sheet-body" class="sheet-body" :hidden="!sheetExpanded">
                     <!-- 載入 skeleton（B5）：只在還沒有任何結果可以顯示時才蓋掉整片，
@@ -837,17 +917,43 @@ watch(sheetExpanded, (expanded) => {
     box-shadow: var(--vm-shadow-md);
 }
 
+.sheet-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.5rem 0.5rem 1rem;
+}
+
 .sheet-toggle {
     display: flex;
+    flex: 1;
+    min-width: 0;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 0.75rem 1rem;
+    padding: 0.25rem 0;
     border: none;
     background: none;
     cursor: pointer;
     font: inherit;
     text-align: left;
+}
+
+.sort-select {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    color: var(--vm-ink-500);
+}
+
+.sort-select select {
+    border: 1px solid var(--vm-ink-300);
+    border-radius: var(--vm-radius-sm);
+    padding: 0.2rem 0.4rem;
+    font-size: 0.8rem;
+    color: var(--vm-ink-800);
 }
 
 .sheet-summary {
