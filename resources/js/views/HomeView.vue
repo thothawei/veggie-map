@@ -455,17 +455,17 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 .hero {
     padding: 1.5rem 1rem;
     text-align: center;
-    background: #f0fff4;
+    background: var(--vm-green-50);
 }
 
 .hero h1 {
     margin: 0;
-    color: #2f855a;
+    color: var(--vm-green-600);
 }
 
 .tagline {
     margin: 0.25rem 0 1rem;
-    color: #4a5568;
+    color: var(--vm-ink-600);
 }
 
 .hero-controls {
@@ -484,16 +484,16 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 
 .locate-button {
     padding: 0.5rem 0.75rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 6px;
-    background: #fff;
+    border: 1px solid var(--vm-ink-300);
+    border-radius: var(--vm-radius-md);
+    background: var(--vm-white);
     cursor: pointer;
     white-space: nowrap;
 }
 
 .locate-error {
     margin: 0.5rem 0 0;
-    color: #c53030;
+    color: var(--vm-red-600);
     font-size: 0.9rem;
 }
 
@@ -508,8 +508,8 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     justify-content: center;
     height: 100%;
     min-height: 400px;
-    background: #f7fafc;
-    color: #718096;
+    background: var(--vm-ink-50);
+    color: var(--vm-ink-500);
 }
 
 .map-badge {
@@ -518,19 +518,19 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     left: 50%;
     transform: translateX(-50%);
     margin: 0;
-    background: #fff;
+    background: var(--vm-white);
     padding: 0.3rem 0.85rem;
-    border-radius: 999px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+    border-radius: var(--vm-radius-full);
+    border: 1px solid var(--vm-ink-200);
+    box-shadow: var(--vm-shadow-sm);
     z-index: 1000;
     font-size: 0.85rem;
     white-space: nowrap;
 }
 
 .map-badge.error {
-    border-color: #fc8181;
-    color: #c53030;
+    border-color: var(--vm-red-300);
+    color: var(--vm-red-600);
 }
 
 .empty-state {
@@ -545,7 +545,7 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 
 .empty-hint {
     margin: 0;
-    color: #718096;
+    color: var(--vm-ink-500);
     font-size: 0.9rem;
 }
 
@@ -564,15 +564,15 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     flex-direction: column;
     gap: 0.25rem;
     padding: 1rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    background: #fff;
+    border: 1px solid var(--vm-ink-200);
+    border-radius: var(--vm-radius-lg);
+    background: var(--vm-white);
     cursor: pointer;
     text-align: left;
 }
 
 .card:hover {
-    border-color: #2f855a;
+    border-color: var(--vm-green-600);
 }
 
 .card .meta {
@@ -584,17 +584,17 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 }
 
 .card .distance {
-    color: #2f855a;
+    color: var(--vm-green-600);
     font-weight: 600;
 }
 
 .card .address {
-    color: #2d3748;
+    color: var(--vm-ink-700);
     font-size: 0.9rem;
 }
 
 .cuisines {
-    color: #2f855a;
+    color: var(--vm-green-600);
     font-size: 0.85rem;
 }
 
@@ -605,22 +605,22 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 .venue-badge {
     align-self: flex-start;
     padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    background: #f0fff4;
-    color: #276749;
-    border: 1px solid #9ae6b4;
+    border-radius: var(--vm-radius-full);
+    background: var(--vm-green-50);
+    color: var(--vm-green-700);
+    border: 1px solid var(--vm-green-200);
     font-size: 0.75rem;
 }
 
 .venue-badge[data-kind='friendly'] {
-    border-radius: 3px;
-    background: #ebf8ff;
-    color: #2b6cb0;
-    border-color: #bee3f8;
+    border-radius: var(--vm-radius-sm);
+    background: var(--vm-blue-50);
+    color: var(--vm-blue-600);
+    border-color: var(--vm-blue-200);
 }
 
 .venue-summary {
-    color: #4a5568;
+    color: var(--vm-ink-600);
     font-size: 0.8rem;
 }
 
@@ -631,12 +631,12 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
 }
 
 .open-status[data-state='open'] {
-    color: #2f855a;
+    color: var(--vm-green-600);
     font-weight: 600;
 }
 
 .open-status[data-state='closed'] {
-    color: #718096;
+    color: var(--vm-ink-500);
 }
 
 .keyword-badge {
@@ -645,23 +645,23 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     gap: 0.5rem;
     margin: 0.5rem auto 0;
     padding: 0.3rem 0.75rem;
-    border-radius: 999px;
-    background: #f0fff4;
-    color: #22543d;
+    border-radius: var(--vm-radius-full);
+    background: var(--vm-green-50);
+    color: var(--vm-green-800);
     font-size: 0.85rem;
 }
 
 .keyword-badge button {
     border: none;
     background: none;
-    color: #2f855a;
+    color: var(--vm-green-600);
     cursor: pointer;
     text-decoration: underline;
     font-size: 0.85rem;
 }
 
 .confidence {
-    color: #2c5282;
+    color: var(--vm-blue-700);
     font-size: 0.85rem;
 }
 
@@ -680,10 +680,10 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     padding: 0.4rem 0.6rem;
     list-style: none;
     background: rgba(255, 255, 255, 0.92);
-    border-radius: 6px;
+    border-radius: var(--vm-radius-md);
     font-size: 0.8rem;
-    color: #2d3748;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    color: var(--vm-ink-700);
+    box-shadow: var(--vm-shadow-md);
 }
 
 .map-legend li {

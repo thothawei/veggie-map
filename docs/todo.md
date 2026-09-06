@@ -64,7 +64,11 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
 
 ### 搜尋畫面 UI/UX
 
-- [ ] B0 design token（CSS 變數，只改這五個檔案；Leaflet popup 吃不到 scoped style）
+- [x] B0 design token（CSS 變數，只改這五個檔案；Leaflet popup 吃不到 scoped style）
+      ✅ 2026-09-06。修掉既有 bug：`#2f855a`／`#2f6b4f` 同一個綠兩個值，統一成
+      `--vm-green-600`；五個檔案＋app.css 全域 grep 硬編碼 hex 只剩變數定義那一處。
+      間距只收斂原本就重複的原子值（0.25/0.5/0.75/1/1.5rem），沒有把每個
+      padding／margin 都強套進尺度——那些微調值套進五級尺度只會逼出視覺位移
 - [ ] B1 首頁改地圖優先版面（移除 hero 標題、控制項浮在地圖上、底部 sheet）
 - [ ] B2 地圖 ↔ 清單雙向連動（注意 markercluster 收起時個別 marker 不存在）
 - [ ] B3 常駐 quick filter ＋「更多篩選」（哪三個常駐等 A8 資料再定，第一版暫定）

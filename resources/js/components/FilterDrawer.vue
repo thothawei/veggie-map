@@ -355,10 +355,10 @@ function clearAll() {
     align-items: center;
     gap: 0.4rem;
     padding: 0.35rem 0.85rem;
-    border-radius: 999px;
-    border: 1px solid #cbd5e0;
-    background: #fff;
-    color: #1f2933;
+    border-radius: var(--vm-radius-full);
+    border: 1px solid var(--vm-ink-300);
+    background: var(--vm-white);
+    color: var(--vm-ink-800);
     cursor: pointer;
     font-size: 0.9rem;
 }
@@ -370,16 +370,16 @@ function clearAll() {
     min-width: 1.25rem;
     height: 1.25rem;
     padding: 0 0.3rem;
-    border-radius: 999px;
-    background: #2f855a;
-    color: #fff;
+    border-radius: var(--vm-radius-full);
+    background: var(--vm-green-600);
+    color: var(--vm-white);
     font-size: 0.72rem;
     font-weight: 600;
 }
 
 .caret {
     font-size: 0.7rem;
-    color: #718096;
+    color: var(--vm-ink-500);
     transition: transform 0.15s ease;
 }
 
@@ -391,7 +391,7 @@ function clearAll() {
     padding: 0.35rem 0.75rem;
     border: none;
     background: none;
-    color: #2f855a;
+    color: var(--vm-green-600);
     cursor: pointer;
     font-size: 0.85rem;
     text-decoration: underline;
@@ -415,38 +415,38 @@ function clearAll() {
 
 .label {
     font-size: 0.85rem;
-    color: #718096;
+    color: var(--vm-ink-500);
     margin-right: 0.25rem;
 }
 
 .chip {
     padding: 0.35rem 0.75rem;
-    border-radius: 999px;
-    border: 1px solid #cbd5e0;
-    background: #fff;
+    border-radius: var(--vm-radius-full);
+    border: 1px solid var(--vm-ink-300);
+    background: var(--vm-white);
     cursor: pointer;
     font-size: 0.85rem;
 }
 
 .chip:hover {
-    border-color: #2f855a;
-    color: #2f855a;
+    border-color: var(--vm-green-600);
+    color: var(--vm-green-600);
 }
 
 .chip.active {
-    background: #2f855a;
-    border-color: #2f855a;
-    color: #fff;
+    background: var(--vm-green-600);
+    border-color: var(--vm-green-600);
+    color: var(--vm-white);
 }
 
 .chip.active:hover {
-    color: #fff;
+    color: var(--vm-white);
 }
 
 .toggle:focus-visible,
 .clear:focus-visible,
 .chip:focus-visible {
-    outline: 2px solid #2f855a;
+    outline: 2px solid var(--vm-green-600);
     outline-offset: 2px;
 }
 

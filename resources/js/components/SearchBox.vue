@@ -522,17 +522,17 @@ function onTab() {
 input {
     flex: 1;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 6px;
+    border: 1px solid var(--vm-ink-300);
+    border-radius: var(--vm-radius-md);
     font-size: 1rem;
 }
 
 button {
     padding: 0.5rem 1rem;
-    background: #2f855a;
-    color: #fff;
+    background: var(--vm-green-600);
+    color: var(--vm-white);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--vm-radius-md);
     cursor: pointer;
 }
 
@@ -547,9 +547,9 @@ button:disabled {
     top: 100%;
     left: 0;
     right: 0;
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
+    background: var(--vm-white);
+    border: 1px solid var(--vm-ink-200);
+    border-radius: var(--vm-radius-md);
     margin-top: 0.25rem;
     z-index: 1000;
     max-height: 240px;
@@ -565,7 +565,7 @@ button:disabled {
 
 .results li:hover,
 .results li.active {
-    background: #f0fff4;
+    background: var(--vm-green-50);
 }
 
 .results .recent-header {
@@ -573,7 +573,7 @@ button:disabled {
     align-items: center;
     justify-content: space-between;
     padding: 0.35rem 0.75rem;
-    color: #718096;
+    color: var(--vm-ink-500);
     font-size: 0.8rem;
     cursor: default;
 }
@@ -582,7 +582,7 @@ button:disabled {
     padding: 0;
     border: none;
     background: none;
-    color: #2f855a;
+    color: var(--vm-green-600);
     font-size: 0.8rem;
     cursor: pointer;
     text-decoration: underline;
@@ -590,19 +590,19 @@ button:disabled {
 
 .results .keyword-option {
     font-weight: 600;
-    color: #2f855a;
-    border-bottom: 1px solid #edf2f7;
+    color: var(--vm-green-600);
+    border-bottom: 1px solid var(--vm-ink-100);
 }
 
 /* 不是選項，只是說明，所以不給 hover 也不給游標。 */
 .results .hint {
     margin-left: 0.5rem;
-    color: #718096;
+    color: var(--vm-ink-500);
     font-size: 0.8rem;
 }
 
 .results .empty-item {
-    color: #718096;
+    color: var(--vm-ink-500);
     cursor: default;
 }
 
@@ -612,6 +612,6 @@ button:disabled {
 
 .empty {
     padding: 0.5rem 0.75rem;
-    color: #718096;
+    color: var(--vm-ink-500);
 }
 </style>

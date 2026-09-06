@@ -545,37 +545,37 @@ watch(committedKeyword, (value) => {
 .toolbar input {
     flex: 1;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 6px;
+    border: 1px solid var(--vm-ink-300);
+    border-radius: var(--vm-radius-md);
 }
 
 .toolbar button {
     padding: 0.5rem 1rem;
-    background: #2f855a;
-    color: #fff;
+    background: var(--vm-green-600);
+    color: var(--vm-white);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--vm-radius-md);
     cursor: pointer;
 }
 
 .toolbar .clear-keyword {
-    background: #fff;
-    color: #2f855a;
-    border: 1px solid #cbd5e0;
+    background: var(--vm-white);
+    color: var(--vm-green-600);
+    border: 1px solid var(--vm-ink-300);
 }
 
 .global-hint {
     margin: 0.75rem 0 0;
     padding: 0.5rem 0.75rem;
-    border-radius: 6px;
-    background: #f0fff4;
-    color: #2f855a;
+    border-radius: var(--vm-radius-md);
+    background: var(--vm-green-50);
+    color: var(--vm-green-600);
     font-size: 0.85rem;
 }
 
 .scope {
     margin: 0.75rem 0 0.5rem;
-    color: #718096;
+    color: var(--vm-ink-500);
     font-size: 0.85rem;
 }
 
@@ -592,9 +592,9 @@ li button {
     text-align: left;
     padding: 1rem;
     margin-bottom: 0.5rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    background: #fff;
+    border: 1px solid var(--vm-ink-200);
+    border-radius: var(--vm-radius-lg);
+    background: var(--vm-white);
     cursor: pointer;
 }
 
@@ -623,26 +623,26 @@ li button {
 .card-evidence > * + *::before {
     content: '·';
     margin-right: 0.5rem;
-    color: #cbd5e0;
+    color: var(--vm-ink-300);
 }
 
 /* 第三層：證據。比事實再淡一階，讓視線先落在店名與營業狀態。 */
 .card-evidence {
     font-size: 0.85rem;
-    color: #718096;
+    color: var(--vm-ink-500);
 }
 
 li button:hover {
-    border-color: #2f855a;
+    border-color: var(--vm-green-600);
 }
 
 .address {
-    color: #2d3748;
+    color: var(--vm-ink-700);
     font-size: 0.9rem;
 }
 
 .cuisines {
-    color: #2f855a;
+    color: var(--vm-green-600);
     font-size: 0.85rem;
 }
 
@@ -654,27 +654,27 @@ li button:hover {
 .venue-badge {
     align-self: flex-start;
     padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    background: #f0fff4;
-    color: #276749;
-    border: 1px solid #9ae6b4;
+    border-radius: var(--vm-radius-full);
+    background: var(--vm-green-50);
+    color: var(--vm-green-700);
+    border: 1px solid var(--vm-green-200);
     font-size: 0.75rem;
 }
 
 .venue-badge[data-kind='friendly'] {
-    border-radius: 3px;
-    background: #ebf8ff;
-    color: #2b6cb0;
-    border-color: #bee3f8;
+    border-radius: var(--vm-radius-sm);
+    background: var(--vm-blue-50);
+    color: var(--vm-blue-600);
+    border-color: var(--vm-blue-200);
 }
 
 .venue-summary {
-    color: #4a5568;
+    color: var(--vm-ink-600);
     font-size: 0.8rem;
 }
 
 .notice {
-    color: #718096;
+    color: var(--vm-ink-500);
     text-align: center;
     padding: 1.5rem 0;
 }
@@ -699,16 +699,16 @@ li button:hover {
 
 .relaxation {
     padding: 0.4rem 0.9rem;
-    border: 1px solid #2f855a;
-    border-radius: 999px;
-    background: #fff;
-    color: #2f855a;
+    border: 1px solid var(--vm-green-600);
+    border-radius: var(--vm-radius-full);
+    background: var(--vm-white);
+    color: var(--vm-green-600);
     cursor: pointer;
     font-size: 0.9rem;
 }
 
 .relaxation:hover {
-    background: #f0fff4;
+    background: var(--vm-green-50);
 }
 
 .empty-suggestions {
@@ -717,14 +717,14 @@ li button:hover {
 
 .did-you-mean {
     font-size: 0.95rem;
-    color: #2d3748;
+    color: var(--vm-ink-700);
 }
 
 .did-you-mean .suggestion {
     margin: 0 0.15rem;
     border: none;
     background: none;
-    color: #2f855a;
+    color: var(--vm-green-600);
     font-weight: 600;
     font-size: inherit;
     cursor: pointer;
@@ -732,16 +732,16 @@ li button:hover {
 }
 
 .notice.error {
-    color: #c53030;
+    color: var(--vm-red-600);
 }
 
 .more {
     display: block;
     margin: 0 auto;
     padding: 0.5rem 1.25rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 6px;
-    background: #fff;
+    border: 1px solid var(--vm-ink-300);
+    border-radius: var(--vm-radius-md);
+    background: var(--vm-white);
     cursor: pointer;
 }
 
@@ -751,12 +751,12 @@ li button:hover {
 }
 
 .open-status[data-state='open'] {
-    color: #2f855a;
+    color: var(--vm-green-600);
     font-weight: 600;
 }
 
 .open-status[data-state='closed'] {
-    color: #718096;
+    color: var(--vm-ink-500);
 }
 
 /*
@@ -764,12 +764,12 @@ li button:hover {
  * 整頁紅字會讓人以為這些店有問題，實際上只是還沒有人去查證。
  */
 .confidence[data-level='high'] {
-    color: #276749;
+    color: var(--vm-green-700);
     font-weight: 600;
 }
 
 .confidence[data-level='verified'] {
-    color: #2c5282;
+    color: var(--vm-blue-700);
 }
 
 .sort-bar {
@@ -779,51 +779,51 @@ li button:hover {
     gap: 0.5rem;
     padding-top: 0.75rem;
     font-size: 0.9rem;
-    color: #4a5568;
+    color: var(--vm-ink-600);
 }
 
 .sort-bar select {
     padding: 0.3rem 0.5rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 6px;
-    background: #fff;
+    border: 1px solid var(--vm-ink-300);
+    border-radius: var(--vm-radius-md);
+    background: var(--vm-white);
     font-size: 0.9rem;
 }
 
 .match-reason {
-    color: #2f855a;
+    color: var(--vm-green-600);
     font-size: 0.85rem;
 }
 
 .expanded-terms {
     margin: 0.75rem 0 0;
     padding: 0.5rem 0.75rem;
-    border-radius: 6px;
-    background: #f7fafc;
-    color: #4a5568;
+    border-radius: var(--vm-radius-md);
+    background: var(--vm-ink-50);
+    color: var(--vm-ink-600);
     font-size: 0.85rem;
 }
 
 .expanded-terms .variant {
     margin: 0 0.15rem;
     padding: 0.1rem 0.45rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 999px;
-    background: #fff;
-    color: #2f855a;
+    border: 1px solid var(--vm-ink-300);
+    border-radius: var(--vm-radius-full);
+    background: var(--vm-white);
+    color: var(--vm-green-600);
     cursor: pointer;
     font-size: inherit;
 }
 
 .expanded-terms .variant:hover {
-    border-color: #2f855a;
+    border-color: var(--vm-green-600);
 }
 
 .expanded-terms .exact-toggle {
     margin-left: 0.5rem;
     border: none;
     background: none;
-    color: #2f855a;
+    color: var(--vm-green-600);
     cursor: pointer;
     text-decoration: underline;
     font-size: inherit;
@@ -833,7 +833,7 @@ li button:hover {
     margin-left: 0.5rem;
     border: none;
     background: none;
-    color: #2f855a;
+    color: var(--vm-green-600);
     cursor: pointer;
     text-decoration: underline;
     font-size: inherit;

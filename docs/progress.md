@@ -4329,3 +4329,40 @@ B0–B5。
 
 **下一步**：A1–A9 搜尋強化全部完成。剩 B0–B5（設計 token／首頁地圖優先版面／
 地圖清單連動／篩選 quick filter，B4／A7 需要先有 A8 的資料再定，見計畫第四節）。
+
+
+## 2026-09-06 — B0：design token
+
+**做什麼**：`resources/css/app.css` 加一組 CSS 變數（`--vm-green-*`／
+`--vm-orange-500`／`--vm-ink-*`／`--vm-red-*`／`--vm-blue-*`／`--vm-white`／
+`--vm-space-*`／`--vm-radius-*`／`--vm-shadow-*`），只把五個搜尋相關檔案
+（HomeView／SearchBox／FilterDrawer／RestaurantListView／`app.css` 自己）
+改成引用變數，其他頁面（詳情頁／Admin／AI Office／登入註冊）不動。
+
+- **修掉現況分析點名的那個 bug**：`#2f855a`（各元件的主要按鈕／連結綠）與
+  `#2f6b4f`（`app.css` 裡 popup 按鈕的綠）其實是同一個品牌色的兩個不同數值，
+  統一成同一個 `--vm-green-600`。真瀏覽器點開地圖 marker 的 popup，「詳情」
+  按鈕的 `background-color` 從 `rgb(47,107,79)` 變成 `rgb(47,133,90)`，
+  跟其他按鈕一致了。
+- 用 CSS 變數不是把整站換 Tailwind class：Leaflet 插進 DOM 的 popup／
+  marker／tooltip 吃不到 Vue scoped style，也吃不到 Tailwind 的 class
+  （沒有 build-time 掃到它），CSS 變數是唯一兩邊都吃得到的方式（`app.css`
+  原本的註解已經記過這件事）。
+- **間距刻意不做成強制尺度**：現況掃出十幾種 padding／margin 原子值，只有
+  0.25／0.5／0.75／1／1.5rem 這幾個真的重複出現在多處，收進 `--vm-space-*`；
+  其餘（0.1rem、0.35rem、0.85rem…）是針對特定元件微調過的值，硬套進一個
+  五級尺度只會逼出不上不下的視覺位移，不是這一輪要解決的問題。
+- `#fff` 也收進 `--vm-white`：驗收條件是「全域 grep 這五個檔案，硬編碼的
+  hex 只剩變數定義那一處」，字面上不能放過純白。
+
+**驗證**
+
+- 全域 grep 五個檔案＋`RestaurantMap.vue`：`#[0-9a-fA-F]{3,6}` 完全沒有命中
+  （之前有 149 處）；`app.css` 只有 token 定義那一段與一句解釋性註解裡的舊值。
+- 前端全套 375 條全綠，eslint／vue-tsc／`npm run build` 乾淨。
+- 真瀏覽器（localhost:8080）：首頁、列表頁截圖跟改之前肉眼一致（顏色/圓角/
+  陰影數值完全沒變，只是換了個名字）；地圖 marker popup 的按鈕背景色
+  `getComputedStyle` 讀出 `rgb(47,133,90)`（`#2f855a`），確認兩個綠已經合併。
+
+**下一步**：B1（首頁改地圖優先版面）→ B2（地圖↔清單雙向連動）→ B3
+（常駐 quick filter）。

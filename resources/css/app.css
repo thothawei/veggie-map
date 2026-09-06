@@ -3,17 +3,90 @@
 @tailwind utilities;
 
 /*
+ * Design token（B0）。範圍**只有搜尋相關的五個檔案**（HomeView／SearchBox／
+ * FilterDrawer／RestaurantListView／RestaurantMap）＋這個檔案自己——後者本來就
+ * 是因為 Leaflet 把 popup／marker／tooltip 的 DOM 插在 Vue 的 scope 之外，
+ * 元件的 scoped style 套不到，才把這幾條規則放在全域。其他頁面（詳情頁／
+ * Admin／AI Office／登入註冊）這一輪不動，維持原本的寫法。
+ *
+ * 用 CSS 變數而不是把整站換成 Tailwind utility class：那是另一個量級的改動，
+ * 而且 Leaflet 插進 DOM 的內容吃不到 Vue 的 scoped style、也吃不到 Tailwind
+ * 的 class（沒有 build-time 掃到），CSS 變數是唯一兩邊都吃得到的方式。
+ *
+ * **修掉的既有 bug**：`#2f855a`（各元件的主要按鈕／連結綠）與 `#2f6b4f`
+ * （這個檔案裡 popup 按鈕的綠）其實是同一個品牌色的兩個不同數值——這裡統一成
+ * 同一個 `--vm-green-600`，下面 `.popup-actions button` 也跟著改用它。
+ */
+:root {
+    /* 純白：卡片／輸入框背景、色塊上的文字。 */
+    --vm-white: #fff;
+
+    /* 綠：品牌主色，由淺到深。 */
+    --vm-green-50: #f0fff4;
+    --vm-green-200: #9ae6b4;
+    --vm-green-600: #2f855a;
+    --vm-green-700: #276749;
+    --vm-green-800: #22543d;
+
+    /* 橘：素食友善 marker 的邊框色，跟純素食店的實心綠做形狀＋顏色雙重區分。 */
+    --vm-orange-500: #dd6b20;
+
+    /* 灰階（ink）：文字與邊框，由淺到深。四五種散在各檔案的灰統一成一個尺度。 */
+    --vm-ink-50: #f7fafc;
+    --vm-ink-100: #edf2f7;
+    --vm-ink-200: #e2e8f0;
+    --vm-ink-300: #cbd5e0;
+    --vm-ink-400: #a0aec0;
+    --vm-ink-500: #718096;
+    --vm-ink-600: #4a5568;
+    --vm-ink-700: #2d3748;
+    --vm-ink-800: #1f2933;
+
+    /* 紅：錯誤／失敗狀態。 */
+    --vm-red-300: #fc8181;
+    --vm-red-600: #c53030;
+
+    /* 藍：資訊性提示（例如「也一併搜尋了同義詞」旁的次要說明框）。 */
+    --vm-blue-50: #ebf8ff;
+    --vm-blue-200: #bee3f8;
+    --vm-blue-600: #2b6cb0;
+    --vm-blue-700: #2c5282;
+
+    /*
+     * 間距：只收斂原本就重複出現在多處的原子值（0.25／0.5／0.75／1／1.5rem）。
+     * 沒有把每一個 padding／margin 都硬套進這個尺度——很多是針對特定元件微調過
+     * 的值（0.1rem、0.35rem、0.85rem…），把它們也塞進一個五級尺度只會逼出
+     * 不上不下的視覺位移，不是這一輪要做的事。
+     */
+    --vm-space-1: 0.25rem;
+    --vm-space-2: 0.5rem;
+    --vm-space-3: 0.75rem;
+    --vm-space-4: 1rem;
+    --vm-space-6: 1.5rem;
+
+    /* 圓角：6px 是預設輸入框／卡片，8px 是稍大的面板，999px 是藥丸形 chip。 */
+    --vm-radius-sm: 3px;
+    --vm-radius-md: 6px;
+    --vm-radius-lg: 8px;
+    --vm-radius-full: 999px;
+
+    /* 陰影：sm 是候選清單這類貼齊元素的浮層，md 是脫離版面的浮動控制項。 */
+    --vm-shadow-sm: 0 1px 3px rgb(0 0 0 / 12%);
+    --vm-shadow-md: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/*
  * 地圖 popup 的內容是字串拼接後由 Leaflet 插進 DOM，元件的 scoped style 套不到，
  * 所以這兩條放全域。營業中用綠色、休息中用灰色；「未知」不會產生節點（見
  * lib/format.ts 的 formatOpenStatus），所以這裡沒有第三種顏色。
  */
 .leaflet-popup-content .open-status[data-state='open'] {
-    color: #2f855a;
+    color: var(--vm-green-600);
     font-weight: 600;
 }
 
 .leaflet-popup-content .open-status[data-state='closed'] {
-    color: #718096;
+    color: var(--vm-ink-500);
 }
 
 /*
@@ -32,18 +105,18 @@
 }
 
 .veggie-marker[data-kind='exclusive'] {
-    background: #2f855a;
-    border: 3px solid #fff;
+    background: var(--vm-green-600);
+    border: 3px solid var(--vm-white);
 }
 
 .veggie-marker[data-kind='friendly'] {
-    background: #fff;
-    border: 4px solid #dd6b20;
+    background: var(--vm-white);
+    border: 4px solid var(--vm-orange-500);
 }
 
 .veggie-marker[data-kind='unknown'] {
-    background: #a0aec0;
-    border: 3px solid #fff;
+    background: var(--vm-ink-400);
+    border: 3px solid var(--vm-white);
 }
 
 /*
@@ -60,10 +133,10 @@
 
 .leaflet-popup-content .popup-actions button {
     padding: 0.25rem 0.75rem;
-    border: 1px solid #2f6b4f;
+    border: 1px solid var(--vm-green-600);
     border-radius: 0.25rem;
-    background: #2f6b4f;
-    color: #fff;
+    background: var(--vm-green-600);
+    color: var(--vm-white);
     cursor: pointer;
     font: inherit;
 }
