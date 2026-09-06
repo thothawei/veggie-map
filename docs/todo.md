@@ -58,7 +58,9 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
       `search_misses` 表（keyword／normalized／result_count／had_filters／
       created_at，沒有 updated_at）；`search:misses --since=7d` 排行榜、
       `search-misses:prune`（預設 90 天）排程每天清舊資料
-- [ ] A9 搜尋效能 benchmark 測試（不上 FULLTEXT，先立量測線）
+- [x] A9 搜尋效能 benchmark 測試（不上 FULLTEXT，先立量測線）✅ 2026-09-06
+      灌 12,000 家跑 8 變體查詢（config「珍珠奶茶」那組同義詞剛好 8 個詞），
+      實測 229ms（門檻 300ms，`veggiemap.search.benchmark_threshold_ms`）
 
 ### 搜尋畫面 UI/UX
 

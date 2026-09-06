@@ -4298,3 +4298,34 @@ B0–B5。
   `search-misses:prune` 對還在保留期內的資料印出「刪除了 0 筆」。
 
 **下一步**：剩 A9（效能 benchmark）與 B0–B5。
+
+
+## 2026-09-06 — A9：搜尋效能 benchmark
+
+**做什麼**：`KeywordSearch` 用 `LIKE '%…%'` 不上 FULLTEXT 的判斷本來就對（中文
+斷詞需要 ngram parser，資料量還小時換不到什麼），但這個判斷之前只活在註解裡，
+沒有一條線會在資料長大、真的變慢時變紅。這次補上：
+
+- `tests/Feature/Performance/KeywordSearchBenchmarkTest.php`：用 `DB::table()->insert()`
+  批次寫入（1,000 筆一批）灌 12,000 家餐廳——繞過 Eloquent factory 逐筆 save
+  的開銷，12,000 筆用 `factory()->create()` 會慢到沒人想執行這條測試。
+  查詢用 `珍珠奶茶`：config 裡那組同義詞剛好 8 個詞，不多不少踩滿
+  `max_variants`，不用另外湊。
+- **量測前一定要清 cache**（`Cache::tags(['restaurants'])->flush()`）——
+  `RestaurantRepository::search()` 本來就有 Redis cache，沒清的話量到的是
+  「Redis 拿字串」的時間，不管索引好壞、資料量多寡這條測試永遠是綠的。
+- 門檻放 `config('veggiemap.search.benchmark_threshold_ms')`（預設 300ms，
+  可用 `VEGGIEMAP_SEARCH_BENCHMARK_MS` 覆蓋），不是寫死在測試裡——超過就是
+  「該回頭談索引／FULLTEXT／外部搜尋引擎了」的訊號，不是調高數字打發過去。
+
+**驗證**
+
+- 實測：12,000 家下 8 變體查詢 **229.2ms**（門檻 300ms，有餘裕）。
+- 反向驗證兩層：①把門檻臨時調到 1ms，測試如預期紅了，訊息印出實際的
+  229.2ms——證明斷言真的在比較，不是恆真。②另一條測試斷言「沒有關鍵字
+  （0 個 LIKE 群組）比 8 變體查詢快」，確認第一條測試量到的真的是關鍵字
+  比對的成本，不是資料庫連線這種怎麼測都會過的東西。
+- 後端全套 700 條全綠，Pint／PHPStan（全專案 225 檔）乾淨。
+
+**下一步**：A1–A9 搜尋強化全部完成。剩 B0–B5（設計 token／首頁地圖優先版面／
+地圖清單連動／篩選 quick filter，B4／A7 需要先有 A8 的資料再定，見計畫第四節）。
