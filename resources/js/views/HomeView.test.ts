@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
+import L from 'leaflet';
 import { setViewportMatches } from '@/test/setup';
 
 const cities = [
@@ -61,16 +62,25 @@ vi.mock('leaflet', () => ({
     default: {
         map: vi.fn(() => mapStub),
         tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
-        markerClusterGroup: vi.fn(() => ({ clearLayers: vi.fn(), addLayer: vi.fn() })),
+        markerClusterGroup: vi.fn(() => ({
+            clearLayers: vi.fn(),
+            addLayer: vi.fn(),
+            getVisibleParent: vi.fn((layer: unknown) => layer),
+        })),
         latLngBounds: vi.fn((points: unknown) => points),
         // bindTooltip 一定要在：少了它 RestaurantMap 的 renderMarkers 會丟
         // TypeError，元件渲染整個中斷，而測試看到的症狀是「載入中…」——
         // 看起來像非同步沒等到，其實是 mock 缺方法。
-        marker: vi.fn(() => ({
-            bindPopup: vi.fn().mockReturnThis(),
-            bindTooltip: vi.fn().mockReturnThis(),
-            on: vi.fn(),
-        })),
+        marker: vi.fn(() => {
+            const element = document.createElement('div');
+
+            return {
+                bindPopup: vi.fn().mockReturnThis(),
+                bindTooltip: vi.fn().mockReturnThis(),
+                on: vi.fn(),
+                getElement: () => element,
+            };
+        }),
         divIcon: vi.fn((options: unknown) => options),
     },
 }));
@@ -307,6 +317,78 @@ describe('HomeView 地圖優先版面（B1）', () => {
         const { wrapper } = await mountHome('/?city=taipei');
 
         expect(wrapper.find('.sheet-summary').text()).toContain('5 家');
+    });
+});
+
+describe('HomeView 地圖↔清單連動（B2）', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    it('地圖發 marker-focused 會展開 sheet，並在對應卡片標上 highlighted', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1), fakeRestaurant(2)], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.sheet-toggle').attributes('aria-expanded')).toBe('false');
+
+        wrapper.findComponent({ name: 'RestaurantMap' }).vm.$emit('marker-focused', { id: 2 });
+        await flushPromises();
+
+        expect(wrapper.find('.sheet-toggle').attributes('aria-expanded')).toBe('true');
+
+        const cards = wrapper.findAll('.result-card');
+        const highlighted = cards.filter((c) => c.classes('highlighted'));
+        expect(highlighted).toHaveLength(1);
+        expect(highlighted[0].text()).toContain('餐廳 2');
+    });
+
+    it('捲到卡片用 scrollIntoView，而且是可選呼叫——jsdom 沒有這個方法也不能讓畫面壞掉', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        // jsdom 預設沒有 scrollIntoView；這裡刻意不 mock 它，驗證的正是
+        // 「沒有這個方法也不會丟例外」（見 HomeView.vue 的可選呼叫註解）。
+        expect(() => {
+            wrapper.findComponent({ name: 'RestaurantMap' }).vm.$emit('marker-focused', { id: 1 });
+        }).not.toThrow();
+    });
+
+    it('收合 sheet 會清掉高亮，不留著一張已經看不到的卡的醒目狀態', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        wrapper.findComponent({ name: 'RestaurantMap' }).vm.$emit('marker-focused', { id: 1 });
+        await flushPromises();
+        expect(wrapper.find('.result-card.highlighted').exists()).toBe(true);
+
+        await wrapper.find('.sheet-toggle').trigger('click');
+
+        expect(wrapper.find('.result-card.highlighted').exists()).toBe(false);
+    });
+
+    it('滑到卡片會放大地圖上對應的 marker，滑走復原', async () => {
+        restaurantsPayload = { data: [fakeRestaurant(1)], meta: { next_cursor: null } };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+        await wrapper.find('.sheet-toggle').trigger('click');
+
+        const card = wrapper.find('.result-card');
+        await card.trigger('mouseenter');
+
+        const el = (L.marker as unknown as ReturnType<typeof vi.fn>).mock.results[0]
+            .value as { getElement: () => HTMLElement };
+        expect(el.getElement().classList.contains('marker-highlighted')).toBe(true);
+
+        await card.trigger('mouseleave');
+        expect(el.getElement().classList.contains('marker-highlighted')).toBe(false);
     });
 });
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import L from 'leaflet';
 import { triggerResize } from '@/test/setup';
 import type { Restaurant } from '@/types';
 
@@ -19,7 +20,12 @@ const mapStub = {
     invalidateSize: vi.fn(),
 };
 
-const clusterStub = { clearLayers: vi.fn(), addLayer: vi.fn() };
+/**
+ * 預設回傳傳進來的那個 marker 本身——模擬「沒被收進 cluster，marker 自己
+ * 就看得到」。B2 的高亮測試要模擬「被收進 cluster」時，改成
+ * `mockReturnValueOnce(clusterIconStub)` 蓋一次即可。
+ */
+const clusterStub = { clearLayers: vi.fn(), addLayer: vi.fn(), getVisibleParent: vi.fn((layer: unknown) => layer) };
 const { bindPopup, bindTooltip, markerOn } = vi.hoisted(() => ({
     bindPopup: vi.fn().mockReturnThis(),
     bindTooltip: vi.fn().mockReturnThis(),
@@ -31,7 +37,13 @@ vi.mock('leaflet', () => ({
         map: vi.fn(() => mapStub),
         tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
         markerClusterGroup: vi.fn(() => clusterStub),
-        marker: vi.fn(() => ({ bindPopup, bindTooltip, on: markerOn })),
+        // 用真的 DOM 元素而不是手刻 classList/style 的假物件——B2 的高亮測試
+        // 斷言的是真的 class 與 style，用 jsdom 的真元素比維護一份假 API 可靠。
+        marker: vi.fn(() => {
+            const element = document.createElement('div');
+
+            return { bindPopup, bindTooltip, on: markerOn, getElement: () => element };
+        }),
         divIcon: vi.fn((options: unknown) => options),
     },
 }));
@@ -408,13 +420,22 @@ describe('RestaurantMap popup 的出口', () => {
         expect(html).toContain('query=25.03,121.56');
     });
 
+    /**
+     * B2 之後 marker 確實掛了 `click` 監聽（讓清單捲過去、見下面
+     * marker-focused 那組測試），但它只發 `marker-focused`，**不會**發
+     * `select`（那是導航去詳情頁的事件）——popup 照樣由 Leaflet 自己的
+     * click 行為開啟，兩者互不干擾。
+     */
     it('點 marker 不再直接導航，而是開 popup', () => {
-        mountWithRestaurant();
+        const wrapper = mountWithRestaurant();
 
         const events = markerOn.mock.calls.map((call) => call[0]);
-        // 有 click 監聽的話就會在 popup 顯示之前把人帶走。
-        expect(events).not.toContain('click');
         expect(events).toContain('popupopen');
+
+        const clickHandler = markerOn.mock.calls.find((call) => call[0] === 'click')?.[1];
+        clickHandler?.();
+
+        expect(wrapper.emitted('select')).toBeFalsy();
     });
 
     it('popup 反覆開關後，看詳情只會發一次 select', async () => {
@@ -511,5 +532,126 @@ describe('RestaurantMap marker tooltip', () => {
 
         expect(bindTooltip).toHaveBeenCalled();
         expect(bindPopup).toHaveBeenCalled();
+    });
+});
+
+/**
+ * 地圖↔清單雙向連動（B2）。這裡只驗證 RestaurantMap 這一半：`marker-focused`
+ * 事件與 `highlightRestaurant()`。HomeView 那一半（sheet 展開、捲動、
+ * 卡片 hover）在 HomeView.test.ts。
+ */
+describe('RestaurantMap 地圖↔清單連動（B2）', () => {
+    const restaurant = {
+        id: 7,
+        name: '綠光食堂',
+        address: '台北市大安區',
+        latitude: 25.03,
+        longitude: 121.56,
+        rating: 4,
+        rating_count: 1,
+    } as Restaurant;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        clusterStub.getVisibleParent.mockImplementation((layer: unknown) => layer);
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    function mountWithRestaurant() {
+        return mount(RestaurantMap, {
+            props: { restaurants: [restaurant], center: [25.033, 121.5654] as [number, number], zoom: 13 },
+        });
+    }
+
+    /**
+     * `L.marker()` 回傳的是一個從沒被插進 `document` 的孤兒 div（我們的 mock
+     * 就是這樣做的，跟真的 Leaflet 一樣不會被 mount() 掛進 vue-test-utils 的
+     * DOM 樹）——查 `document.querySelectorAll` 永遠找不到它。要驗證的是
+     * 「哪個 marker 的 element 被打了 highlight」，直接從 `L.marker` 的
+     * mock 呼叫紀錄拿回傳值最準，不用假裝它在真實 DOM 裡。
+     */
+    function markerElements(): HTMLElement[] {
+        return (L.marker as ReturnType<typeof vi.fn>).mock.results.map(
+            (result) => (result.value as { getElement: () => HTMLElement }).getElement(),
+        );
+    }
+
+    it('點 marker 會發 marker-focused，帶上那家餐廳', () => {
+        const wrapper = mountWithRestaurant();
+
+        const clickHandler = markerOn.mock.calls.find((call) => call[0] === 'click')?.[1];
+        clickHandler?.();
+
+        expect(wrapper.emitted('marker-focused')?.[0]?.[0]).toMatchObject({ id: 7 });
+    });
+
+    it('highlightRestaurant 放大對應的 marker，設 zIndex 讓它蓋過其他點', () => {
+        const wrapper = mountWithRestaurant();
+        const vm = wrapper.vm as unknown as { highlightRestaurant: (id: number | null) => void };
+
+        vm.highlightRestaurant(7);
+
+        const [el] = markerElements();
+
+        expect(el.classList.contains('marker-highlighted')).toBe(true);
+        expect(el.style.zIndex).toBe('10000');
+    });
+
+    it('highlightRestaurant(null) 復原上一個被放大的 marker', () => {
+        const wrapper = mountWithRestaurant();
+        const vm = wrapper.vm as unknown as { highlightRestaurant: (id: number | null) => void };
+
+        vm.highlightRestaurant(7);
+        vm.highlightRestaurant(null);
+
+        const [el] = markerElements();
+
+        expect(el.classList.contains('marker-highlighted')).toBe(false);
+        expect(el.style.zIndex).toBe('');
+    });
+
+    it('換一個 id 高亮時，前一個會先復原——不是兩個同時放大', () => {
+        const other = { ...restaurant, id: 8, latitude: 25.04, longitude: 121.57 } as Restaurant;
+        const wrapper = mount(RestaurantMap, {
+            props: { restaurants: [restaurant, other], center: [25.033, 121.5654] as [number, number], zoom: 13 },
+        });
+        const vm = wrapper.vm as unknown as { highlightRestaurant: (id: number | null) => void };
+
+        vm.highlightRestaurant(7);
+        vm.highlightRestaurant(8);
+
+        const [first, second] = markerElements();
+
+        expect(first.classList.contains('marker-highlighted')).toBe(false);
+        expect(second.classList.contains('marker-highlighted')).toBe(true);
+    });
+
+    /**
+     * cluster 收起來時個別 marker 不存在——`getVisibleParent()` 這時候回的是
+     * 代表整群的 cluster icon，不是 marker 自己。高亮要打在那個 icon 上，
+     * 不能對著一個沒有 DOM 節點的 marker 呼叫 `getElement()`（拿到 undefined，
+     * 什麼事都不會發生，看起來像「hover 沒反應」）。
+     */
+    it('marker 被收進 cluster 時，高亮打在 cluster icon 上，不是消失的 marker', () => {
+        const clusterIconElement = document.createElement('div');
+        const clusterIcon = { getElement: () => clusterIconElement };
+        clusterStub.getVisibleParent.mockReturnValueOnce(clusterIcon);
+
+        const wrapper = mountWithRestaurant();
+        const vm = wrapper.vm as unknown as { highlightRestaurant: (id: number | null) => void };
+
+        vm.highlightRestaurant(7);
+
+        expect(clusterIconElement.classList.contains('marker-highlighted')).toBe(true);
+    });
+
+    it('不存在的 id 不會爆炸，也不會留下高亮', () => {
+        const wrapper = mountWithRestaurant();
+        const vm = wrapper.vm as unknown as { highlightRestaurant: (id: number | null) => void };
+
+        expect(() => vm.highlightRestaurant(9999)).not.toThrow();
+
+        const [el] = markerElements();
+        expect(el.classList.contains('marker-highlighted')).toBe(false);
     });
 });

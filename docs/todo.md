@@ -87,7 +87,11 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
       既有的自動規則（關鍵字→相關性、有座標→距離、否則→最新收錄），維持
       跟原本一致的行為；加一個獨立的、要跟網址同步的排序控制是比「排版」
       更大的一塊範圍，留給以後有需要再做，記在下面「新發現」
-- [ ] B2 地圖 ↔ 清單雙向連動（注意 markercluster 收起時個別 marker 不存在）
+- [x] B2 地圖 ↔ 清單雙向連動（注意 markercluster 收起時個別 marker 不存在）
+      ✅ 2026-09-06。滑到卡片用 `clusterGroup.getVisibleParent()` 找出「現在
+      畫面上真的看得到的東西」（marker 自己或它所在的 cluster icon）再放大，
+      不需要先 zoomToShowLayer；點 marker 發 `marker-focused`（跟導航用的
+      `select` 分開），sheet 展開＋捲到卡片＋醒目標示，popup 照舊保留
 - [ ] B3 常駐 quick filter ＋「更多篩選」（哪三個常駐等 A8 資料再定，第一版暫定）
 - [ ] B4 每個篩選帶「會剩幾家」（`/restaurants/facets`，先量成本）
 - [ ] B5 載入 skeleton ＋ `aria-busy`

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { isAxiosError } from 'axios';
 import client from '@/api/client';
@@ -338,6 +338,43 @@ const sheetSummary = computed(() => {
 
     return keyword.value ? `符合「${keyword.value}」的有 ${count}` : `${scopeResultLabel.value}有 ${count}`;
 });
+
+/* ---------- 地圖 ↔ 清單雙向連動（B2） ---------- */
+
+/**
+ * 卡片的 DOM 節點，點 marker 時要捲到它。用一般的 Map 而不是 ref 陣列——
+ * 這只是查表用的，不需要觸發重新渲染。清單換了（換城市、改篩選、重新搜尋）
+ * 就整批清掉，不然舊的節點引用會一直留著、越積越多。
+ */
+const cardRefs = new Map<number, HTMLElement>();
+
+watch(restaurants, () => {
+    cardRefs.clear();
+});
+
+/** 目前捲過去、要標成醒目的那一張卡；換一個目標或收合 sheet 就清掉。 */
+const highlightedRestaurantId = ref<number | null>(null);
+
+/**
+ * 點 marker＝清單捲過去給他看＋醒目標示，不是直接跳轉詳情頁——那是「看詳情」
+ * 按鈕的事（見 RestaurantMap 的 marker-focused 事件註解）。
+ */
+function handleMarkerFocused(restaurant: Restaurant) {
+    sheetExpanded.value = true;
+    highlightedRestaurantId.value = restaurant.id;
+
+    void nextTick(() => {
+        // `scrollIntoView` 用可選呼叫——jsdom 沒有這個方法，測試環境呼叫會直接爆
+        // （SearchBox 的 scrollActiveIntoView() 已經踩過同一個坑）。
+        cardRefs.get(restaurant.id)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    });
+}
+
+watch(sheetExpanded, (expanded) => {
+    if (!expanded) {
+        highlightedRestaurantId.value = null;
+    }
+});
 </script>
 
 <template>
@@ -388,6 +425,7 @@ const sheetSummary = computed(() => {
                 @bounds-changed="handleBoundsChanged"
                 @select="goToDetail"
                 @locate-failed="handleLocateFailed"
+                @marker-focused="handleMarkerFocused"
             />
             <div v-else class="map-placeholder">
                 <span v-if="citiesLoading">地圖準備中…</span>
@@ -470,9 +508,13 @@ const sheetSummary = computed(() => {
                         <button
                             v-for="restaurant in restaurants"
                             :key="restaurant.id"
+                            :ref="(el) => { if (el) cardRefs.set(restaurant.id, el as HTMLElement); }"
                             type="button"
                             class="result-card"
+                            :class="{ highlighted: highlightedRestaurantId === restaurant.id }"
                             @click="goToDetail(restaurant)"
+                            @mouseenter="mapRef?.highlightRestaurant(restaurant.id)"
+                            @mouseleave="mapRef?.highlightRestaurant(null)"
                         >
                             <strong>{{ restaurant.name }}</strong>
                             <span
@@ -753,6 +795,13 @@ const sheetSummary = computed(() => {
 .card:hover,
 .result-card:hover {
     border-color: var(--vm-green-600);
+}
+
+/* 點了地圖上的 marker 之後捲過來的那一張卡（B2）。 */
+.result-card.highlighted {
+    border-color: var(--vm-green-600);
+    background: var(--vm-green-50);
+    box-shadow: 0 0 0 2px var(--vm-green-200);
 }
 
 .card .meta,

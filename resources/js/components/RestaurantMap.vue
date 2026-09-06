@@ -18,11 +18,24 @@ const emit = defineEmits<{
     (e: 'select', restaurant: Restaurant): void;
     (e: 'locate', coords: [number, number]): void;
     (e: 'locate-failed'): void;
+    /**
+     * 點了 marker（B2：地圖↔清單連動）。跟 `select` 分開——`select` 是「使用者
+     * 決定要去看這家店的詳情」（來自 popup 的「看詳情」按鈕），這個是「使用者點了
+     * 地圖上這一點，清單捲過去給他看」。合成同一個事件的話，點 marker 會直接跳轉
+     * 詳情頁，popup 就變回「綁了但沒機會顯示」（2026-08-27 才修掉的問題）。
+     */
+    (e: 'marker-focused', restaurant: Restaurant): void;
 }>();
 
 let map: L.Map | null = null;
 let clusterGroup: L.MarkerClusterGroup | null = null;
 const mapEl = ref<HTMLDivElement | null>(null);
+
+/** 依 restaurant id 找回 marker，滑到卡片時要能定位到對應的點。 */
+const markersById = new Map<number, L.Marker>();
+
+/** 目前被放大的 marker（或它所在的 cluster）DOM 元素，滑走時要復原成這個狀態。 */
+let highlightedEl: HTMLElement | null = null;
 
 let resizeObserver: ResizeObserver | null = null;
 
@@ -76,6 +89,8 @@ function markerIcon(restaurant: Restaurant): L.DivIcon {
 function renderMarkers() {
     if (!map || !clusterGroup) return;
     clusterGroup.clearLayers();
+    markersById.clear();
+    highlightedEl = null;
 
     for (const restaurant of props.restaurants) {
         const marker = L.marker([restaurant.latitude, restaurant.longitude], {
@@ -149,8 +164,49 @@ function renderMarkers() {
             }
         });
 
+        // B2：點 marker 讓清單捲過去給他看，同時 Leaflet 照舊開 popup（兩個
+        // handler 各自獨立，互不影響）。
+        marker.on('click', () => emit('marker-focused', restaurant));
+
+        markersById.set(restaurant.id, marker);
         clusterGroup.addLayer(marker);
     }
+}
+
+/**
+ * 滑到卡片＝放大對應的點並提到最上層；滑走或換一個目標＝復原上一個。
+ *
+ * **cluster 收起來時個別 marker 不存在**（`clusterGroup.addLayer` 之後，聚集
+ * 範圍內的 marker 不會出現在 DOM 上，出現的是代表整群的 cluster icon）——
+ * 對消失的 marker 呼叫 `getElement()` 只會拿到 undefined，什麼事都不會發生。
+ * `getVisibleParent()` 是 Leaflet.markercluster 提供的查詢：marker 自己可見
+ * 就回它自己，被收進 cluster 就回那個 cluster icon，兩種情況都能拿到一個
+ * 「現在畫面上真的看得到的東西」去放大，不用先把地圖拉近。
+ */
+function highlightRestaurant(id: number | null) {
+    if (highlightedEl) {
+        highlightedEl.classList.remove('marker-highlighted');
+        highlightedEl.style.zIndex = '';
+        highlightedEl = null;
+    }
+
+    if (id === null || !clusterGroup) return;
+
+    const marker = markersById.get(id);
+
+    if (!marker) return;
+
+    const visible = clusterGroup.getVisibleParent(marker) ?? marker;
+    const el = visible.getElement();
+
+    if (!el) return;
+
+    el.classList.add('marker-highlighted');
+    // 直接設 zIndex 而不是 setZIndexOffset：後者只影響 Leaflet 自己下次重新
+    // 排序時的計算基準，同一個 marker 在同一個位置不會觸發重排，放大了但還是
+    // 被旁邊的點蓋住一半。inline style 立刻生效，滑走時清掉即可還原。
+    el.style.zIndex = '10000';
+    highlightedEl = el;
 }
 
 /**
@@ -194,6 +250,7 @@ defineExpose({
     jumpTo(lat: number, lng: number, zoom: number) {
         map?.setView([lat, lng], zoom);
     },
+    highlightRestaurant,
     locateUser() {
         if (!navigator.geolocation) {
             emit('locate-failed');

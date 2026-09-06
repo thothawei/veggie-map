@@ -4412,3 +4412,51 @@ CSS 原始碼看不出來——這條規則本身完全沒有語法錯誤。
   左側常駐清單＋右側地圖兩欄，圖例／定位鈕正確避開清單區域。
 
 **下一步**：B2（地圖↔清單雙向連動——現在清單有了，B2 才有東西可以連動）。
+
+
+## 2026-09-06 — B2：地圖↔清單雙向連動
+
+**做什麼**：B1 的底部 sheet 已經有結果清單了，這裡把它跟地圖接起來。
+
+- **滑到卡片→放大對應的 marker**：`RestaurantMap` 新增 `highlightRestaurant(id)`，
+  用 `clusterGroup.getVisibleParent(marker)` 找「現在畫面上真的看得到的東西」——
+  cluster 收起來時個別 marker 沒有 DOM 節點，直接對它 `getElement()` 只會拿到
+  undefined；`getVisibleParent` 沒被收進 cluster 就回 marker 自己，收進去了
+  就回代表整群的 cluster icon，兩種情況都能拿到一個可以放大的東西，**不用**
+  規劃裡提到的另一個選項（`zoomToShowLayer` 先把地圖拉近）——單純 hover
+  就自動改變地圖縮放層級對使用者來說太突兀。
+- 放大用 `transform: scale(1.4)`，但加在 icon wrapper 的**子元素**上，不是
+  wrapper 本身——Leaflet 用 inline `transform: translate3d(...)` 在 wrapper
+  上定位 marker，CSS class 選不贏 inline style，加在同一層會直接沒有效果。
+  「提到最上層」用 inline `zIndex` 直接設在 wrapper 上（`setZIndexOffset()`
+  只影響下次重排的計算基準，同位置的 marker 不會觸發重排，放大了還是被
+  蓋住一半）。
+- **點 marker→清單捲過去＋醒目標示**：新增 `marker-focused` 事件，跟既有的
+  `select`（「看詳情」按鈕觸發、導航去詳情頁）分開——合成同一個事件的話，
+  點 marker 會直接跳轉，popup 就變回「綁了但沒機會顯示」（2026-08-27 才修掉
+  的問題）。HomeView 收到後展開 sheet、用 `scrollIntoView` 捲到那張卡、
+  加 `highlighted` class；收合 sheet 時清掉醒目狀態，不留著一張看不到的卡
+  的高亮。
+- `scrollIntoView` 用可選呼叫（`?.scrollIntoView?.(...)`）——jsdom 沒有這個
+  方法，SearchBox 的 `scrollActiveIntoView()` 已經踩過同一個坑。
+
+**驗證**
+
+- `RestaurantMap.test.ts` 新增 7 條（`marker-focused` 事件、`highlightRestaurant`
+  的放大／復原／換目標／cluster 情況／不存在的 id），既有一條斷言「不該有
+  click 監聽」的測試已經過時（B2 合理地加了一個不會導航的 click 監聽），
+  改成直接驗證「有 click 監聽，但點了不會發 select」。
+- `HomeView.test.ts` 新增 5 條（marker-focused 展開 sheet＋高亮卡片、
+  scrollIntoView 缺方法不炸、收合清高亮、hover 放大/復原）。全套 392 條全綠，
+  eslint／vue-tsc／`npm run build` 乾淨。
+- 反向驗證：拿掉收合時清高亮的 watch → 1 條紅。
+- 真瀏覽器（1200×800 桌機兩欄版面）：hover 清單卡片 → `document.querySelector
+  ('.marker-highlighted')` 抓到對應的 cluster icon（`marker-cluster-medium`），
+  `zIndex:10000`，畫面上那個「24」cluster 確實放大；mouseleave 後
+  `.marker-highlighted` 消失。點一個沒被收進 cluster 的個別 marker →
+  popup 正常開啟（「看詳情」／「在 Google 地圖開啟」都在）**同時**清單裡
+  對應的卡片拿到 `.highlighted`。
+
+**下一步**：B3（常駐 quick filter＋「更多篩選」，哪三個常駐等 A8 資料再定，
+第一版先用暫定的三個）。B0–B2 都完成，B1 的排序選單、B4／A7 的量體待評估
+記在 todo.md。

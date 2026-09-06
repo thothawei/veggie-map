@@ -120,6 +120,26 @@
 }
 
 /*
+ * 滑到清單卡片時放大對應的 marker（B2）。加在 Leaflet 幫 icon 建的外層 wrapper
+ * div 上（`RestaurantMap::highlightRestaurant()` 用 `getElement()` 拿到的就是
+ * 這一層）——**不能**把 transform 加在這層本身：Leaflet 用 inline
+ * `transform: translate3d(...)` 定位 marker，我們的 class 選不贏 inline
+ * style，放大會直接沒有效果。改放大它的直接子元素（我們自己 divIcon 的
+ * `<span class="veggie-marker">`，或 cluster icon 的 `<div>`），那一層沒有
+ * Leaflet 的定位 transform，可以放心用。z-index 另外用 inline style 直接
+ * 設在同一個 wrapper 上（見 highlightRestaurant()），這裡的 !important
+ * 只是保險，避免 Leaflet 重新排序時把它蓋掉。
+ */
+.marker-highlighted {
+    z-index: 10000 !important;
+}
+
+.marker-highlighted > * {
+    transform: scale(1.4);
+    transition: transform 0.12s ease;
+}
+
+/*
  * popup 裡的兩個出口。寫在全域 CSS 而不是元件的 scoped style：popup 的 DOM 由
  * Leaflet 建在 map pane 上，不帶 Vue 的 scope 屬性，scoped 選不到它
  * （既有的 .open-status 也是同樣理由放在這裡）。
