@@ -412,7 +412,7 @@ watch(sheetExpanded, (expanded) => {
                     只顯示符合「{{ keyword }}」的餐廳
                     <button type="button" @click="clearKeyword">清除</button>
                 </p>
-                <FilterDrawer v-model:filters="filters" />
+                <FilterDrawer v-model:filters="filters" :result-count="restaurants.length" :has-more-results="hasMore" />
             </div>
 
             <RestaurantMap

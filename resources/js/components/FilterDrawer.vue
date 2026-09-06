@@ -16,6 +16,18 @@ import type {
 
 const filters = defineModel<Partial<RestaurantSearchParams>>('filters', { required: true });
 
+defineProps<{
+    /**
+     * 目前條件下有幾家店（B3：「顯示 N 家結果」）。這一輪沒有 B4 的
+     * `/restaurants/facets`，所以這是「現在已經查到的筆數」，不是「按下某個
+     * 篩選之後會剩幾家」的預測值——後者要等 B4 才做得到，先用現有的數字
+     * 讓按鈕有意義，總比完全不顯示好。
+     */
+    resultCount?: number;
+    /** 目前這批是不是還有更多（cursor 分頁的下一頁），顯示成「100+ 家」。 */
+    hasMoreResults?: boolean;
+}>();
+
 const diets = ref<DietType[]>([]);
 const features = ref<Feature[]>([]);
 const scopeMeta = ref(venueScopeMeta());
@@ -62,6 +74,18 @@ const dietGroups = computed(() => {
 
     return [...groups.entries()].map(([label, items]) => ({ label, items }));
 });
+
+/**
+ * 常駐 quick filter（B3）：營業中／純素食店↔含友善店／高可信度。這三個是
+ * 「最常用」的暫定選擇，不是量出來的——A8 的零結果紀錄才剛上線，還沒有
+ * 一週以上的資料可以看真實使用率。等資料夠了再回頭調整這三個是誰。
+ *
+ * 可信度只挑**最高**那一級當 quick chip（`confidenceFilters` 由後端依分數
+ * 由低到高排序，見 config/vegetarian.php）——「高度可信」是使用者最想
+ * 一鍵套用的門檻，較低的門檻（例如「有查證」）留在「更多篩選」裡。
+ */
+const quickConfidence = computed(() => confidenceFilters.value[confidenceFilters.value.length - 1] ?? null);
+const morePanelConfidenceFilters = computed(() => confidenceFilters.value.slice(0, -1));
 
 const activeCount = computed(() => {
     let count = 0;
@@ -229,23 +253,11 @@ function clearAll() {
 
 <template>
     <div class="filter-drawer">
-        <div class="drawer-bar">
-            <button
-                type="button"
-                class="toggle"
-                :aria-expanded="open"
-                aria-controls="filter-panel"
-                @click="userOpen = !open"
-            >
-                篩選
-                <span v-if="activeCount" class="count">{{ activeCount }}</span>
-                <span class="caret" :class="{ up: open }" aria-hidden="true">▾</span>
-            </button>
-
-            <button v-if="activeCount" type="button" class="clear" @click="clearAll">清除</button>
-        </div>
-
-        <div v-show="open" id="filter-panel" class="panel">
+        <!--
+          常駐 quick filter（B3）：不用打開「更多篩選」就按得到的三個最常用
+          條件。哪三個是暫定的，見上面 quickConfidence 的註解。
+        -->
+        <div class="quick-chips">
             <div v-if="scopeMeta.values.length" class="group">
                 <span class="label">{{ scopeMeta.group_label }}</span>
                 <button
@@ -261,6 +273,47 @@ function clearAll() {
                 </button>
             </div>
 
+            <div class="group">
+                <span class="label">時間</span>
+                <button
+                    type="button"
+                    class="chip"
+                    :class="{ active: Boolean(filters.open_now) }"
+                    :aria-pressed="Boolean(filters.open_now)"
+                    @click="toggleOpenNow"
+                >
+                    營業中
+                </button>
+            </div>
+
+            <div v-if="quickConfidence" class="group">
+                <button
+                    type="button"
+                    class="chip"
+                    :class="{ active: filters.confidence_min === quickConfidence.value }"
+                    :aria-pressed="filters.confidence_min === quickConfidence.value"
+                    @click="toggleConfidence(quickConfidence.value)"
+                >
+                    {{ quickConfidence.label }}
+                </button>
+            </div>
+        </div>
+
+        <div class="drawer-bar">
+            <button
+                type="button"
+                class="toggle"
+                :aria-expanded="open"
+                aria-controls="filter-panel"
+                @click="userOpen = !open"
+            >
+                更多篩選
+                <span v-if="activeCount" class="count">{{ activeCount }}</span>
+                <span class="caret" :class="{ up: open }" aria-hidden="true">▾</span>
+            </button>
+        </div>
+
+        <div v-show="open" id="filter-panel" class="panel">
             <div v-for="group in dietGroups" :key="group.label" class="group">
                 <span class="label">{{ group.label }}</span>
                 <button
@@ -292,10 +345,10 @@ function clearAll() {
                 </button>
             </div>
 
-            <div v-if="confidenceFilters.length" class="group">
+            <div v-if="morePanelConfidenceFilters.length" class="group">
                 <span class="label">素食可信度</span>
                 <button
-                    v-for="option in confidenceFilters"
+                    v-for="option in morePanelConfidenceFilters"
                     :key="option.value"
                     type="button"
                     class="chip"
@@ -304,19 +357,6 @@ function clearAll() {
                     @click="toggleConfidence(option.value)"
                 >
                     {{ option.label }}
-                </button>
-            </div>
-
-            <div class="group">
-                <span class="label">時間</span>
-                <button
-                    type="button"
-                    class="chip"
-                    :class="{ active: Boolean(filters.open_now) }"
-                    :aria-pressed="Boolean(filters.open_now)"
-                    @click="toggleOpenNow"
-                >
-                    營業中
                 </button>
             </div>
 
@@ -334,6 +374,23 @@ function clearAll() {
                     {{ feature.label }}
                 </button>
             </div>
+
+            <!--
+              底部固定「清除全部」與「顯示 N 家結果」（B3）。後者目前用現有已
+              查到的筆數，不是「按下某個篩選之後會剩幾家」的預測——那需要
+              B4 的 /restaurants/facets，這一輪還沒做。
+            -->
+            <div class="panel-footer">
+                <button v-if="activeCount" type="button" class="clear" @click="clearAll">清除全部</button>
+                <button
+                    v-if="resultCount !== undefined"
+                    type="button"
+                    class="show-results"
+                    @click="userOpen = false"
+                >
+                    顯示 {{ resultCount }}{{ hasMoreResults ? '+' : '' }} 家結果
+                </button>
+            </div>
         </div>
     </div>
 </template>
@@ -341,6 +398,21 @@ function clearAll() {
 <style scoped>
 .filter-drawer {
     padding: 0.75rem 0 0;
+}
+
+.quick-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.quick-chips .group {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .drawer-bar {
@@ -397,6 +469,27 @@ function clearAll() {
     text-decoration: underline;
 }
 
+.panel-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    flex-basis: 100%;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--vm-ink-100);
+}
+
+.show-results {
+    padding: 0.5rem 1.25rem;
+    border: none;
+    border-radius: var(--vm-radius-full);
+    background: var(--vm-green-600);
+    color: var(--vm-white);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
 .panel {
     display: flex;
     flex-wrap: wrap;
@@ -445,6 +538,7 @@ function clearAll() {
 
 .toggle:focus-visible,
 .clear:focus-visible,
+.show-results:focus-visible,
 .chip:focus-visible {
     outline: 2px solid var(--vm-green-600);
     outline-offset: 2px;

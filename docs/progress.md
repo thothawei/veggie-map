@@ -4460,3 +4460,47 @@ CSS 原始碼看不出來——這條規則本身完全沒有語法錯誤。
 **下一步**：B3（常駐 quick filter＋「更多篩選」，哪三個常駐等 A8 資料再定，
 第一版先用暫定的三個）。B0–B2 都完成，B1 的排序選單、B4／A7 的量體待評估
 記在 todo.md。
+
+
+## 2026-09-06 — B3：常駐 quick filter ＋「更多篩選」
+
+**做什麼**：`FilterDrawer`（Home／List 共用）把六組 chip 拆成兩層：
+
+- **常駐**（不用打開「更多篩選」）：店家類型（純素食店／素食友善／全部）、
+  營業中、高度可信——直接沿用既有的 venue_scope／open_now/confidence 邏輯，
+  只是把這三組模板搬到 `v-show="open"` 之外，變成永遠看得到。沒有發明新的
+  二元切換：規劃寫「純素食店 ↔ 含友善店」，但既有的三選一（exclusive/
+  friendly/all）已經涵蓋這個需求且零風險（不用碰任何既有邏輯），改成真的
+  二選一反而是要拿掉「只看友善店」這個既有能力，得不償失。
+- **更多篩選**：飲食類型細項、價位、8 個特色、較低的可信度門檻（「有查證」）。
+  可信度只挑**最高**一級（`confidenceFilters` 陣列最後一筆）當 quick chip，
+  其餘留在面板——這是唯一真的新邏輯，其他都是模板搬家。
+- Toggle 按鈕文案「篩選」→「更多篩選」，符合現在只收窄「其餘條件」的定位。
+- 底部固定「清除全部」（沿用既有 `clearAll`，搬進面板底部）與「顯示 N 家
+  結果」——後者是新按鈕，用目前**已經查到**的筆數（`restaurants.length`／
+  `hasMoreResults`，父層傳入的新 prop），不是「按下某個篩選會剩幾家」的
+  預測值，那需要 B4 的 `/restaurants/facets`，這一輪還沒做。按下去收合面板，
+  不用再點一次「更多篩選」。
+
+**踩到的坑**：測「按下顯示結果會收合面板」時，同一個元素在點擊前後各查一次
+`isVisible()`，第二次查到的是**第一次查詢當下**的舊值（`getComputedStyle`
+在沒有 `attachTo document.body` 的元件上，對已經查過一次的節點不會因為
+之後的 DOM 變化重新計算）——`style="display:none"` 明明已經在 DOM 上，
+`getComputedStyle().display` 還是回 `block`。修法：這條測試改用
+`attachTo: document.body` 掛載，結束時 `wrapper.unmount()` 清掉，別的
+只查一次可見性的測試不受影響、不用改。已記成坑卡
+`pitfall-vtu-isvisible-stale-detached`。
+
+**驗證**
+
+- `FilterDrawer.test.ts` 新增 8 條（quick chip 可見/可按、confidence 只挑
+  最高一級、toggle 文案、顯示結果按鈕的三種狀態），既有 23 條全部維持通過
+  ——大部分既有測試用 `.chip` 的文字內容找元素，跟 DOM 位置無關，模板搬家
+  沒有破壞任何一條。全套 400 條全綠，eslint／vue-tsc／`npm run build` 乾淨。
+- 反向驗證：把「只挑最高一級」改回「全部塞進面板」→ 1 條紅。
+- 真瀏覽器：Home 與 List 兩頁都看得到常駐的「店家類型／營業中／高度可信」，
+  收合「更多篩選」後這三個仍然看得到；面板展開時底部「顯示 100+ 家結果」
+  （Home）／「顯示 20+ 家結果」（List），按下去面板收合。
+
+**下一步**：B0–B3 全部完成。剩 B4（每個篩選帶「會剩幾家」，需要
+`/restaurants/facets`，先量成本）與 A7／B4 一起等 A8 的資料先跑一段時間。

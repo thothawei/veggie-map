@@ -92,7 +92,11 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
       畫面上真的看得到的東西」（marker 自己或它所在的 cluster icon）再放大，
       不需要先 zoomToShowLayer；點 marker 發 `marker-focused`（跟導航用的
       `select` 分開），sheet 展開＋捲到卡片＋醒目標示，popup 照舊保留
-- [ ] B3 常駐 quick filter ＋「更多篩選」（哪三個常駐等 A8 資料再定，第一版暫定）
+- [x] B3 常駐 quick filter ＋「更多篩選」（哪三個常駐等 A8 資料再定，第一版暫定）
+      ✅ 2026-09-06。營業中／店家類型（純素食店/素食友善/全部）／高度可信三個
+      常駐，其餘（飲食類型細項、價位、8 個特色、較低的可信度門檻）收進
+      「更多篩選」；FilterDrawer 是共用元件，Home／List 兩頁都吃到這個改動。
+      底部「顯示 N 家結果」用現有已查到的筆數（不是 B4 的預測值，B4 還沒做）
 - [ ] B4 每個篩選帶「會剩幾家」（`/restaurants/facets`，先量成本）
 - [ ] B5 載入 skeleton ＋ `aria-busy`
 - [x] B6 空狀態改成可按的下一步（接 A3）✅ 2026-09-06——A4 的「你是不是要找」待 A4 完成後接上

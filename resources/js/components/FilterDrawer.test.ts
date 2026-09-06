@@ -362,4 +362,130 @@ describe('FilterDrawer 可信度篩選', () => {
 
         expect(wrapper.text()).not.toContain('素食可信度');
     });
+
+    /** 只挑最高的一級當 quick chip，較低的門檻留在「更多篩選」面板裡。 */
+    it('只有最高門檻進 quick chip，較低的留在更多篩選面板', async () => {
+        setViewportMatches(false);
+        const wrapper = await mountDrawer();
+
+        const quick = wrapper.find('.quick-chips');
+        expect(quick.text()).toContain('高度可信');
+        expect(quick.text()).not.toContain('有查證');
+
+        const panel = wrapper.find('#filter-panel');
+        expect(panel.text()).toContain('有查證');
+        expect(panel.text()).not.toContain('高度可信');
+    });
+});
+
+/**
+ * 常駐 quick filter（B3）：營業中／純素食店↔含友善店／高可信度不用打開
+ * 「更多篩選」就按得到。哪三個是暫定的，等 A8 的資料夠了再回頭調整。
+ */
+describe('FilterDrawer 常駐 quick filter（B3）', () => {
+    beforeEach(() => {
+        resetVenueScopeMeta();
+    });
+
+    it('窄螢幕上「更多篩選」收合，quick chip 仍然看得到、按得到', async () => {
+        setViewportMatches(false);
+        const wrapper = await mountDrawer();
+
+        expect(panelVisible(wrapper)).toBe(false);
+        expect(wrapper.find('.quick-chips').isVisible()).toBe(true);
+
+        const openNowChip = wrapper.findAll('.quick-chips .chip').find((c) => c.text() === '營業中')!;
+        await openNowChip.trigger('click');
+
+        expect(wrapper.props('filters').open_now).toBe(true);
+    });
+
+    it('toggle 按鈕文字是「更多篩選」，不是「篩選」', async () => {
+        const wrapper = await mountDrawer();
+
+        expect(wrapper.find('.toggle').text()).toContain('更多篩選');
+    });
+
+    it('quick chip 裡的可信度按鈕也能切換，行為跟面板裡的一致', async () => {
+        setViewportMatches(false);
+        const wrapper = await mountDrawer();
+
+        const chip = wrapper.findAll('.quick-chips .chip').find((c) => c.text() === '高度可信')!;
+        await chip.trigger('click');
+        expect(wrapper.props('filters').confidence_min).toBe(60);
+
+        await chip.trigger('click');
+        expect('confidence_min' in wrapper.props('filters')).toBe(false);
+    });
+});
+
+describe('FilterDrawer 底部「顯示 N 家結果」（B3）', () => {
+    beforeEach(() => {
+        setViewportMatches(true);
+        resetVenueScopeMeta();
+    });
+
+    it('沒有帶 resultCount 時不顯示這顆按鈕', async () => {
+        const wrapper = await mountDrawer();
+
+        expect(wrapper.find('.show-results').exists()).toBe(false);
+    });
+
+    it('顯示目前已經查到的筆數，還有下一頁時加上 +', async () => {
+        const wrapper = mount((await import('./FilterDrawer.vue')).default, {
+            props: {
+                filters: {},
+                resultCount: 42,
+                hasMoreResults: true,
+                'onUpdate:filters': () => {},
+            },
+        });
+        await flushPromises();
+
+        expect(wrapper.find('.show-results').text()).toBe('顯示 42+ 家結果');
+    });
+
+    /**
+     * `isVisible()` 讀 `getComputedStyle()`——沒有 `attachTo` 掛進真的
+     * `document` 的元件，jsdom 對「同一個節點查兩次 computed style、中間
+     * DOM 變了」這種情況不會重算，第二次查到的還是第一次查詢當下的舊值
+     * （2026-09-06 實測：`display` 明明已經變成 `none`，`getComputedStyle`
+     * 還是回 `block`）。這條要驗證的正是「查一次→變化→再查一次」，所以
+     * 掛進 `document.body`，測完手動 unmount 清掉，不留給下一條測試。
+     */
+    it('按下「顯示 N 家結果」會收合面板，不需要使用者自己再點一次「更多篩選」', async () => {
+        const wrapper = mount((await import('./FilterDrawer.vue')).default, {
+            attachTo: document.body,
+            props: {
+                filters: {},
+                resultCount: 10,
+                'onUpdate:filters': () => {},
+            },
+        });
+        await flushPromises();
+
+        try {
+            expect(panelVisible(wrapper)).toBe(true);
+            await wrapper.find('.show-results').trigger('click');
+
+            expect(panelVisible(wrapper)).toBe(false);
+        } finally {
+            wrapper.unmount();
+        }
+    });
+
+    it('「清除全部」跟「顯示 N 家結果」在同一個底部區塊', async () => {
+        const wrapper = mount((await import('./FilterDrawer.vue')).default, {
+            props: {
+                filters: { open_now: true },
+                resultCount: 5,
+                'onUpdate:filters': () => {},
+            },
+        });
+        await flushPromises();
+
+        const footer = wrapper.find('.panel-footer');
+        expect(footer.find('.clear').exists()).toBe(true);
+        expect(footer.find('.show-results').exists()).toBe(true);
+    });
 });

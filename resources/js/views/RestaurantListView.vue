@@ -353,7 +353,7 @@ watch(committedKeyword, (value) => {
             -->
             <ScopeSelect v-model="scope" :options="['city', 'all']" />
         </div>
-        <FilterDrawer v-model:filters="filters" />
+        <FilterDrawer v-model:filters="filters" :result-count="restaurants.length" :has-more-results="Boolean(nextCursor)" />
 
         <div class="sort-bar">
             <label for="sort-select">排序</label>
