@@ -218,6 +218,51 @@ describe('HomeView 結果計數', () => {
     });
 });
 
+describe('HomeView 地圖圖例', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        recommendedCalls.length = 0;
+        localStorage.clear();
+        setViewportMatches(true);
+        mapStub.getCenter.mockReturnValue({ lat: 25.033, lng: 121.5654 });
+    });
+
+    /**
+     * 地圖上出現圖例沒解釋的顏色，等於叫使用者猜謎。`RestaurantMap` 的 markerIcon
+     * 在 venue_kind 缺席時會畫第三種灰點——這條測試是「灰點與圖例必須成對出現」的防線。
+     */
+    it('有 venue_kind 缺席的店時，圖例補上第三種', async () => {
+        restaurantsPayload = {
+            data: [{ ...fakeRestaurant(1), venue_kind: 'exclusive' }, { ...fakeRestaurant(2), venue_kind: null }],
+            meta: { next_cursor: null },
+        };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.map-legend [data-kind="unknown"]').exists()).toBe(true);
+        expect(wrapper.find('.map-legend').text()).toContain('素食資訊待確認');
+    });
+
+    /**
+     * 2026-09-06 實測：1167 家 active 餐廳全部是 exclusive(576)／friendly(591)，
+     * 一家都不會產生灰點。無條件列出第三種等於解釋一個使用者永遠看不到的東西。
+     */
+    it('沒有灰點時不列第三種，那只是雜訊', async () => {
+        restaurantsPayload = {
+            data: [{ ...fakeRestaurant(1), venue_kind: 'exclusive' }, { ...fakeRestaurant(2), venue_kind: 'friendly' }],
+            meta: { next_cursor: null },
+        };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.map-legend [data-kind="unknown"]').exists()).toBe(false);
+        // 前兩種永遠都在。
+        expect(wrapper.find('.map-legend [data-kind="exclusive"]').exists()).toBe(true);
+        expect(wrapper.find('.map-legend [data-kind="friendly"]').exists()).toBe(true);
+    });
+});
+
 describe('HomeView 篩選也套到推薦', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -288,6 +333,25 @@ describe('HomeView 推薦卡片的距離與地址', () => {
 
         expect(wrapper.find('.card .distance').exists()).toBe(false);
         expect(wrapper.find('.card').text()).not.toContain('null');
+    });
+
+    /**
+     * 可信度用三段標籤，跟列表卡片同一套說法——同一個產品對同一件事有兩種講法
+     * （一邊「素食可信度 5」、一邊「素食資訊待確認」）比不改更糟。
+     */
+    it('推薦卡片的可信度也是標籤，不是裸分數', async () => {
+        recommendedPayload = {
+            data: [{
+                ...fakeRestaurant(1),
+                confidence_score: 5,
+                confidence_level: { code: 'unverified', label: '素食資訊待確認' },
+            }],
+        };
+
+        const { wrapper } = await mountHome('/?city=taipei');
+
+        expect(wrapper.find('.card .confidence').text()).toBe('素食資訊待確認');
+        expect(wrapper.find('.card').text()).not.toContain('素食可信度 5');
     });
 
     it('把城市跟路名拼成完整地址', async () => {

@@ -139,6 +139,10 @@ export function formatMatchReasons(reasons?: MatchedReason[] | null): string | n
 /**
  * 素食可信度的畫面文字。
  *
+ * **裸分數只留給沒有 `confidence_level` 的舊使用端**（詳情頁的分數明細仍然要
+ * 印數字，那裡有 breakdown 說明每一分怎麼來的，不會被誤讀成評分）。列表卡片
+ * 請用後端給的 `confidence_level.label`，見 config/vegetarian.php 的說明。
+ *
  * 回傳 null 代表沒有分數——不要印「0 分」：0 跟「還沒有人查證過」在使用者眼裡
  * 是兩件事，前者看起來像這家店被判定不可信。
  */

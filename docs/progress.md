@@ -3956,3 +3956,82 @@ bindings，開錯人是資料外洩。
   `redocly lint` 0 error。
 
 **下一步**：B8（卡片資訊層級重排）或 B7（圖例補第三種）。
+
+## 2026-09-06 B8 — 卡片資訊層級重排 ＋ 可信度改三段標籤 ✅ 已完成
+
+### 先量（這一項的每個決定都是量出來的，不是設計偏好）
+
+`restaurant_confidence_scores` 全表：**589 家 5 分、559 家 10 分，沒有任何一家超過 10**
+（1148 家有分數，1167 家 active）。也就是說「素食可信度 5」這個裸分數在 0–100 的
+量表上幾乎沒有區辨力，卻天天被讀成「這家店只有 5 分，很爛」——它的實際意思是
+「只有 OSM 標示，還沒有人查證過」。這正是規劃說的「分數看起來像評分，而這個產品
+刻意不做評分，兩者混淆是體驗上的傷害」。
+
+### 三段標籤
+
+- `config/vegetarian.php` 新增 `confidence_levels`（high 60／verified 30／unverified 0），
+  **門檻與既有的 `confidence_filters`（篩選晶片）同源**——分開維護的話，使用者按
+  「有查證」篩出來的店會在卡片上寫「待確認」，那是自打嘴巴。
+  `ConfidenceLevelTest::test_level_thresholds_match_the_filter_chips` 釘住兩者不會漂移
+  （比照 `CitiesTest` 綁住 config/cities.php 與 sync_regions 的做法）。
+- `VerificationCatalog::level()` ＋ `RestaurantResource.confidence_level`，
+  前端不需要知道門檻數字（單一真相來源在 config）。
+- **過程中抓到一個真的落差**：原本寫 `whenLoaded('confidenceScore', ...)`，但 Laravel 的
+  `whenLoaded()` 在「關聯載入了、卻沒有那一列」時**直接回 null、callback 根本不執行**。
+  於是 1167 家裡那 19 家沒有分數列的店會什麼標籤都不顯示——而「還沒有人查證過」
+  正是這個標籤要講的事，沉默反而讓使用者不知道能不能相信它。改成
+  `when($this->relationLoaded(...))`，並補一條測試釘住這個反直覺的行為。
+  **這是打真實 API 對答案時才發現的**（`/restaurants/recommended` 回 `level: null`），
+  單元測試 `level(null)` 是綠的，測不到 Resource 這條路。
+
+### 卡片三層
+
+平鋪成同一層的 `<span>` 時每一項都一樣重，使用者得讀完才知道哪個重要。改成：
+
+1. **身分**——店名 ＋ venue 徽章
+2. **事實**——營業狀態 · 料理種類
+3. **證據**——命中原因 · 可信度 · 地址（字級與顏色都降一階）
+
+徽章**形狀也不同**（純素食＝999px 圓角膠囊、素食友善＝3px 方角），不是只有顏色：
+綠與藍對紅綠色盲可能是同一個色塊，而「整間店都素」跟「有素食選項」對素食者是
+很不一樣的資訊。瀏覽器實測 `getComputedStyle` 確認兩者 borderRadius 真的是
+999px 與 3px，不是只有我以為。
+
+HomeView 的推薦卡片一併改（同一個產品對同一件事不能有兩種說法），並補測試——
+推薦區要定位才會出現，瀏覽器驗不到，所以那一塊只有元件測試覆蓋，這點誠實記錄。
+
+**既有測試原本沒有守住可信度顯示**：改成標籤後前端 326 條全綠，這代表沒有任何
+一條在看它。補了 3 條（標籤文字／data-level／三層各自成組）。
+
+## 2026-09-06 B7 — 地圖圖例的第三種顏色 ✅ 已完成
+
+規劃要求「**先查哪一種情況真的會發生**，查完再決定補圖例或消滅它，不要兩件都做」。
+
+**查到的答案**：`venue_kind` 為 null 的條件是「這家店的 diet_types 沒有任何一個對應到
+exclusive／friendly」。實測 1167 家 active 餐廳：**exclusive 576、friendly 591、
+null 0 家**；而且七個 diet code 每一個都對應得到 kind（`vegan`／`vegetarian`／`lacto`／
+`ovo`／`ovo_lacto` → exclusive，兩個 `*_friendly` → friendly），完全沒有 diet_types 的
+店也是 0 家。列表 API 的 `search()` 有 eager load `dietTypes`，所以 `venue_kind` 一定帶。
+
+**結論：灰點在現況下一家都不會出現。** 所以兩條路都不對——
+
+- 無條件補圖例＝解釋一個使用者永遠看不到的東西，是雜訊；
+- 消滅 `?? 'unknown'` 這條 fallback ＝把「資料真的缺了」的情況變成說謊（畫成綠點或藍點）。
+
+**做法：圖例那一項只在地圖上真的有灰點時才顯示**（`hasUnknownKind`）。現況下使用者
+看不到多餘項目，真的發生時（diet_types 沒載到、或未來新增對應不到 kind 的 code）
+立刻有解釋。兩條測試守住這對關係：有灰點就要有圖例、沒灰點就不能列。
+瀏覽器實測台中：圖例只有兩項，符合實測資料。
+
+後端 663 passed（4 skipped、1814 assertions）、前端 332 passed、PHPStan 0、Pint PASS、
+redocly 0 error。
+
+**過程中自己踩了一次已知的坑**：把完整 `php artisan test` 丟背景跑之後，前景又跑了一個
+`--filter` 的小範圍驗證，兩個進程的 `RefreshDatabase` 對同一個 `veggiemap_testing`
+互相 migrate:fresh，完整那一輪回報 **29 failed**。失敗全部落在 AI Office 子系統
+（這一批完全沒碰的地方），而每個檔案單獨跑都全綠——正是這個專案已經記錄過的判別法。
+單獨重跑一次即 663 全綠，中間沒有改任何程式碼。已知的坑卡原本只寫「多個 session」，
+補上「**同一個 session 自己同時跑兩個 artisan test 也會觸發**」。
+
+**下一步**：第 1 批（A1／A2／B8／B7）到此完成。接著是第 2 批「零結果的完整解」——
+A3（放寬條件的建議）→ B6（空狀態可按的下一步）→ A4（錯字容錯）。

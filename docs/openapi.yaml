@@ -1552,6 +1552,17 @@ components:
           items: { type: string }
           description: >
             命中的菜色名稱（最多三個）。只有在帶 keyword、而且命中的不是店名時才出現。
+        confidence_level:
+          type: object
+          description: >
+            可信度的三段標籤，畫面顯示這個而不是 confidence_score 的裸分數——
+            0–100 看起來像評分，而這個產品刻意不做評分制度（使用者會把
+            「素食可信度 5」讀成「這家店很爛」，實際意思是「還沒有人查證過」）。
+            門檻與 confidence_filters 同源，見 config/vegetarian.php。
+            沒有分數列的餐廳一樣會拿到 unverified，不是整個欄位消失。
+          properties:
+            code: { type: string, enum: [high, verified, unverified] }
+            label: { type: string, example: 素食資訊待確認 }
         matched_reasons:
           type: array
           description: >

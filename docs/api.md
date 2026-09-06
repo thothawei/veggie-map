@@ -182,6 +182,18 @@ GET /api/v1/restaurants?bbox=35.5300,139.5600,35.8200,139.9200&venue_scope=exclu
 （沒有分數列的餐廳算 0 分排在最後，不是被濾掉）。列表回應現在也帶 `confidence_score`，
 不必點進詳情才看得到。
 
+**`confidence_level`（2026-09）**：三段標籤 `{ code, label }`，`code` 是
+`high`／`verified`／`unverified`。**畫面顯示這個，不是 `confidence_score` 的裸分數**——
+0–100 的數字看起來像評分，而這個產品刻意不做評分制度（2026-08-26 產品決定），
+使用者會把「素食可信度 5」讀成「這家店很爛」，它的實際意思是「還沒有人查證過」。
+2026-09-06 實測：1148 家有分數的店裡 589 家 5 分、559 家 10 分，**沒有一家超過 10**
+——裸分數在現況下幾乎沒有區辨力，卻天天在誤導。
+
+門檻與 `confidence_filters`（篩選晶片）**同源**，都在 `config/vegetarian.php`：
+分開維護的話，使用者按「有查證」篩出來的店會在卡片上寫「待確認」。有測試釘住
+（`tests/Feature/Api/ConfidenceLevelTest.php`）。沒有分數列的餐廳一樣拿到
+`unverified`，不是整個欄位消失——「還沒有人查證過」正是這個標籤要講的事。
+
 **詳情另外帶 `confidence_breakdown`**：每一種已成立的驗證各取最高分
 （`[{code, label, score}]`，分數高的在前）。只給一個數字的話，使用者沒辦法判斷要不要
 相信它——「管理員已查證」跟「OSM 標示」是很不一樣的證據。

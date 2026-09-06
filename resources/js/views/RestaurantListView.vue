@@ -7,7 +7,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { ALL_CITIES, useCities } from '@/composables/useCities';
 import { apiFilterParams, filterQueryKey, useFilterQuery } from '@/composables/useFilterQuery';
-import { formatAddress, formatConfidence, formatCuisines, formatMatchReasons, formatOpenStatus } from '@/lib/format';
+import { formatAddress, formatCuisines, formatMatchReasons, formatOpenStatus } from '@/lib/format';
 import { googleMapsUrl } from '@/lib/geo';
 import type { ApiSuccess, ExpandedTerm, Restaurant } from '@/types';
 
@@ -346,32 +346,57 @@ watch(committedKeyword, (value) => {
 
         <ul>
             <li v-for="restaurant in restaurants" :key="restaurant.id">
+                <!--
+                    三層資訊，不是把所有欄位平鋪成同一層的 <span>（那樣每一項都
+                    一樣重，使用者得自己讀完才知道哪個重要）：
+                      1. 身分——店名 ＋ venue 徽章
+                      2. 事實——營業狀態 · 料理種類
+                      3. 證據——命中原因 · 可信度 · 地址
+                -->
                 <button type="button" @click="goToDetail(restaurant)">
-                    <strong>{{ restaurant.name }}</strong>
-                    <span
-                        v-if="restaurant.venue_badge"
-                        class="venue-badge"
-                        :data-kind="restaurant.venue_kind ?? undefined"
-                    >{{ restaurant.venue_badge }}</span>
-                    <span v-if="formatCuisines(restaurant.cuisines)" class="cuisines">{{ formatCuisines(restaurant.cuisines) }}</span>
-                    <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
-                    <!--
-                        「這家店為什麼出現在結果裡」。搜「拉麵」排第一的店如果店名
-                        沒有那兩個字，不說明看起來像排序壞了——其實是命中了料理種類。
-                    -->
-                    <span v-if="formatMatchReasons(restaurant.matched_reasons)" class="match-reason">
-                        {{ formatMatchReasons(restaurant.matched_reasons) }}
+                    <span class="card-identity">
+                        <strong>{{ restaurant.name }}</strong>
+                        <!--
+                            徽章的形狀也不同（純素食是圓角膠囊、素食友善是方角），
+                            不是只有顏色不同——色盲使用者分辨不出兩種綠藍色塊。
+                        -->
+                        <span
+                            v-if="restaurant.venue_badge"
+                            class="venue-badge"
+                            :data-kind="restaurant.venue_kind ?? undefined"
+                        >{{ restaurant.venue_badge }}</span>
                     </span>
-                    <span
-                        v-if="formatConfidence(restaurant.confidence_score)"
-                        class="confidence"
-                    >{{ formatConfidence(restaurant.confidence_score) }}</span>
-                    <span
-                        v-if="formatOpenStatus(restaurant)"
-                        class="open-status"
-                        :data-state="formatOpenStatus(restaurant)?.state"
-                    >{{ formatOpenStatus(restaurant)?.text }}</span>
-                    <span class="address">{{ formatAddress(restaurant) ?? '地址未提供' }}</span>
+
+                    <span class="card-facts">
+                        <span
+                            v-if="formatOpenStatus(restaurant)"
+                            class="open-status"
+                            :data-state="formatOpenStatus(restaurant)?.state"
+                        >{{ formatOpenStatus(restaurant)?.text }}</span>
+                        <span v-if="formatCuisines(restaurant.cuisines)" class="cuisines">{{ formatCuisines(restaurant.cuisines) }}</span>
+                    </span>
+
+                    <span class="card-evidence">
+                        <!--
+                            「這家店為什麼出現在結果裡」。搜「拉麵」排第一的店如果店名
+                            沒有那兩個字，不說明看起來像排序壞了——其實是命中了料理種類。
+                        -->
+                        <span v-if="formatMatchReasons(restaurant.matched_reasons)" class="match-reason">
+                            {{ formatMatchReasons(restaurant.matched_reasons) }}
+                        </span>
+                        <!--
+                            三段標籤而不是裸分數：0–100 的數字看起來像評分，而這個
+                            產品刻意不做評分——使用者會把「素食可信度 5」讀成
+                            「這家店很爛」，它的實際意思是「還沒有人查證過」。
+                        -->
+                        <span
+                            v-if="restaurant.confidence_level"
+                            class="confidence"
+                            :data-level="restaurant.confidence_level.code"
+                        >{{ restaurant.confidence_level.label }}</span>
+                        <span v-if="restaurant.venue_summary" class="venue-summary">{{ restaurant.venue_summary }}</span>
+                        <span class="address">{{ formatAddress(restaurant) ?? '地址未提供' }}</span>
+                    </span>
                 </button>
                 <!--
                     放在 button 外面：<a> 巢狀在 <button> 裡是無效 HTML，而且點連結
@@ -466,7 +491,7 @@ ul {
 li button {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.35rem;
     width: 100%;
     text-align: left;
     padding: 1rem;
@@ -475,6 +500,40 @@ li button {
     border-radius: 8px;
     background: #fff;
     cursor: pointer;
+}
+
+/* 第一層：身分。店名與徽章同一行，徽章不換行擠掉店名。 */
+.card-identity {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.card-identity strong {
+    font-size: 1.05rem;
+}
+
+/* 第二層：事實。一行講完，用點分隔而不是各佔一行。 */
+.card-facts,
+.card-evidence {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.5rem;
+}
+
+.card-facts > * + *::before,
+.card-evidence > * + *::before {
+    content: '·';
+    margin-right: 0.5rem;
+    color: #cbd5e0;
+}
+
+/* 第三層：證據。比事實再淡一階，讓視線先落在店名與營業狀態。 */
+.card-evidence {
+    font-size: 0.85rem;
+    color: #718096;
 }
 
 li button:hover {
@@ -491,18 +550,26 @@ li button:hover {
     font-size: 0.85rem;
 }
 
+/*
+ * 純素食店＝圓角膠囊、素食友善＝方角標籤。**形狀也不同，不是只有顏色不同**：
+ * 綠與藍對紅綠色盲來說可能是同一個色塊，而「整間店都素」跟「有素食選項」
+ * 對素食者是很不一樣的資訊，不能只靠顏色承載。
+ */
 .venue-badge {
     align-self: flex-start;
     padding: 0.1rem 0.5rem;
     border-radius: 999px;
     background: #f0fff4;
     color: #276749;
+    border: 1px solid #9ae6b4;
     font-size: 0.75rem;
 }
 
 .venue-badge[data-kind='friendly'] {
+    border-radius: 3px;
     background: #ebf8ff;
     color: #2b6cb0;
+    border-color: #bee3f8;
 }
 
 .venue-summary {
@@ -544,9 +611,17 @@ li button:hover {
     color: #718096;
 }
 
-.confidence {
+/*
+ * 「待確認」刻意不上警示色：它是多數店家的現況（實測 1148 家全部落在這一段），
+ * 整頁紅字會讓人以為這些店有問題，實際上只是還沒有人去查證。
+ */
+.confidence[data-level='high'] {
+    color: #276749;
+    font-weight: 600;
+}
+
+.confidence[data-level='verified'] {
     color: #2c5282;
-    font-size: 0.85rem;
 }
 
 .sort-bar {

@@ -101,6 +101,8 @@ export interface Restaurant {
     menu_items?: MenuItem[];
     menu_empty_message?: string | null;
     confidence_score?: number | null;
+    /** 卡片顯示這個三段標籤，不是上面的裸分數（見 ConfidenceLevel 的說明）。 */
+    confidence_level?: ConfidenceLevel | null;
     /** 這個分數憑什麼——每一種已成立的驗證各取最高分（只有詳情才有）。 */
     confidence_breakdown?: Array<{ code: string; label: string; score: number }>;
     /**
@@ -159,6 +161,15 @@ export interface User {
     // 一般消費者 `user` 共用同一個欄位，見 App\Models\User::AI_OFFICE_ROLES。
     role: 'user' | 'admin' | 'manager' | 'developer' | 'viewer';
     created_at: string;
+}
+
+/**
+ * 可信度的三段標籤。畫面顯示這個而不是 `confidence_score` 的裸分數——0–100 看起來
+ * 像評分，而這個產品刻意不做評分制度。門檻定義在 config/vegetarian.php。
+ */
+export interface ConfidenceLevel {
+    code: 'high' | 'verified' | 'unverified';
+    label: string;
 }
 
 export interface MatchedReason {

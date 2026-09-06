@@ -630,6 +630,76 @@ describe('RestaurantListView 命中原因', () => {
     });
 });
 
+describe('RestaurantListView 卡片資訊層級', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restaurantCalls.length = 0;
+        localStorage.clear();
+    });
+
+    /**
+     * 0–100 的分數看起來像評分，而這個產品刻意不做評分制度——使用者會把
+     * 「素食可信度 5」讀成「這家店很爛」，它的實際意思是「還沒有人查證過」。
+     * 2026-09-06 實測：1148 家有分數的店全部落在 5 或 10 分。
+     */
+    it('可信度顯示三段標籤，畫面上不出現裸分數', async () => {
+        listPayload = {
+            data: [{
+                ...fakeRestaurant(1),
+                confidence_score: 10,
+                confidence_level: { code: 'unverified', label: '素食資訊待確認' },
+            }],
+            meta: { next_cursor: null },
+        };
+
+        const { wrapper } = await mountList('/restaurants');
+
+        expect(wrapper.find('.confidence').text()).toBe('素食資訊待確認');
+        expect(wrapper.text()).not.toContain('素食可信度 10');
+    });
+
+    it('高可信度帶得出 data-level，讓樣式分得出三段', async () => {
+        listPayload = {
+            data: [{
+                ...fakeRestaurant(1),
+                confidence_score: 80,
+                confidence_level: { code: 'high', label: '高度可信' },
+            }],
+            meta: { next_cursor: null },
+        };
+
+        const { wrapper } = await mountList('/restaurants');
+
+        expect(wrapper.find('.confidence').attributes('data-level')).toBe('high');
+    });
+
+    it('三層各自成組，不是全部平鋪成同一層', async () => {
+        listPayload = {
+            data: [{
+                ...fakeRestaurant(1),
+                venue_badge: '素食餐廳',
+                venue_kind: 'exclusive',
+                open_status: 'open',
+                cuisines: [{ code: 'ramen', label: '拉麵' }],
+                confidence_level: { code: 'unverified', label: '素食資訊待確認' },
+            }],
+            meta: { next_cursor: null },
+        };
+
+        const { wrapper } = await mountList('/restaurants');
+
+        // 身分層：店名與徽章在一起。
+        expect(wrapper.find('.card-identity').text()).toContain('餐廳 1');
+        expect(wrapper.find('.card-identity .venue-badge').text()).toBe('素食餐廳');
+        // 事實層：營業狀態與料理種類。
+        expect(wrapper.find('.card-facts').text()).toContain('營業中');
+        expect(wrapper.find('.card-facts').text()).toContain('拉麵');
+        // 證據層：可信度與地址。
+        expect(wrapper.find('.card-evidence').text()).toContain('素食資訊待確認');
+        expect(wrapper.find('.card-evidence').text()).toContain('地址 1');
+    });
+});
+
 describe('RestaurantListView 同義詞展開', () => {
     beforeEach(() => {
         vi.clearAllMocks();

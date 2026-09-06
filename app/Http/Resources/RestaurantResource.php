@@ -100,6 +100,17 @@ class RestaurantResource extends JsonResource
                 fn () => $this->matched_reasons,
             ),
             'confidence_score' => $this->whenLoaded('confidenceScore', fn () => $this->confidenceScore?->score),
+            // 畫面顯示的是這個三段標籤，不是上面的裸分數：0–100 看起來像評分，
+            // 而這個產品刻意不做評分。分數本身保留給 API 使用端與排序。
+            //
+            // 刻意用 when(relationLoaded) 而不是 whenLoaded()：後者在「關聯載入了
+            // 但沒有那一列」時**直接回 null、根本不執行 callback**，於是一家還沒有
+            // 任何驗證紀錄的店會什麼標籤都不顯示——但「還沒有人查證過」正是
+            // 「素食資訊待確認」要講的事，沉默反而讓使用者不知道能不能相信這家店。
+            'confidence_level' => $this->when(
+                $this->relationLoaded('confidenceScore'),
+                fn () => VerificationCatalog::level($this->confidenceScore?->score),
+            ),
             // 「這個分數憑什麼」。只有一個數字的話，使用者沒辦法判斷要不要相信它——
             // 「管理員已查證」跟「OSM 標示」是很不一樣的證據。
             'confidence_breakdown' => $this->whenLoaded(

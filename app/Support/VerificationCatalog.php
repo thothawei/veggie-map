@@ -62,6 +62,35 @@ class VerificationCatalog
     }
 
     /**
+     * 可信度的三段標籤（高度可信／有查證／待確認），取代畫面上的裸分數。
+     *
+     * 為什麼不直接印分數：0–100 看起來像評分，而這個產品刻意不做評分制度。
+     * 使用者會把「素食可信度 5」讀成「這家店 5 分，很爛」，實際意思卻是
+     * 「只有 OSM 標示，還沒有人查證過」——那是兩件完全不同的事。
+     *
+     * 沒有分數列（null）與 0 分都算最低那一段：兩者在使用者眼裡是同一件事
+     * （沒有人查證過），分開講沒有意義。門檻與 confidence_filters 同源，見 config。
+     *
+     * @return array{code: string, label: string}
+     */
+    public static function level(?int $score): array
+    {
+        /** @var list<array<string, mixed>> $levels */
+        $levels = config('vegetarian.confidence_levels', []);
+        $score ??= 0;
+
+        foreach ($levels as $level) {
+            if ($score >= (int) $level['min']) {
+                return ['code' => (string) $level['code'], 'label' => (string) $level['label']];
+            }
+        }
+
+        // config 被改成沒有 min=0 的那一段時才會走到這裡。回一個誠實的預設，
+        // 而不是讓畫面上出現空白徽章。
+        return ['code' => 'unverified', 'label' => '素食資訊待確認'];
+    }
+
+    /**
      * @return list<string>
      */
     public static function adminTypeCodes(): array

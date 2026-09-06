@@ -9,7 +9,7 @@ import FilterDrawer from '@/components/FilterDrawer.vue';
 import CitySwitcher from '@/components/CitySwitcher.vue';
 import { rememberCity, useCities } from '@/composables/useCities';
 import { apiFilterParams, useFilterQuery } from '@/composables/useFilterQuery';
-import { formatAddress, formatConfidence, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
+import { formatAddress, formatCuisines, formatDistance, formatOpenStatus } from '@/lib/format';
 import { formatBbox } from '@/lib/geo';
 import type { ApiSuccess, GeocodedPlace, Restaurant, SuggestedRestaurant } from '@/types';
 
@@ -230,6 +230,13 @@ watch(activeCity, (city, previous) => {
 });
 
 const hasResults = computed(() => restaurants.value.length > 0);
+
+/**
+ * 地圖上真的有灰色 marker 嗎？`RestaurantMap` 在 `venue_kind` 缺席時會畫第三種
+ * 灰點，圖例只在那時候才列出它——實測現況一家都不會（見圖例那段註解），
+ * 無條件列出只是雜訊。
+ */
+const hasUnknownKind = computed(() => restaurants.value.some((restaurant) => !restaurant.venue_kind));
 // 篩選被切掉後鍵可能還在（值是 undefined），直接數 Object.keys 會謊報「還有篩選條件」。
 const hasActiveFilters = computed(
     () => Object.values(filters.value).some((value) => value !== undefined && value !== null),
@@ -290,6 +297,18 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
             <ul class="map-legend" aria-label="地圖圖例">
                 <li><span class="veggie-marker" data-kind="exclusive" aria-hidden="true"></span>純素食店</li>
                 <li><span class="veggie-marker" data-kind="friendly" aria-hidden="true"></span>素食友善</li>
+                <!--
+                    第三種灰色 marker：`RestaurantMap` 的 markerIcon 在 venue_kind
+                    缺席時會畫它，圖例原本沒解釋——地圖上會出現圖例沒有的顏色。
+
+                    但**只在真的有灰點時才列**：2026-09-06 實測 1167 家 active 餐廳
+                    全部是 exclusive(576)／friendly(591)，一家都不會產生灰點，
+                    無條件列出等於解釋一個使用者永遠看不到的東西。它是給
+                    「diet_types 沒載到或新增了對應不到 kind 的 code」那天用的。
+                -->
+                <li v-if="hasUnknownKind">
+                    <span class="veggie-marker" data-kind="unknown" aria-hidden="true"></span>素食資訊待確認
+                </li>
             </ul>
 
             <p v-if="loading" class="map-badge" role="status">載入中…</p>
@@ -346,10 +365,16 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
                         <span v-if="formatDistance(restaurant.distance_meters)" class="distance">
                             {{ formatDistance(restaurant.distance_meters) }}
                         </span>
+                        <!--
+                            三段標籤而不是裸分數，跟列表卡片同一套說法：同一個產品
+                            對同一件事有兩種講法（一邊「素食可信度 5」、一邊
+                            「素食資訊待確認」）比不改更糟。理由見 config/vegetarian.php。
+                        -->
                         <span
-                            v-if="formatConfidence(restaurant.confidence_score)"
+                            v-if="restaurant.confidence_level"
                             class="confidence"
-                        >{{ formatConfidence(restaurant.confidence_score) }}</span>
+                            :data-level="restaurant.confidence_level.code"
+                        >{{ restaurant.confidence_level.label }}</span>
                         <span
                             v-if="formatOpenStatus(restaurant)"
                             class="open-status"
@@ -510,18 +535,25 @@ const showEmptyState = computed(() => !loading.value && !loadFailed.value && !ha
     font-size: 0.85rem;
 }
 
+/*
+ * 純素食店＝圓角膠囊、素食友善＝方角標籤（跟列表卡片同一套）。**形狀也不同，
+ * 不是只有顏色不同**：綠與藍對紅綠色盲可能是同一個色塊。
+ */
 .venue-badge {
     align-self: flex-start;
     padding: 0.1rem 0.5rem;
     border-radius: 999px;
     background: #f0fff4;
     color: #276749;
+    border: 1px solid #9ae6b4;
     font-size: 0.75rem;
 }
 
 .venue-badge[data-kind='friendly'] {
+    border-radius: 3px;
     background: #ebf8ff;
     color: #2b6cb0;
+    border-color: #bee3f8;
 }
 
 .venue-summary {
