@@ -1134,11 +1134,27 @@ Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是
       OpenAPI／api.md 同步更新，`OpenApiContractTest` 綠燈。PHPStan 途中
       補上 `Activity::project()` 缺的 `BelongsTo<Project, $this>` 泛型標註。
 
-- [ ] **`Projects` 清單頁／`Tasks` 跨專案頁／`Settings` 頁（AI Office §44 pages）**
-      三頁都不存在：專案建立塞在 Dashboard、任務只能從專案詳情進去、沒有設定頁。
-      **這一項可能是合理裁決**（MVP 專案數少，總覽即清單），但裁決沒有被寫下來，
-      所以下一個接手的人只會看到「規格列了、repo 沒有」。
-      決定不做的話，就在這裡改成 `[~]` 並寫明理由，不要留白。
+- [~] **`Projects` 清單頁／`Tasks` 跨專案頁／`Settings` 頁（AI Office §44 pages）**
+      **2026-09-06 裁決：三頁都不做，理由分開寫，不是一句「MVP 用不到」帶過：**
+      1. **`Projects` 清單頁**：`CommandCenter`（Dashboard 上）已經是「列出全部
+         專案 ＋ 建立新專案」的完整功能，只是沒有獨立路由。seeder／Demo 目前
+         專案數是個位數，分頁／篩選都用不上，另開一條路由只是同一份資料換一個
+         網址，沒有新增能力。
+      2. **`Tasks` 跨專案頁**：這一輪剛做的 `LogsView`（`GET /ai-office/activities`）
+         已經示範了「跨專案瀏覽＋篩選」的模式，如果要做 Tasks 版本，架構直接
+         照抄即可，**不是技術障礙**。沒做的原因是没有需求信號：現在看任務都是
+         「先看某個專案在幹嘛」（走 `ProjectDetailView` 的 `TaskBoard`），
+         還沒有出現「我要跨專案找某個狀態的任務」这种使用情境，跟 B3/B4 的
+         quick filter 是同一個判斷——沒有真實使用資料支持要不要做，先做等於
+         用猜的湊功能。
+      3. **`Settings` 頁**：查證後**沒有任何東西可以放進去**。這個 repo 的
+         AI Office 設定全部是 `.env`／`config/ai_office.php`（`DASHBOARD_ALLOWED_EMAILS`、
+         sandbox 上限、LLM provider…），改動要重新部署，不是執行期可調的
+         使用者設定。做一個空的設定頁只是為了讓路由清單看起來完整，那是
+         「規格清單字面對齊」不是「使用者需要」。
+      **會讓這個裁決過期的條件**：專案數成長到需要分頁／搜尋（→ 做 Projects
+      清單頁）；有人明確要求跨專案任務搜尋（→ 照抄 LogsView 的模式做）；
+      新增任何一個執行期可調的設定項（→ 那時候才有 Settings 頁要放的東西）。
 
 ### P3 — 要產品決定才能動（不要擅自選）
 
