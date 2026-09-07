@@ -43,6 +43,12 @@ class RestaurantController extends Controller
         $validated = $request->validated();
         $paginator = $this->restaurants->search($validated);
 
+        // 「哪個篩選最常被按」（B4 量體評估）。**每次搜尋都記**，不只零結果——
+        // `search_misses` 那份分佈只看得到「哪個篩選最容易把結果篩成 0 家」，
+        // 那是最不該常駐的候選，回答不了 B3 的「哪三個該常駐」。只加 cache
+        // 計數器、只記鍵名（不記 IP／user id／關鍵字／座標）。
+        $this->restaurants->recordFilterUsage($validated);
+
         $meta = [
             'per_page' => $paginator->perPage(),
             'next_cursor' => optional($paginator->nextCursor())->encode(),

@@ -5041,3 +5041,44 @@ docker 環境**量到的基準（229ms）訂的。GitHub Actions 的共用 runne
 `{ name: MIT, url: https://github.com/thothawei/veggie-map/blob/main/LICENSE }`，
 `npx @redocly/cli lint` 通過（0 error），`OpenApiContractTest` 綠燈。
 純文件／metadata 變動，不影響任何程式行為，不需要跑後端／前端測試。
+
+## 2026-09-07 — B4 續：量體評估的量測本身是錯的樣本，補上「篩選使用分佈」
+
+**做的事**：使用者要我繼續推進 B4 剩下的「哪三個該常駐 quick filter」。查證
+現況後發現卡點不是「資料還沒累積」，而是**現有的量測回答的是另一個問題**：
+
+- `search_misses.active_filters`（9/6 補的）只在**零結果**時寫入，所以它的
+  「篩選分佈」排行榜量到的是「哪個篩選最容易把結果篩成 0 家」。那恰好是最
+  **不**該常駐的候選——照著它挑前三名，會挑出最會把使用者篩到空手的那三個。
+- B3 要的是「哪個最常被按」，那需要**所有**搜尋的分佈。原本的儀器永遠量不到，
+  再等三十天流量也一樣。
+
+**改法**（`app/Support/FilterUsageTelemetry.php`）：每次 `/api/v1/restaurants`
+搜尋都記一筆——總數加一、每個有開的篩選鍵各加一。跟 `CacheStatsRecorder`
+同一套做法：存在 cache、按日切、`add()` 先建立帶 TTL 的 0 再 `increment()`
+（直接 increment 不存在的 key 會留下沒有 TTL 的計數器），TTL 100 天。只記
+鍵名，不記 IP／user id／關鍵字／座標——跟 `search_misses` 一貫的原則一樣。
+遙測整段包 try/catch：它掛掉的代價是少一份參考數字，把主查詢一起拉下去才
+是真的壞掉。
+
+`RestaurantRepository::activeFilterKeys()` 原本自己寫死一份鍵清單，現在改吃
+`FilterUsageTelemetry::trackedKeys()`——報表得逐個鍵去 cache 撈（cache 沒有
+「列出所有 key」），兩邊各留一份遲早會漂移：新增篩選只改一邊，報表就從此
+漏掉那一個。
+
+**報表**：`php artisan search:filter-usage --days=30` 印出每個鍵的使用次數與
+佔全部搜尋的比例，次數 0 的鍵也留著（「一次都沒人用」本身就是「不該常駐」
+的證據）。總搜尋 <100 次時明講「這個排名還不足以拿來改 B3 的三個常駐項目」
+——不加這個門檻，報表自己就會變成下一個憑猜的來源。
+
+**驗證**：新增 7 條測試（4 條 API：每次搜尋都記／沒開篩選也進分母／
+`venue_scope` 預設值不算使用者開了篩選／沒搜尋前是空的；3 條指令：無資料、
+列出、樣本太少的警告），全綠。**反向驗證**：把 controller 裡
+`recordFilterUsage()` 那行註解掉重跑，4 條裡紅了 3 條（該紅的那 3 條），
+確認測的是實作不是套件。相關既有測試 72 條全綠（`SearchMissTest`、
+`tests/Feature/Console`、facets、restaurants），PHPStan 0 error，Pint PASS。
+
+**結論不變**：B3 的三個常駐（店家類型／營業中／高度可信）**維持暫定值**。
+這一輪修的是儀器，不是結論——現在兩張表湊齊了：`search:filter-usage` 看誰
+最常被按、`search:misses` 的篩選分佈看誰最常把結果殺光，常駐的條件是前者高
+且後者低。真實流量進來以前不動 B3。

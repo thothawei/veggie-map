@@ -12,6 +12,7 @@ use App\Repositories\Search\KeywordSearch;
 use App\Support\CityCatalog;
 use App\Support\CuisineCatalog;
 use App\Support\DietCatalog;
+use App\Support\FilterUsageTelemetry;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -480,6 +481,25 @@ class RestaurantRepository
     }
 
     /**
+     * 記一次「這次搜尋開了哪些篩選」（B4 量體評估）。跟 recordMiss() 不同，
+     * 這個**每次搜尋都記**——`search_misses` 只在零結果時寫入，那份分佈回答的是
+     * 「哪個篩選最容易把結果篩成 0 家」，不是 B3 要的「哪三個最常被按」。
+     *
+     * 只加 cache 裡的計數器，不寫資料庫；失敗也不能拖垮搜尋，所以整段吞例外——
+     * 遙測掛掉的代價是少一份參考數字，讓它把主查詢一起拉下去才是真的壞掉。
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function recordFilterUsage(array $filters): void
+    {
+        try {
+            FilterUsageTelemetry::record($this->activeFilterKeys($filters));
+        } catch (\Throwable) {
+            // 靜默：見上面的註解。
+        }
+    }
+
+    /**
      * trim ＋ 空白收成一個 ＋ 大小寫統一。「拉麵」「拉麵 」「拉麵  」在 top N
      * 排行榜裡該算同一筆，不然計數會被空白差異稀釋掉；`mb_strtolower` 對
      * ASCII／全形字母有效，對中日文沒有影響。
@@ -503,10 +523,9 @@ class RestaurantRepository
     {
         $scopeParam = DietCatalog::venueScopeParam();
 
-        $keys = [
-            'diet', $scopeParam, 'price_level', 'confidence_min', 'open_now',
-            'bbox', 'city', 'district', ...Feature::CODES,
-        ];
+        // 這份清單長在 FilterUsageTelemetry：那邊的報表得逐個鍵去 cache 撈，
+        // 兩邊各留一份遲早會漂移（新增篩選只改一邊，報表就從此漏掉那一個）。
+        $keys = FilterUsageTelemetry::trackedKeys();
 
         $active = [];
 
