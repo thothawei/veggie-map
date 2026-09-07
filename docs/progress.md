@@ -5174,3 +5174,24 @@ Vue 元件 0 處，版面全部走 scoped style ＋ CSS 變數。所以 Tailwind
 （純素食 576／友善 592／全部 1168／營業中 86）、詳情頁 slug 路由正常、
 導覽列連結是 SPA 導航（在 `window` 上放旗標，導航後旗標還在＝沒有整頁重載）、
 console 無錯誤。
+
+## 2026-09-07 — 開發機 Node 換成 22 LTS，跟 CI 對齊
+
+升 Vite 8 之後本機留在 Node 23.11（非 LTS，落在 Vite 的 engine 範圍外，
+`npm install` 會印 EBADENGINE），使用者要求換成 22 LTS。
+
+Homebrew 管理：`brew install node@22`（22.23.2）→ `brew unlink node` →
+`brew link --overwrite --force node@22`。**23 的 formula 保留不刪**，要切回去
+反過來 link 一次就好。`.zshrc` 沒有硬編任何 node 路徑，不用改。
+
+Node ABI 換版會影響裝好的原生模組（esbuild／rollup／lightningcss 的 binary），
+所以是 `rm -rf node_modules && npm ci` 全新裝，不是原地沿用。這次 `npm ci`
+**沒有任何 EBADENGINE 警告**——那正是換版要拿到的結果。
+
+順手把版本範圍宣告進 `package.json` 的 `engines`（`^20.19 || ^22.13 || >=24`），
+以後裝錯版本會有警告。**刻意不加 `engine-strict`**：那會讓版本不符直接安裝失敗，
+對一個還沒有固定協作者的專案，擋人比提醒人的代價高。
+
+**驗證**（全部在 Node 22 下重跑）：447 條前端測試全綠、`vue-tsc` 乾淨、eslint 乾淨、
+`npm run build` 成功、`npm audit` 0 漏洞；真瀏覽器打開列表頁，facets 數字正常
+（576／592／1168／營業中 47／高度可信 0）、console 無錯誤。

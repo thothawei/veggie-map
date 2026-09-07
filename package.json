@@ -1,6 +1,9 @@
 {
     "private": true,
     "type": "module",
+    "engines": {
+        "node": "^20.19 || ^22.13 || >=24"
+    },
     "scripts": {
         "build": "vue-tsc --noEmit && vite build",
         "dev": "vite",

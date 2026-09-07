@@ -134,8 +134,10 @@ SPA 由 Laravel blade shell 渲染、HMR 走 Vite dev server）、Pinia、Vue Ro
 Axios、Leaflet + `leaflet.markercluster`、Tailwind 4（**只用到它的 preflight**，全站沒有
 utility class，版面走元件 scoped style ＋ `resources/css/app.css` 的 CSS 變數）。
 
-Vite 8 要求 Node `^20.19 || ^22.13 || >=24`——CI 用 22。裝在不符合的版本上（例如 23.x）
-`npm install` 會印 EBADENGINE 警告，build 目前仍跑得動，但那是沒有保證的區間。
+**Node 22 LTS**（開發機與 CI 一致）。這個範圍寫在 `package.json` 的 `engines`
+（`^20.19 || ^22.13 || >=24`＝Vite 8 的要求），裝在範圍外的版本時 `npm install`
+會印 EBADENGINE 警告。**刻意沒有加 `engine-strict`**：那會讓版本不符直接安裝失敗，
+對一個還沒有固定協作者的專案來說，擋人比提醒人的代價高。
 
 **Infra**：Docker Compose（app / nginx / mysql / redis）。
 
