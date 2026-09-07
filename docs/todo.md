@@ -1164,10 +1164,14 @@ Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是
       當時只看了兩個城市而且沒算 `limited`。
       **東京還沒帶進來**：重跑時 Overpass 連兩次 HTTP 504（外部服務忙碌，fallback
       正確地回 0 筆而不是炸掉），等每日排程補。
-- [ ] ~~**`vegan=only` 是否自動掛 `vegetarian`**~~
-      改由 P0 `config/diet.php` 的 `implies[]` 處理，預設關、用設定打開，不當寫死規則。
-- [ ] ~~**台南要不要從 `only` 放寬成 `yes`**~~
-      已由產品決定：Phase B 台灣四市（含台南）都改收友善店；預設篩選仍 exclusive。
+- [x] ~~**`vegan=only` 是否自動掛 `vegetarian`**~~ 已解決：改由 P0
+      `config/diet.php` 的 `implies[]` 處理（查證現況：`'implies' => []`，
+      預設關、用設定打開，不當寫死規則）。checkbox 先前沒跟著打勾，2026-09-06
+      查證屬實後補上。
+- [x] ~~**台南要不要從 `only` 放寬成 `yes`**~~ 已解決：Phase B 台灣四市（含
+      台南）都改收友善店（查證現況：`.env` 的 `EXTERNAL_API_SYNC_BBOXES`
+      四個台灣 bbox 全是 `@yes`）；預設篩選仍 exclusive。checkbox 先前沒
+      跟著打勾，2026-09-06 查證屬實後補上。
 - [x] **舊資料的 slug 回寫拼音** ✅ 2026-08-26 產品決定：回寫，但舊網址不能死。
       建 `restaurant_slug_aliases` 接住舊 slug，`restaurants:backfill-slugs`
       （預設 dry-run）負責換。**開發／正式庫的實際回寫另外執行**，見 progress.md。
