@@ -4916,6 +4916,51 @@ P3「要產品決定才能動（不要擅自選）」：`LICENSE` 檔、`Sanctum
 `FoodDataProviderInterface`——問過使用者，三項決定分別是：加 MIT、
 Sanctum token 現在就加過期時間、`FoodDataProvider` 維持不做。
 
+## 2026-09-07 — 修：CI 的 A9 benchmark 長期紅燈（環境門檻沒校準，不是效能回歸）
+
+**發現的過程**：推完 Sanctum 那批之後習慣性看一眼 `gh run list`，發現「加
+MIT LICENSE」那個純文件 commit（沒有動任何程式碼）CI 也紅了——這不可能是
+那個 commit 造成的，代表紅燈跟我當下在改的東西無關，得回頭查。
+
+**查證，不是猜**：拉了今天以來的 CI 歷史，`gh run view --log-failed` 挑
+5 次失敗的跑逐一比對，全部同一條測試、同一種失敗訊息：
+
+| commit | 量到的時間 |
+|---|---|
+| 補上首頁排序控制項 | 345.8ms |
+| 每個篩選帶會剩幾家 | 330.6ms |
+| B4 量體評估 | 330.6ms |
+| ResourceUsage | 335.3ms |
+| AgentDetailView | 336.6ms |
+| 加 MIT LICENSE（純文件） | 333.7ms |
+| 補打勾兩個 todo | 339.8ms |
+
+七次全部是 `KeywordSearchBenchmarkTest`，全部落在 330–346ms 這個窄區間，
+全部只超過門檻（300ms）一點點——不是某次改動讓它爆掉到 800ms，是**穩定地
+比門檻高一截**。而且「加 MIT LICENSE」那次沒動任何 PHP／查詢邏輯也紅，
+直接排除「是這幾輪的程式改動讓查詢變慢」這個假設。
+
+**根因**：A9 這個 benchmark（見 2026-09-06 段落）的 300ms 門檻是照**本機
+docker 環境**量到的基準（229ms）訂的。GitHub Actions 的共用 runner 硬體
+規格與雜訊（noisy neighbor）跟本機不一樣，同一段查詢邏輯穩定量到 330–346ms
+——這是「量測環境的基準線不同」，不是「查詢真的變慢了」。
+
+**做的事**：`config/veggiemap.php` 的 `benchmark_threshold_ms` 本來就是
+`env('VEGGIEMAP_SEARCH_BENCHMARK_MS', 300)`，設計上早就留了環境覆寫的路，
+只是 CI workflow 沒有用它。`.github/workflows/ci.yml` 的 backend job 補上
+`VEGGIEMAP_SEARCH_BENCHMARK_MS: 500`（略高於觀測到的最壞值 346ms，留一點
+餘裕但不會寬到抓不到真的回歸），**本機開發沒設這個變數，還是用預設的
+300ms**——本機那道防線沒有被動過，真正會抓到效能回歸的是本機那個更緊的
+門檻，CI 這個只是不要因為機器不同而每次都紅。
+
+**這不是「調高門檻打發過去」**：如果是查詢本身變慢（例如少了一個索引、
+多了一個 N+1），本機的 300ms 門檻在開發時就會先紅，不用等到 CI；CI 的
+500ms 只是校準到「這台機器跑這個查詢正常的樣子」。
+
+**驗證**：改動只有 CI workflow 一個環境變數，沒有動任何程式碼或測試斷言
+邏輯。下一次 push 後看 `gh run list` 確認 Backend job 轉綠——如果還是紅，
+代表門檻沒抓對或有別的問題，要回頭重新量測，不是繼續調高數字。
+
 ## 2026-09-06 — P3 決定：Sanctum token 加過期時間 ＋ refresh 機制
 
 **查證再動手**：`config('sanctum.expiration')` 這個值不是「不用就沒用」，
