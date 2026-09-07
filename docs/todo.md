@@ -65,7 +65,12 @@ docker 已經可以用，`php artisan test` 跑得動，所以 A1 是真的測�
       `search-misses:prune`（預設 90 天）排程每天清舊資料
 - [x] A9 搜尋效能 benchmark 測試（不上 FULLTEXT，先立量測線）✅ 2026-09-06
       灌 12,000 家跑 8 變體查詢（config「珍珠奶茶」那組同義詞剛好 8 個詞），
-      實測 229ms（門檻 300ms，`veggiemap.search.benchmark_threshold_ms`）
+      實測 229ms（門檻 300ms，`veggiemap.search.benchmark_threshold_ms`）。
+      **2026-09-07 補記**：GitHub Actions 共用 runner 穩定量到 330–346ms，
+      跟本機基準（229ms）有落差，連續 7 次 CI 紅燈都是這條、不是查詢真的
+      變慢（含一次完全沒動程式碼的純文件 commit 也紅）。已用既有的
+      `VEGGIEMAP_SEARCH_BENCHMARK_MS` env 在 CI workflow 校準到 500ms，
+      本機開發仍是 300ms，細節見 progress.md。
 
 ### 搜尋畫面 UI/UX
 
