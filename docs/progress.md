@@ -4916,6 +4916,77 @@ P3「要產品決定才能動（不要擅自選）」：`LICENSE` 檔、`Sanctum
 `FoodDataProviderInterface`——問過使用者，三項決定分別是：加 MIT、
 Sanctum token 現在就加過期時間、`FoodDataProvider` 維持不做。
 
+## 2026-09-06 — P3 決定：Sanctum token 加過期時間 ＋ refresh 機制
+
+**查證再動手**：`config('sanctum.expiration')` 這個值不是「不用就沒用」，
+而是**已經在生效路徑上，只是被設成 `null`**——Sanctum 的
+`Guard::isValidAccessToken()`（`vendor/laravel/sanctum/src/Guard.php:129`）
+本來就會拿這個值比對每個 token 的 `created_at`，跟 token 自己的
+`expires_at` 欄位是兩道獨立檢查。這代表**不用改 `AuthController` 就能讓
+所有 token 開始過期**，只要把 `expiration` 從 `null` 改成一個數字。
+一開始以為要自己在 `createToken()` 手動算 `expires_at`（另一個獨立機制），
+查了原始碼才發現那是白工——两道机制刻意留著給不同情境用，這次只需要
+啟用比較簡單的那道全域上限。
+
+**做的事**：
+
+1. `config/sanctum.php` 的 `expiration` 改 `env('SANCTUM_TOKEN_EXPIRATION', 10080)`
+   （預設 7 天）。`.env`／`.env.example` 都補上這個變數。
+2. `AuthController` 加 `issueToken()` helper，`register()`／`login()`／新的
+   `refresh()` 都經過它，回應多一個 `expires_at`（`config('sanctum.expiration')`
+   算出來的參考時間點，給前端排程用；真正生效的仍然是上面那個
+   `created_at` 比對，兩者算出來的時間點一致但不是同一套機制，寫在
+   `issueToken()` 的註解裡避免下一輪搞混）。
+3. `POST /auth/refresh`（`auth:sanctum` 保護）：刪掉目前的 token、發一張新的。
+   **刻意是「換」不是「多發一張」**——舊 token 立刻撤銷，外流的舊 token
+   被撤銷才有意義；如果兩張都能用一陣子，撤銷這個動作就沒有實際效果。
+
+**前端補的是一個原本完全不存在的缺口**：查證發現舊版**沒有任何 401
+攔截器**——因為 token 永不過期，`/me` 或其他需要登入的請求收到 401 這個
+情境從來沒真的發生過，缺口才沒被注意到。現在加了過期時間，這個情境會
+真的發生，所以：
+
+- `api/client.ts` 新增 response 攔截器：401（排除 `/auth/login`／
+  `/auth/register`，那兩支的失敗是 422 帳密錯誤，不是這個攔截器要處理的
+  情境）清掉本機 session、導去登入頁並記住原本要去的路徑（沿用既有的
+  `redirect` query 慣例）。動態 `import()` store／router 是為了繞開
+  client.ts 先於它們被載入造成的循環依賴。
+- `stores/auth.ts` 加 `expiresAt` 狀態（存 localStorage）、`refresh()`
+  action、`clearSession()`（只清本機狀態，不打 `/auth/logout`——token 已經
+  失效時再打一次登出 API 只會再拿到一次 401，沒有意義；跟 401 攔截器共用
+  這個方法）。
+- `lib/tokenRefresh.ts` 抽出 `shouldRefreshToken()` 純函式（給定
+  `expiresAt`、現在時間、緩衝分鐘數，回傳該不該提前換），`App.vue` 用
+  `setInterval` 每 5 分鐘檢查一次，剩餘時間進入 60 分鐘緩衝區內就呼叫
+  `auth.refresh()`。抽成純函式是因為分鐘級的排程邏輯不寫成純函式沒辦法
+  測——不用等真的 5 分鐘過去，也不用 mock 計時器。refresh 失敗不用自己
+  處理登出，401 攔截器已經會接手，這裡只吞掉錯誤不讓它變成 unhandled
+  rejection。
+
+**驗證**
+
+- 後端 6 條新測試（`AuthTest`）：`login`／`register` 回應帶正確的
+  `expires_at`（`config` 關掉時是 `null`）、超過過期窗的 token 真的被拒絕、
+  窗內的 token 仍然可用（都用 `forceFill(['created_at' => ...])` 模擬時間
+  流逝，不用真的等）、`refresh` 換到新 token 且舊 token 立刻失效、
+  `refresh` 需要先登入。後端全套 **741** 條全綠（4 skipped），PHPStan
+  0 error，Pint PASS（途中被 Pint 抓到一處要補 `use` 匯入而不是寫完全
+  限定名稱，已修正）。
+- 前端 15 條新測試：`stores/auth.test.ts` 5 條（token／過期時間寫入
+  localStorage、`refresh` 換值、`clearSession` 不打 API、`logout` 失敗仍
+  清狀態）、`api/client.test.ts` 5 條（直接呼叫攔截器的 `rejected` handler，
+  不用真的打網路——401 清 session 並導頁、`/auth/refresh` 的 401 也要接、
+  `/auth/login` 的 401 不觸發、已在登入頁不重複導、非 401 不觸發）、
+  `lib/tokenRefresh.test.ts` 5 條。前端全套 **447** 條全綠，eslint／
+  vue-tsc／`npm run build` 乾淨。
+- `docs/openapi.yaml` 新增 `/auth/refresh`、`AuthSuccess` 補 `expires_at`
+  （`npx @redocly/cli lint` 通過），`docs/api.md` 新增「認證與 token 過期」
+  一節，`OpenApiContractTest` 綠燈。
+- 沒做真瀏覽器點擊驗證（同前幾則的理由：沒有已知的 admin 密碼）——但這次
+  額外用 `docker compose exec app php artisan tinker` 手動建立一個過期
+  token（`forceFill` 過去的 `created_at`）＋ `curl` 打 `/api/v1/me` 確認
+  真的回 401，不是只靠 PHPUnit 環境的行為。
+
 ## 2026-09-06 — P3 決定：加 `LICENSE`（MIT）
 
 新增 `LICENSE`（MIT，著作權人 thothawei，2026）。查證時發現一個既有

@@ -834,6 +834,31 @@ paths:
         "200": { $ref: "#/components/responses/EmptySuccess" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
 
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [Auth]
+      summary: >-
+        在過期前換一張新 token（`config('sanctum.expiration')` 加了過期時間
+        之後才有意義）。舊 token 立刻撤銷，不是多發一張——外流的舊 token
+        撤銷才有效果。
+      responses:
+        "200":
+          description: 換到新 token
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          token: { type: string }
+                          expires_at: { type: string, format: date-time, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
   /me:
     get:
       operationId: getCurrentUser
@@ -1551,6 +1576,14 @@ components:
                       token:
                         type: string
                         description: Sanctum plain-text token，只在這個回應出現一次
+                      expires_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        description: >-
+                          這張 token 何時過期，`config('sanctum.expiration')`
+                          沒設定就是 `null`（永不過期）。真正生效的過期判斷
+                          在 Sanctum Guard，這個欄位只是給前端排程 refresh 用的參考值。
 
   schemas:
     SuccessEnvelope:

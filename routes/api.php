@@ -55,6 +55,9 @@ Route::middleware('throttle:api')->group(function () {
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        // 過期上限見 config/sanctum.php；這支讓活躍使用者在過期前換一張新
+        // token，不用整個重新登入。
+        Route::post('/auth/refresh', [AuthController::class, 'refresh']);
 
         Route::get('/me', [MeController::class, 'show']);
         Route::get('/me/favorites', [FavoriteController::class, 'index']);

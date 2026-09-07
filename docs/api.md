@@ -47,6 +47,7 @@ Swagger UI／Postman 的 OpenAPI 3.0 規格見 [`docs/openapi.yaml`](openapi.yam
 | POST | `/auth/register` | 註冊 | 無 |
 | POST | `/auth/login` | 登入 | 無 |
 | POST | `/auth/logout` | 登出 | 必須 |
+| POST | `/auth/refresh` | 在過期前換一張新 token（見下方「認證與 token 過期」） | 必須 |
 | GET | `/admin/reports` | 待審核回報列表（Phase 7） | 必須（admin） |
 | POST | `/admin/reports/{id}/approve` | 核准回報（Phase 7） | 必須（admin） |
 | POST | `/admin/reports/{id}/reject` | 駁回回報（Phase 7） | 必須（admin） |
@@ -364,6 +365,29 @@ GET /api/v1/restaurants/recommended?latitude=24.1477&longitude=120.6736&bbox=23.
 
 列表 API 採 Cursor Pagination（依 `id` 遞增）而非 offset，避免大資料集下 `OFFSET N` 效能劣化
 （見 `docs/architecture.md`）。回應 `meta` 需帶 `next_cursor`。
+
+## 認證與 token 過期
+
+`POST /auth/login`／`POST /auth/register` 回應除了 `token`，還帶
+`expires_at`（ISO 8601，`config('sanctum.expiration')` 沒設定時是 `null`＝
+永不過期）：
+
+```json
+{ "success": true, "data": { "user": {}, "token": "1|abc...", "expires_at": "2026-09-13T10:00:00+00:00" } }
+```
+
+**2026-09-06 使用者決定**：正式營運前補上過期時間，不再永不過期。
+`.env` 的 `SANCTUM_TOKEN_EXPIRATION`（分鐘，預設 `10080`＝ 7 天）控制這個
+上限。真正生效的過期判斷在 Sanctum 的 `Guard::isValidAccessToken()`，比對
+的是 token 的 `created_at`，不是 `expires_at` 欄位本身——`expires_at` 只是
+回給前端排程 refresh 用的參考值，兩者算出來的時間點會一致（都是
+`config('sanctum.expiration')` 分鐘後），但強制生效的是前者。
+
+`POST /auth/refresh`（需要目前這張還沒過期的 token）換一張新的：舊 token
+**立刻撤銷**，不是多發一張——外流的舊 token 撤銷才有意義，所以不能兩張
+同時有效。前端（`App.vue`）每 5 分鐘檢查一次，剩餘時間進入 60 分鐘緩衝區
+內就提前換，活躍使用者不會被這個全域上限硬性登出；401（token 已經失效）
+時前端的攔截器會清掉本機狀態並導去登入頁，不會卡在一個安靜失敗的畫面上。
 
 ## Validation / Authorization
 

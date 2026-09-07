@@ -1184,12 +1184,22 @@ Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是
 - [x] **Horizon／Telescope production gate 白名單** ✅ 2026-08-26 改成環境變數
       `DASHBOARD_ALLOWED_EMAILS`（逗號分隔）。預設仍是空的＝沒有人，那是安全預設；
       email 不寫進程式碼（repo 是公開的）。見 progress.md 與 deployment.md。
-- [ ] **Sanctum token 永不過期**
-      MVP 可接受；正式營運要 expiry／refresh。
-- [ ] **`FoodDataProviderInterface`／OpenFoodFacts（第十九節）**
-      只是 Adapter 範例。目前沒有菜單營養資料需求，**不要為了架構圖對稱去接**。
-      菜單本身：種子餐廳有假 `menu_items`，OSM 匯入餐廳幾乎沒菜單（OSM 沒這資料）。
-      若要有菜單，來源是使用者／店家，不是再接一個食品 API。
+- [x] **Sanctum token 永不過期** ✅ 2026-09-06 使用者決定：正式營運前現在就加。
+      `config/sanctum.php` 的 `expiration` 改讀 `env('SANCTUM_TOKEN_EXPIRATION', 10080)`
+      （7 天）——這個值其實不用改 `AuthController` 就對所有既有 token 生效，
+      Sanctum 的 `Guard::isValidAccessToken()` 直接比對 `created_at`。額外加
+      `POST /auth/refresh`（換新 token，舊的立刻撤銷）＋回應帶 `expires_at`
+      給前端排程用。前端：`App.vue` 每 5 分鐘檢查一次是否進入過期緩衝區，
+      是的話提前 refresh；`api/client.ts` 新增 401 攔截器清 session＋導去
+      登入頁（**這個攔截器先前完全不存在**——查證發現舊版永不過期，這個情境
+      從沒真的發生過，所以缺口沒被注意到）。後端 6 測試（`AuthTest`）、
+      前端 15 測試（auth store 5、client 攔截器 5、`tokenRefresh` 純函式 5），
+      OpenAPI／api.md 新增「認證與 token 過期」一節。
+- [~] **`FoodDataProviderInterface`／OpenFoodFacts（第十九節）**
+      **2026-09-06 使用者決定：不做，維持現狀。** 只是 Adapter 範例，目前
+      沒有菜單營養資料需求，不要為了架構圖對稱去接。菜單本身：種子餐廳有假
+      `menu_items`，OSM 匯入餐廳幾乎沒菜單（OSM 沒這資料）。若要有菜單，
+      來源是使用者／店家，不是再接一個食品 API。
 
 ### 明確不在這份待辦（總 Prompt 第四十三／四十五節）
 

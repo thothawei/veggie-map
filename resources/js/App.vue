@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted } from 'vue';
 import { RouterLink, RouterView, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useFavoritesStore } from '@/stores/favorites';
+import { shouldRefreshToken } from '@/lib/tokenRefresh';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -15,6 +17,29 @@ async function handleLogout() {
         await router.push({ name: 'home' });
     }
 }
+
+/**
+ * `config('sanctum.expiration')`（2026-09-06 加上）讓 token 會過期。與其等
+ * 過期後被攔截器踢回登入頁，活躍的分頁每 5 分鐘檢查一次「快到期了嗎」，
+ * 快到的話提前換一張——使用者感覺不到，session 卻不會中斷。
+ *
+ * refresh 失敗（代表這張 token 早就不能用了）不用自己處理登出：`api/client.ts`
+ * 的 401 攔截器已經會清狀態並導去登入頁，這裡只要吞掉錯誤、不讓它變成
+ * 一個沒人接的 unhandled rejection。
+ */
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
+
+onMounted(() => {
+    refreshTimer = setInterval(() => {
+        if (auth.isAuthenticated && shouldRefreshToken(auth.expiresAt)) {
+            auth.refresh().catch(() => {});
+        }
+    }, 5 * 60_000);
+});
+
+onBeforeUnmount(() => {
+    clearInterval(refreshTimer);
+});
 </script>
 
 <template>

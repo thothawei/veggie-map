@@ -50,7 +50,13 @@ return [
     |
     */
 
-    'expiration' => null,
+    // 2026-09-06 使用者決定：正式營運前補上過期時間，不再永不過期。
+    // Sanctum 的 Guard 用這個值比對 token 的 created_at（見
+    // vendor/laravel/sanctum/src/Guard.php::isValidAccessToken()），跟
+    // token 自己的 expires_at 是兩道獨立檢查，任一過期就失效。
+    // AuthController::refresh() 提供了在還沒過期前換一張新 token 的路，
+    // 讓活躍使用者不會被這個全域上限硬性登出。
+    'expiration' => env('SANCTUM_TOKEN_EXPIRATION', 10080),
 
     /*
     |--------------------------------------------------------------------------
