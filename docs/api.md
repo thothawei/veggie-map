@@ -408,9 +408,11 @@ Controller 只做「呼叫 Service／回傳 Resource」，不做欄位驗證與�
 收藏刻意沒有 Policy（只判斷是否登入，沒有「別人的收藏」這種概念）。
 這段先前列了 `FavoritePolicy`／`ReportPolicy` 兩個不存在的名字，已更正。
 
-所有 email 欄位另外掛 `App\Rules\SafeEmail`：Laravel 11 預設的 `email` 規則會放行
-`"user\r\n"@example.com` 這種帶引號 local part 的 CRLF 值（CVE-2026-48019，
-修補版本是 12.61.1+，屬 major upgrade）。這是緩解不是根治，見 [deployment.md](deployment.md)。
+所有 email 欄位另外掛 `App\Rules\SafeEmail`（擋所有 C0 控制字元）。它原本是
+CVE-2026-48019 的緩解——Laravel 12.60 以前的 `email` 規則會放行
+`"user\r\n"@example.com` 這種帶引號 local part 的 CRLF 值。**2026-09-07 升級到
+`laravel/framework` 12.69.1，上游那個洞已根治**（`composer audit` 乾淨），這條規則
+保留為第二道防線，不再是唯一防線。見 [deployment.md](deployment.md)。
 
 ## Caching（`RestaurantRepository`）
 

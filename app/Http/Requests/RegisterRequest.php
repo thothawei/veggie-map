@@ -17,7 +17,8 @@ class RegisterRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            // SafeEmail：Laravel 11 預設 email 規則的 CRLF injection 緩解，見該類別註解。
+            // SafeEmail：控制字元的第二道防線（Laravel 12.60+ 的預設 email 規則已補掉
+            // CVE-2026-48019 本身），見該類別註解。
             'email' => ['required', 'string', 'email', new SafeEmail, 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', Password::min(8), 'confirmed'],
         ];

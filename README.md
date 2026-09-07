@@ -126,7 +126,7 @@ flowchart TD
 
 ## Tech Stack
 
-**Backend**：Laravel 11（PHP 8.2）、MySQL 8（Spatial functions）、Redis（cache + queue driver）、
+**Backend**：Laravel 12（PHP 8.2）、MySQL 8（Spatial functions）、Redis（cache + queue driver）、
 Laravel Sanctum、Laravel Pint（formatter）。
 
 **Frontend**：Vue 3 + TypeScript（`<script setup>`）、Vite（透過 `laravel-vite-plugin` 整合，SPA

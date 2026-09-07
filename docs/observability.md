@@ -37,7 +37,7 @@ middleware group 的最前面。
 
 ## Queue Failures
 
-`failed_jobs` 表存在（Laravel 11 預設骨架的 `0001_01_01_000002_create_jobs_table.php` 一併
+`failed_jobs` 表存在（Laravel 骨架的 `0001_01_01_000002_create_jobs_table.php` 一併
 建立），`QUEUE_CONNECTION=redis`（`.env.example`）。
 
 **2026-08-25 起這張表是有意義的**：Laravel Horizon 已安裝、`docker-compose.yml` 有
@@ -130,7 +130,7 @@ docker compose exec app php artisan cache:stats --day=2026-08-25
 
 ## Health Check
 
-Laravel 11 內建的 `/up` 路由（`bootstrap/app.php` 的 `health: '/up'`），回 200 代表應用程式
+Laravel 內建的 `/up` 路由（`bootstrap/app.php` 的 `health: '/up'`），回 200 代表應用程式
 能正常處理請求（不含資料庫連線檢查）。`tests/Feature/ExampleTest.php` 原本測 `GET /` 是否
 200，Phase 12 接 CI 時才發現 `/` 現在是需要 Vite manifest 的 SPA shell——這個健康檢查用途
 更適合 `/up`（不需要任何前端資產），但目前測試套件還沒有實際切過去驗證這一條路徑

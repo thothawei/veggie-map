@@ -1021,12 +1021,19 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 
 ### P1 — 安全／可觀測性（規劃「至少」）
 
-- [x] **`CVE-2026-48019`（第四十二節）— 已緩解，未根治 ✅ 2026-08-26**
+- [x] **`CVE-2026-48019`（第四十二節）— 2026-08-26 緩解，2026-09-07 根治**
       `App\Rules\SafeEmail` 掛在所有吃 email 的 FormRequest 上，擋掉控制字元。
       **payload 是實測出來的**：`user@example.com\r\n...` 那種形狀預設規則本來就會擋
       （用它當測試等於假保護），真正會通過的是帶引號的 local part
-      `"user\r\n"@example.com`。`composer audit` 仍會報三則——那要升 major
-      （12.61.1+／13.12+），是獨立的工作，不要因為擋住了就說已修補。
+      `"user\r\n"@example.com`。
+      **2026-09-07 根治**：升 `laravel/framework` 11.56 → 12.69.1（`composer.json`
+      下限釘 `^12.61.1`＝三則公告的修補版本），`composer audit` 現在乾淨。相依只
+      連帶升了幾個 symfony patch，horizon／telescope／sanctum 的既有約束本來就
+      涵蓋 12，沒有任何原始碼要改，748 條後端測試全綠。
+      **順帶抓到一個假保護**：升級後預設 `email` 規則自己就擋掉那些 payload，
+      所以 `SafeEmailTest`（端到端）拿掉 `SafeEmail` 照樣綠——補了
+      `tests/Unit/SafeEmailRuleTest.php` 直接對規則斷言，反向驗證確認停用規則
+      實作時紅的是它、端到端那三條全綠。規則保留為第二道防線。
 
 - [x] **Observability 三缺（第三十五節）— 三項都完成 ✅ 2026-08-26**
       - [x] 一般 API 的 response time：`LogSlowApiRequests` middleware，每筆回應帶

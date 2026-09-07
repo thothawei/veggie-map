@@ -13,7 +13,7 @@
 
 | 項目 | 現況 | 證據 |
 | --- | --- | --- |
-| Framework | Laravel 11.31 | `composer.json` |
+| Framework | Laravel 12.69（`composer.json` 下限 `^12.61.1`＝CVE-2026-48019 的修補版本） | `composer.json` |
 | PHP | `^8.2`（容器內；本機 CLI 是 8.1，**測試一律在容器裡跑**） | `composer.json` / `php -v` |
 | DB | **MySQL 8**，重度使用 `POINT` / `ST_Distance_Sphere` / `MBRContains` | `phpunit.xml` 註解、`RestaurantRepository` |
 | Cache / Queue | Redis + Laravel Horizon | `.env.example`、`docker-compose.yml` |
@@ -106,7 +106,7 @@ User → POST /api/v1/ai-office/projects        （Controller，同步只建 Pro
   安裝的是 `^0.43.0`，未新增其他相依。
 - 前端：沿用 axios / Pinia。DAG 視覺化第一版用純 SVG 手繪（規格 §49「不需要非常複雜」），不引入 d3。
 
-任何要新增套件的時刻，先確認與 Laravel 11 / PHP 8.2 / Vite 6 相容才動 lock file。
+任何要新增套件的時刻，先確認與 Laravel 12 / PHP 8.2 / Vite 6 相容才動 lock file。
 
 ---
 

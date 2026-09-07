@@ -6,13 +6,19 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * CVE-2026-48019 的緩解（Laravel 預設 email 規則接受含 CRLF 的值）。
- * 正式修法是 major upgrade，在那之前用 FormRequest 擋住控制字元。
+ * 註冊／登入端點不接受含控制字元的 email（CVE-2026-48019 的形狀）。
+ *
+ * **2026-09-07 升上 Laravel 12.69.1 之後，這三條的性質變了**：預設 `email` 規則
+ * 自己就會擋下這些 payload（實測過），所以**把 `SafeEmail` 從 FormRequest 拿掉，
+ * 這三條照樣會綠**——反向驗證確認過（把規則的實作停用，紅的是
+ * `tests/Unit/SafeEmailRuleTest.php` 的兩條，這裡三條全綠）。
+ *
+ * 它們現在是**端點層的回歸測試**（「這兩個端點不會接受這種 email」，不管是哪一道
+ * 擋的），不是 `SafeEmail` 的證明。要釘住那條規則本身，看 `SafeEmailRuleTest`。
  *
  * **payload 是實測出來的，不是想像的**：第一版測試用
- * `user@example.com\r\nBcc: ...`，但那個字串 Laravel 11.56 的預設 email 規則
- * 本來就會擋——把 SafeEmail 拿掉測試照樣綠，等於守不住任何東西。
- * 實際會通過預設規則的是**帶引號的 local part**：`"user\r\n"@example.com`
+ * `user@example.com\r\nBcc: ...`，但那個字串連當時的 Laravel 11.56 都會擋。
+ * 實際能通過當時預設規則的是**帶引號的 local part**：`"user\r\n"@example.com`
  * （RFC 5321 的 quoted-string 允許裡面出現這些字元）。
  */
 class SafeEmailTest extends TestCase

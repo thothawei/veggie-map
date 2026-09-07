@@ -5082,3 +5082,43 @@ docker 環境**量到的基準（229ms）訂的。GitHub Actions 的共用 runne
 這一輪修的是儀器，不是結論——現在兩張表湊齊了：`search:filter-usage` 看誰
 最常被按、`search:misses` 的篩選分佈看誰最常把結果殺光，常駐的條件是前者高
 且後者低。真實流量進來以前不動 B3。
+
+## 2026-09-07 — 升 Laravel 12：`composer audit` 的三則公告根治，順帶抓到一個假保護
+
+**做的事**：使用者要我檢查前面做的東西並繼續做剩下的。先做完整回歸——後端 748
+條全綠、前端 447 條全綠、eslint／vue-tsc／Pint／PHPStan 乾淨、CI 最近三次都綠，
+前面幾輪沒有留下壞掉的東西。`docs/todo.md` 未打勾的只剩兩項，都是刻意維持的
+狀態（B4 等真實流量、Playwright E2E 的 ROI 判斷）——真正還沒閉環的是
+`composer audit` 那三則 laravel/framework 公告，todo 自己寫「那要升 major，是
+獨立的工作」。
+
+**升級本身比預期便宜**：`composer require -W laravel/framework:^12.61.1` 的解算
+結果是「只升 framework 11.56 → 12.69.1 ＋ 幾個 symfony patch」，horizon／
+telescope／sanctum／tinker 的既有約束本來就涵蓋 12，一個原始碼檔都不用改。
+`composer.json` 的下限刻意釘在 `^12.61.1` 而不是 `^12.0`——那個數字就是三則
+公告的修補版本，寫死它才擋得住有人日後 downgrade 回有洞的 12.x。
+升完 `composer audit` 是 **No security vulnerability advisories found**。
+
+**驗證**：748 條後端測試全綠（升級前後同樣的 748 條）、PHPStan 0 error、
+Pint PASS、重啟 app／horizon／scheduler 容器後 Horizon 正常啟動、
+`/api/v1/restaurants?keyword=素食`／`facets`／`cities`／`features`／`/docs`
+五個端點實打都是 200、`php artisan about` 顯示 Laravel 12.69.1。
+
+**順帶抓到的假保護（這才是這一輪真正的發現）**：`App\Rules\SafeEmail` 是
+CVE-2026-48019 的緩解，而升級把上游那個洞補掉了——實測 Laravel 12.69.1 的預設
+`email` 規則現在自己就會擋下 `"user\r\n"@example.com`。這代表
+`tests/Feature/Api/SafeEmailTest.php` 那三條端到端斷言**已經不能證明 SafeEmail
+有效**：把規則拿掉照樣綠。那正是那份測試自己註解裡警告過的失敗模式，只是這次
+是被上游修好而失效的。
+
+處置：規則**保留**（它擋的是所有 C0 控制字元，不綁某一版框架的實作細節，而
+`email` 規則的行為以後還可能因 RFC 模式選擇而變），但補
+`tests/Unit/SafeEmailRuleTest.php` 直接對規則本身斷言。**反向驗證**：把
+`SafeEmail::validate()` 的判斷停用後重跑，紅的是新 Unit 測試的 2 條，端到端那
+3 條全綠——證實了上面的判斷，不是推論。三處註解（規則類別、`RegisterRequest`、
+`SafeEmailTest`）都改成誠實描述現在的地位：第二道防線，不是唯一防線。
+
+**文件**：`docs/deployment.md` 的已知缺口表刪掉那一列、「安全性（部署前必須
+處理）」的 CVE 段落改成已根治；`docs/api.md`、`docs/implementation-plan.md`
+（Framework 那列與套件相容性說明）、`docs/observability.md`（兩處「Laravel 11
+骨架／內建」改成不綁版本）、`README.md` 的 Tech Stack 一併更新。

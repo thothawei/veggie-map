@@ -10,7 +10,6 @@ credentials，也沒有使用者確認要真的花錢起 infra，依照總 promp
 
 | 缺口 | 影響 | 部署前要不要處理 |
 |---|---|---|
-| `composer audit` 仍報 `CVE-2026-48019` 等三則 laravel/framework 公告 | 修補版本是 12.61.1+／13.12+，本專案在 11.56，屬於 major upgrade | **已緩解、未根治**：所有吃 email 的 FormRequest 都掛 `App\Rules\SafeEmail` 擋控制字元（實測過預設 `email` 規則會放行 `"user\r\n"@example.com` 這種 quoted local part）。要真的清掉 audit 就得升 major，那是獨立的工作 |
 | Nominatim 商業使用政策偏保留（見 [external-apis.md](external-apis.md)） | 公開營運的地址搜尋流量可能違反 Nominatim 使用政策 | 真的要公開營運，評估換付費 Geocoding 服務 |
 | Horizon／Telescope 的白名單預設是空的 | production 沒有人能看儀表板（這是刻意的安全預設） | 要看就設 `DASHBOARD_ALLOWED_EMAILS`，逗號分隔 |
 | Sanctum token 永不過期 | MVP 可接受，正式營運要 expiry／refresh | 依營運需求決定 |
@@ -162,10 +161,11 @@ DASHBOARD_ALLOWED_EMAILS=ops@example.com,dev@example.com
 
 ## 安全性（部署前必須處理）
 
-- **`CVE-2026-48019`**（`composer audit` 顯示的 Laravel 11.x email 驗證 CRLF injection
-  公告）：官方修法是升級到 Laravel 12.60+/13.10+，或在 FormRequest layer 額外處理。
-  這個專案的 User 註冊／Report 表單都用到 email 驗證，**部署前必須解決**，不是「之後
-  有空再說」的技術債。
+- ~~**`CVE-2026-48019`**（Laravel email 驗證 CRLF injection）~~ **2026-09-07 已根治**：
+  升級到 `laravel/framework` 12.69.1（`composer.json` 的下限釘在 `^12.61.1`＝三則
+  公告的修補版本），`composer audit` 現在是 **No security vulnerability advisories
+  found**。`App\Rules\SafeEmail` 保留為第二道防線（擋所有 C0 控制字元，不綁框架
+  版本），但已經不是唯一防線——見該類別與 `tests/Unit/SafeEmailRuleTest.php`。
 - `APP_DEBUG=false`：本機 `.env.example` 預設 `true`，忘記改會把完整 stack trace 洩漏給
   使用者。
 - `.env` 不進版控、不寫死密碼——見上方「修改 `.env`」段落。
