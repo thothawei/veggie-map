@@ -1076,6 +1076,13 @@ Phase C 完成的驗收：種子餐廳詳情看得到葷／素分組；OSM 匯�
 - [x] ~~`SearchBox`／`AdminView`／`RestaurantDetailView` 仍無元件測試~~ ✅ 2026-08-26
       三個都有了（`RestaurantDetailView` 17 條、`SearchBox` 10 條、`AdminView` 5 條）
 - [ ] 沒有 Playwright／真瀏覽器 E2E（Phase 10 判斷這個規模 ROI 偏低，維持）
+- [ ] **TypeScript 7 升不上去（2026-09-07 查證，等上游）**：`vue-tsc` 最新的
+      3.3.11 是 `require('typescript/lib/tsc')` 啟動的，TS 7 的 `exports` 不再
+      匯出那個 subpath，`npm run type-check` 直接
+      `ERR_PACKAGE_PATH_NOT_EXPORTED`。它的 peer 寫 `typescript: >=5.0.0` 但實際
+      跑不動——**peer 範圍不等於能跑，這是實測出來的**。所以 TypeScript 停在
+      5.9.3，其餘前端 major 全部升上去了。
+      **解除條件**：`vue-tsc` 出支援 TS 7 的版本（或改用它的 tsgo 管線）之後再升。
 - [x] **OpenAPI contract test ✅ 2026-08-26**：`OpenApiContractTest` 比對「實際註冊的
       `/api/v1` 路由」與「openapi.yaml 寫了哪些 path+method」，兩個方向都比。
       **第一次跑就抓到整個 AI Office 子系統（26 支端點）從來沒寫進規格**，

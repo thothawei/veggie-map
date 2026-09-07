@@ -129,9 +129,13 @@ flowchart TD
 **Backend**：Laravel 12（PHP 8.2）、MySQL 8（Spatial functions）、Redis（cache + queue driver）、
 Laravel Sanctum、Laravel Pint（formatter）。
 
-**Frontend**：Vue 3 + TypeScript（`<script setup>`）、Vite（透過 `laravel-vite-plugin` 整合，SPA
-由 Laravel blade shell 渲染、HMR 走 Vite dev server）、Pinia、Vue Router（history 模式）、Axios、
-Leaflet + `leaflet.markercluster`。
+**Frontend**：Vue 3 + TypeScript（`<script setup>`）、Vite 8（透過 `laravel-vite-plugin` 整合，
+SPA 由 Laravel blade shell 渲染、HMR 走 Vite dev server）、Pinia、Vue Router 5（history 模式）、
+Axios、Leaflet + `leaflet.markercluster`、Tailwind 4（**只用到它的 preflight**，全站沒有
+utility class，版面走元件 scoped style ＋ `resources/css/app.css` 的 CSS 變數）。
+
+Vite 8 要求 Node `^20.19 || ^22.13 || >=24`——CI 用 22。裝在不符合的版本上（例如 23.x）
+`npm install` 會印 EBADENGINE 警告，build 目前仍跑得動，但那是沒有保證的區間。
 
 **Infra**：Docker Compose（app / nginx / mysql / redis）。
 

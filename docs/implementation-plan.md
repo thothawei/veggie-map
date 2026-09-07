@@ -106,7 +106,7 @@ User → POST /api/v1/ai-office/projects        （Controller，同步只建 Pro
   安裝的是 `^0.43.0`，未新增其他相依。
 - 前端：沿用 axios / Pinia。DAG 視覺化第一版用純 SVG 手繪（規格 §49「不需要非常複雜」），不引入 d3。
 
-任何要新增套件的時刻，先確認與 Laravel 12 / PHP 8.2 / Vite 6 相容才動 lock file。
+任何要新增套件的時刻，先確認與 Laravel 12 / PHP 8.2 / Vite 8 相容才動 lock file。
 
 ---
 

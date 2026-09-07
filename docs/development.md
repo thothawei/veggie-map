@@ -14,6 +14,10 @@ docker compose exec app php artisan migrate --seed
 npm install && npm run dev        # 前端跑在 host 上，不在容器裡
 ```
 
+**Node 版本**：Vite 8 要求 `^20.19 || ^22.13 || >=24`（CI 用 22）。裝在不符合的版本
+（例如 23.x 這種非 LTS）`npm install` 會印 EBADENGINE 警告——目前 build／測試仍會過，
+但那是沒有保證的區間，遇到怪問題先確認這一項。
+
 `http://localhost:8080/` 是完整 SPA，API 在 `http://localhost:8080/api/v1`，
 可瀏覽的 API 文件在 `http://localhost:8080/docs`（Redoc；由 `veggiemap.docs.enabled` 控制，
 production 預設關閉）。

@@ -5122,3 +5122,55 @@ CVE-2026-48019 的緩解，而升級把上游那個洞補掉了——實測 Lara
 處理）」的 CVE 段落改成已根治；`docs/api.md`、`docs/implementation-plan.md`
 （Framework 那列與套件相容性說明）、`docs/observability.md`（兩處「Laravel 11
 骨架／內建」改成不綁版本）、`README.md` 的 Tech Stack 一併更新。
+
+## 2026-09-07 — 前端 major 升級：Vite 8／Tailwind 4／vue-router 5（TypeScript 7 卡上游）
+
+**做的事**：使用者說前端 major 升級也做。分階段升、每階段都跑測試＋build，
+最後在真瀏覽器走一次。
+
+| 套件 | 前 | 後 | 備註 |
+|---|---|---|---|
+| vite | 6.4.3 | 8.2.2 | engine 要求 Node `^20.19 \|\| ^22.13 \|\| >=24`（CI 用 22） |
+| laravel-vite-plugin | 1.3.0 | 3.2.0 | 跟 vite 8 一起升，`@vite` blade 指令與 manifest 路徑不變 |
+| tailwindcss | 3.4.19 | 4.3.3 | PostCSS plugin 拆成 `@tailwindcss/postcss`，config 從 JS 搬進 CSS |
+| vue-router | 4.6.4 | 5.3.1 | 沒有用到被移除的 API，零程式碼改動 |
+| concurrently | 9.2.4 | 10.0.5 | 只有 `composer dev` script 用它，`-c`／`--names` 旗標實測仍相容 |
+| typescript | 5.9.3 | **維持** | 見下面「升不上去的那一個」 |
+
+外加一批 minor（`@vue/test-utils` 2.5、`axios` 1.20、`eslint-plugin-vue` 10.11、
+`vue` 3.5.42、`postcss`）。
+
+**Tailwind 4 的遷移，跟查證到的一件事**：`tailwind.config.js` 刪掉，改成
+`resources/css/app.css` 裡的 `@import 'tailwindcss'` ＋ `@theme`（v3 的
+`fontFamily.sans` 對應 v4 的 `--font-sans`）；`postcss.config.js` 換成
+`@tailwindcss/postcss`，`autoprefixer` 整包移除（v4 內建 Lightning CSS 的
+prefix 處理，實測產出的 CSS 仍有 `-webkit-*`）。
+
+查證到的是：**這個專案其實完全沒有在用 Tailwind 的 utility class**——blade 0 處、
+Vue 元件 0 處，版面全部走 scoped style ＋ CSS 變數。所以 Tailwind 在這裡的實際
+作用只有 preflight（reset），這也是為什麼升 major 幾乎零阻力，產出的
+`app.css` 從 28.9KB 掉到 9.8KB。這件事寫進了 `app.css` 的註解與 README：
+哪天要拿掉 Tailwind，記得補一份等效 reset，不是刪掉就沒事。
+
+**preflight 的差異有逐項查，不是「跑得動就算」**：
+- 預設 border color v3 灰 → v4 `currentColor`：查過全站唯一只設寬度不設顏色的
+  `border-width: 3px`（marker），顏色來自同一個選擇器群組的明確宣告，不受影響。
+- button 的 cursor：實測頁面上前 10 個按鈕仍是 `pointer`（專案自己有 41 處
+  `cursor: pointer`）。
+- placeholder 從固定灰改成 `currentColor 50%`：實測算出來 ≈ `rgb(143,148,153)`，
+  跟 v3 的 `#9ca3af` 幾乎一樣——**但那是巧合**，所以補了一條 `::placeholder`
+  規則把它釘在 `--vm-ink-400`（`rgb(160,174,192)`，實測生效），不讓下一次升級
+  再改一次外觀。
+
+**升不上去的那一個（TypeScript 7）**：`vue-tsc` 最新版 3.3.11 用
+`require('typescript/lib/tsc')` 啟動，TS 7 的 `exports` 不再匯出那個 subpath，
+`npm run type-check` 直接 `ERR_PACKAGE_PATH_NOT_EXPORTED`。它的 peer 寫
+`typescript: >=5.0.0`——**peer 範圍不等於能跑**。TypeScript 回退 5.9.3，
+解除條件記在 todo。
+
+**驗證**：前端 447 條測試全綠、`vue-tsc --noEmit` 乾淨、eslint 乾淨、
+`npm run build` 成功、`npm audit` 0 漏洞。真瀏覽器（`localhost:8080`，build 過的
+資產）走過：首頁地圖與篩選面板渲染正常、列表頁 facets 數字正確
+（純素食 576／友善 592／全部 1168／營業中 86）、詳情頁 slug 路由正常、
+導覽列連結是 SPA 導航（在 `window` 上放旗標，導航後旗標還在＝沒有整頁重載）、
+console 無錯誤。

@@ -1,6 +1,21 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/*
+ * Tailwind 4：單一 `@import` 取代 v3 的三行 `@tailwind`，設定改寫在 CSS 裡
+ * （`@theme`），不再有 `tailwind.config.js`。
+ *
+ * **這個專案實際上只吃到 Tailwind 的 preflight（CSS reset）**——全站沒有任何
+ * utility class（升級時查過：blade 0 處、Vue 元件 0 處），版面全部走元件的
+ * scoped style ＋ 下面這組 CSS 變數。保留 Tailwind 是為了那份 reset 與日後
+ * 要用 utility 時的餘裕；哪天決定不要它，要記得補一份等效的 reset，
+ * 不是直接刪掉就沒事。
+ */
+@import 'tailwindcss';
+
+@theme {
+    /* v3 的 `theme.extend.fontFamily.sans`。--font-sans 是 v4 的 theme 變數名。 */
+    --font-sans:
+        'Figtree', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+        'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
 
 /*
  * Design token（B0）。範圍**只有搜尋相關的五個檔案**（HomeView／SearchBox／
@@ -174,4 +189,18 @@
     margin-top: 0.125rem;
     font-size: 0.75rem;
     opacity: 0.75;
+}
+
+/*
+ * 輸入框的 placeholder 顏色。
+ *
+ * **為什麼要明寫**：升 Tailwind 4 時實測發現 preflight 的 placeholder 從
+ * v3 的固定灰（`#9ca3af`）改成「currentColor 50% 透明」。在這個站的白底深字
+ * 下算出來 ≈ `rgb(143,148,153)`，跟舊值幾乎一樣，所以升級沒有造成看得出來的
+ * 變化——但那是巧合，不是設計決定。既然這個站的灰階已經收斂成 `--vm-ink-*`，
+ * 就把它釘在自己的尺度上，別讓下一次框架升級再改一次外觀。
+ */
+::placeholder {
+    color: var(--vm-ink-400);
+    opacity: 1; /* Firefox 預設會再乘一次透明度 */
 }
