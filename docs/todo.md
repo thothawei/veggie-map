@@ -1175,8 +1175,12 @@ Phase 8 沒做、這份待辦也沒接住。下面每一項的「現況」都是
 - [x] **匯入的 `city`／`district`／`address` 空字串 vs NULL** ✅ 2026-08-26 改成 NULL。
       來源層（OSM 空標籤）與 sync 的 `?? ''` 兩處都堵住，既有空字串由 migration 轉。
       讀取端本來就多半兩邊都擋，只有 TS 型別與 OpenAPI 要放寬。見 progress.md。
-- [ ] **要不要加 `LICENSE` 檔**
-      OpenAPI 曾寫 MIT 被拿掉，因為 repo 根本沒有授權條款。
+- [x] **要不要加 `LICENSE` 檔** ✅ 2026-09-06 使用者決定：加 MIT。
+      新增 `LICENSE`（MIT，著作權人 thothawei，2026）。查證發現
+      `composer.json` 其實早就寫 `"license": "MIT"`，跟「repo 根本沒有
+      授權條款」的舊狀態本身就不一致——不是新引入的宣稱，是補上早就
+      該存在的檔案。`docs/openapi.yaml` 的 `info.license` 補回
+      `{ name: MIT, url: .../LICENSE }`，`npx @redocly/cli lint` 通過。
 - [x] **Horizon／Telescope production gate 白名單** ✅ 2026-08-26 改成環境變數
       `DASHBOARD_ALLOWED_EMAILS`（逗號分隔）。預設仍是空的＝沒有人，那是安全預設；
       email 不寫進程式碼（repo 是公開的）。見 progress.md 與 deployment.md。

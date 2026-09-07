@@ -4913,5 +4913,15 @@ Token 用量三格，`success_rate`／`avg_duration_ms` 是 `null` 時顯示「�
 **做到這裡，todo.md「AI Office：規劃自己列了但漏做」清單全部處理完畢**
 （三項做掉、一項裁決不做並寫明理由）。剩下的 AI Office 相關項目全部落在
 P3「要產品決定才能動（不要擅自選）」：`LICENSE` 檔、`Sanctum` token 過期、
-`FoodDataProviderInterface`——這三項需要使用者決定，不是工程判斷可以
-單方面拍板的範圍。
+`FoodDataProviderInterface`——問過使用者，三項決定分別是：加 MIT、
+Sanctum token 現在就加過期時間、`FoodDataProvider` 維持不做。
+
+## 2026-09-06 — P3 決定：加 `LICENSE`（MIT）
+
+新增 `LICENSE`（MIT，著作權人 thothawei，2026）。查證時發現一個既有
+的小不一致：`composer.json` 其實早就寫 `"license": "MIT"`，但 repo 根本
+沒有對應的 `LICENSE` 檔——不是新引入一個宣稱，是補齊本來就該存在、卻
+漏掉的檔案。`docs/openapi.yaml` 的 `info.license` 補回
+`{ name: MIT, url: https://github.com/thothawei/veggie-map/blob/main/LICENSE }`，
+`npx @redocly/cli lint` 通過（0 error），`OpenApiContractTest` 綠燈。
+純文件／metadata 變動，不影響任何程式行為，不需要跑後端／前端測試。

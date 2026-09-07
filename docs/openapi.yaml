@@ -7,6 +7,9 @@ info:
     `{success:false, error:{code, message, fields?}}`（見 docs/api.md）。
     這份規格直接對照 routes/api.php 與各 Controller/FormRequest/Resource 產出，不是憑記憶寫的。
   version: "1.0.0"
+  license:
+    name: MIT
+    url: https://github.com/thothawei/veggie-map/blob/main/LICENSE
 servers:
   - url: http://localhost:8080/api/v1
     description: Local development (docker compose)
