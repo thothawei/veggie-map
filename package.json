@@ -7,6 +7,7 @@
     "scripts": {
         "build": "vue-tsc --noEmit && vite build",
         "dev": "vite",
+        "generate-pwa-assets": "pwa-assets-generator",
         "type-check": "vue-tsc --noEmit",
         "test": "vitest run",
         "lint": "eslint resources/js"
@@ -15,6 +16,7 @@
         "@tailwindcss/postcss": "^4.3.3",
         "@types/leaflet": "^1.9.22",
         "@types/leaflet.markercluster": "^1.5.6",
+        "@vite-pwa/assets-generator": "^1.0.4",
         "@vitejs/plugin-vue": "^6.0.8",
         "@vue/eslint-config-typescript": "^14.9.0",
         "@vue/test-utils": "^2.4.11",
@@ -28,6 +30,7 @@
         "tailwindcss": "^4.3.3",
         "typescript": "^5.9.3",
         "vite": "^8.2.2",
+        "vite-plugin-pwa": "^1.3.0",
         "vitest": "^3.2.7",
         "vue-tsc": "^3.3.11"
     },

@@ -3,6 +3,11 @@
 /public/build
 /public/hot
 /public/storage
+
+# vite-plugin-pwa 每次 build 都重新產生（含新的 workbox hash 檔名），不進版控；
+# public/pwa-*.png、apple-touch-icon*.png 等圖示是由 public/logo.svg 產生的靜態資產，照常進版控。
+/public/sw.js
+/public/workbox-*.js
 /storage/*.key
 /storage/pail
 /storage/phpstan

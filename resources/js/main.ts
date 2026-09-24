@@ -3,9 +3,13 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
+import { registerSW } from 'virtual:pwa-register';
 import App from './App.vue';
 import router from './router';
 import { useAuthStore } from './stores/auth';
+
+// 生產環境才會真的產生 service worker；開發模式下這是 vite-plugin-pwa 給的 no-op。
+registerSW({ immediate: true });
 
 const app = createApp(App);
 
