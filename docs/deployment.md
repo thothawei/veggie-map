@@ -3,6 +3,9 @@
 Phase 13 產出。**這份文件只提供部署步驟，沒有實際執行過 production 部署**——沒有 AWS
 credentials，也沒有使用者確認要真的花錢起 infra，依照總 prompt 第十三節規則先停在文件階段。
 
+> 這個方案會產生實際雲端費用（RDS、ElastiCache、EC2）。想要完全零成本的話，見
+> [deployment-oracle-cloud.md](deployment-oracle-cloud.md)（Oracle Cloud Always Free）。
+
 ## 先讀這段：目前還不是 production-ready
 
 在照下面步驟部署之前，先知道這些已知缺口（都記錄在 [docs/todo.md](todo.md)），
